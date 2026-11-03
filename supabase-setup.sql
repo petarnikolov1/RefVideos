@@ -154,6 +154,23 @@ drop policy if exists "comments: author or admin delete" on public.video_comment
 create policy "comments: author or admin delete" on public.video_comments
   for delete to authenticated using (user_id = (select auth.uid()) or private.is_admin());
 
+-- ───────────────────────── ebfu.net archive reports ─────────────────────────
+-- structure reports of the ebfu.net video archive, sent by approved members; only admins can read them
+create table if not exists public.ebfu_reports (
+  id         bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  report     jsonb not null
+);
+create index if not exists ebfu_reports_user_idx on public.ebfu_reports (user_id);
+alter table public.ebfu_reports enable row level security;
+drop policy if exists "ebfu reports: approved members send" on public.ebfu_reports;
+create policy "ebfu reports: approved members send" on public.ebfu_reports
+  for insert to authenticated with check (private.is_approved() and user_id = (select auth.uid()));
+drop policy if exists "ebfu reports: admin reads" on public.ebfu_reports;
+create policy "ebfu reports: admin reads" on public.ebfu_reports
+  for select to authenticated using (private.is_admin());
+
 -- ───────────────────────── storage bucket ─────────────────────────
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('videos', 'videos', true, 52428800, array['video/mp4', 'video/webm', 'video/quicktime'])

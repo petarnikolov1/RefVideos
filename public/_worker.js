@@ -5,6 +5,9 @@
 //                                 the match minutes the text mentions, and what was tried (diag).
 //   /config.json                  Supabase URL + key from the Pages environment variables
 //                                 SUPABASE_URL and SUPABASE_ANON_KEY (public by design; data is protected by RLS).
+//   POST /ebfu/login, /ebfu/explore   ebfu.net with the member's OWN account (approved members only):
+//                                 log in once, then map the video archive. Passwords are never stored or logged;
+//                                 the ebfu.net session goes back to the member's browser only.
 //   everything else               the static site.
 
 const FEED_HOSTS = ['news.google.com', 'www.bing.com', 'bing.com'];
@@ -21,6 +24,7 @@ export default {
     if (url.pathname === '/feed') return handleFeed(request, url, ctx);
     if (url.pathname === '/extract') return handleExtract(request, url, ctx);
     if (url.pathname === '/selftest') return handleSelftest(url, ctx);
+    if (url.pathname.startsWith('/ebfu/')) return handleEbfu(request, url, env);
     if (url.pathname === '/config.json') {
       return json({ supabaseUrl: env.SUPABASE_URL || '', supabaseKey: env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY || '' }, 200, 300);
     }
@@ -406,6 +410,205 @@ function findMinutes(text) {
     out.set(key, { m: h.min, plus: h.plus, ctx, tags: MIN_TAGS.filter(([, re]) => re.test(seg)).map(([k]) => k) });
   });
   return [...out.values()].sort((a, b) => a.m - b.m || a.plus - b.plus);
+}
+
+/* ---------------- ebfu.net (each member's own account) ----------------
+   Only members the site admin approved can use this, so the site can't be used to guess referees' passwords.
+   Login: the ebfu.net login form is filled with the member's username/password exactly like a browser would.
+   The resulting ebfu.net session is returned to the member's browser; nothing is stored here.
+   Explore: walks start page → Видеоархив → a league round → one match video and reports how the pages are
+   built (links, forms, buttons, players), so the automatic match + minute search can be built on it.
+   Calendar/history pages are never opened or reported. */
+const SB_URL = 'https://zinuspouctowujhocevy.supabase.co';
+const SB_KEY = 'sb_publishable_sElFdQnVmyqIZMRqBV5dAg_VrstG7T8';
+const EBFU_BASE = 'https://ebfu.net/';
+const EBFU_SKIP = /календар|история|calendar|history|събити|event|изход|logout|log-out|signout|exit|настройки|settings|profile|профил|gdpr/i;
+
+async function handleEbfu(request, url, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'POST only' }, 405);
+  const member = await checkMember(request.headers.get('Authorization') || '', env);
+  if (!member.ok) return json({ ok: false, error: member.error }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: 'bad request' }, 400); }
+  const diag = [];
+  try {
+    if (url.pathname === '/ebfu/login') return json({ ...(await ebfuLogin(String(body.username || '').trim(), String(body.password || ''), diag)), diag });
+    if (url.pathname === '/ebfu/explore') return json({ ...(await ebfuExplore(String(body.session || ''), diag)), diag });
+  } catch (e) { return json({ ok: false, error: 'ebfu.net: ' + (e.name === 'TimeoutError' ? 'no answer in time' : e.message), diag }); }
+  return json({ ok: false, error: 'unknown action' }, 404);
+}
+
+async function checkMember(auth, env) {
+  if (!/^Bearer\s+\S+/.test(auth)) return { ok: false, error: 'Log in to the site first.' };
+  const base = env.SUPABASE_URL || SB_URL, key = env.SUPABASE_ANON_KEY || SB_KEY;
+  try {
+    const u = await fetch(base + '/auth/v1/user', { headers: { apikey: key, Authorization: auth }, signal: AbortSignal.timeout(8000) });
+    if (!u.ok) return { ok: false, error: 'Your site login has expired. Log in again.' };
+    const user = await u.json();
+    const p = await fetch(base + '/rest/v1/profiles?select=approved,role&id=eq.' + encodeURIComponent(user.id), { headers: { apikey: key, Authorization: auth }, signal: AbortSignal.timeout(8000) });
+    const rows = p.ok ? await p.json() : [];
+    if (!rows[0] || !(rows[0].approved || rows[0].role === 'admin')) return { ok: false, error: 'Only members approved by the admin can connect ebfu.net.' };
+    return { ok: true, id: user.id };
+  } catch (e) { return { ok: false, error: 'Could not check your site login: ' + e.message }; }
+}
+
+// --- a tiny cookie jar, so ebfu.net sees one consistent browser session ---
+const jarFrom = str => { const m = new Map(); String(str || '').split(/;\s*/).forEach(p => { const i = p.indexOf('='); if (i > 0) m.set(p.slice(0, i), p.slice(i + 1)); }); return m; };
+const jarStr = jar => [...jar].map(([k, v]) => k + '=' + v).join('; ');
+function absorbCookies(jar, resp) {
+  const list = typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : (resp.headers.get('set-cookie') ? [resp.headers.get('set-cookie')] : []);
+  for (const c of list) {
+    const first = c.split(';')[0], i = first.indexOf('=');
+    if (i <= 0) continue;
+    const k = first.slice(0, i).trim(), v = first.slice(i + 1).trim();
+    if (!v || /max-age=0|expires=thu, 01 jan 1970/i.test(c)) jar.delete(k); else jar.set(k, v);
+  }
+}
+async function ebfuFetch(href, jar, opts, diag) {
+  opts = opts || {};
+  let u = href, method = opts.method || 'GET', body = opts.body, ct = opts.contentType;
+  for (let hop = 0; hop < 8; hop++) {
+    const target = new URL(u);
+    if (!/(^|\.)ebfu\.net$/i.test(target.hostname)) throw new Error('left ebfu.net (' + target.hostname + ')');
+    const h = { ...BROWSER_HEADERS, Accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8' };
+    if (jar.size) h.Cookie = jarStr(jar);
+    if (ct) h['Content-Type'] = ct;
+    if (opts.referer) h.Referer = opts.referer;
+    const r = await fetch(u, { method, headers: h, body, redirect: 'manual', signal: AbortSignal.timeout(10000) });
+    absorbCookies(jar, r);
+    diag.push(`${method} ${maskUrl(u)} → ${r.status}`);
+    const loc = r.headers.get('location');
+    if (r.status >= 300 && r.status < 400 && loc) { u = new URL(loc, u).toString(); method = 'GET'; body = undefined; ct = undefined; continue; }
+    const bytes = await readBytes(r, 1500000);
+    return { status: r.status, url: u, text: decodeBytes(bytes, r.headers.get('content-type') || ''), type: r.headers.get('content-type') || '' };
+  }
+  throw new Error('too many redirects');
+}
+
+// --- reading pages ---
+const attrOf = (s, n) => { const m = s.match(new RegExp('\\s' + n + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i')); return m ? decodeEntities(m[1] ?? m[2] ?? m[3] ?? '') : ''; };
+const stripTags = h => decodeEntities(String(h).replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+function maskUrl(u) {
+  try {
+    const x = new URL(u);
+    x.pathname = x.pathname.replace(/\([A-Z]\([^)]{12,}\)\)/g, '(S(…))');
+    for (const [k, v] of [...x.searchParams]) if (v.length > 24 || /token|session|sid|auth|key|pass/i.test(k)) x.searchParams.set(k, '…');
+    return x.toString();
+  } catch { return String(u).slice(0, 200); }
+}
+function parseForms(html, base) {
+  return [...html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)].map(m => {
+    let action = base; try { action = new URL(attrOf(m[1], 'action') || base, base).toString(); } catch {}
+    const inputs = [...m[2].matchAll(/<(input|button|select|textarea)\b([^>]*)>/gi)].map(x => {
+      const tag = x[1].toLowerCase();
+      return { tag, name: attrOf(x[2], 'name'), id: attrOf(x[2], 'id'), value: attrOf(x[2], 'value'), checked: /\schecked\b/i.test(x[2]),
+        type: (attrOf(x[2], 'type') || (tag === 'button' ? 'submit' : tag === 'input' ? 'text' : tag)).toLowerCase() };
+    }).filter(i => i.name);
+    return { action, method: (attrOf(m[1], 'method') || 'GET').toUpperCase(), id: attrOf(m[1], 'id'), inputs, onsubmit: attrOf(m[1], 'onsubmit').slice(0, 200) };
+  });
+}
+function findLoginForm(html, base) {
+  const forms = parseForms(html, base).filter(f => f.inputs.filter(i => i.type === 'password').length === 1 && f.inputs.some(i => ['text', 'email', 'tel'].includes(i.type)));
+  if (!forms.length) return null;
+  const f = forms[0];
+  f.userField = f.inputs.find(i => ['text', 'email', 'tel'].includes(i.type) && !/search|търс/i.test(i.name));
+  f.submit = f.inputs.find(i => i.type === 'submit' && /вход|login|sign|влез|submit/i.test(i.value + ' ' + i.name)) || f.inputs.find(i => i.type === 'submit');
+  return f;
+}
+function pageLinks(html, base) {
+  return [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].map(m => {
+    let href = ''; try { href = new URL(attrOf(m[1], 'href') || '#', base).toString(); } catch {}
+    return { text: stripTags(m[2]).slice(0, 80), href, onclick: attrOf(m[1], 'onclick').slice(0, 160), inner: m[2].slice(0, 300), cls: attrOf(m[1], 'class') };
+  });
+}
+function summarizePage(html, base) {
+  const links = pageLinks(html, base).filter(l => (l.text || l.onclick || /video|camera|play|fa-/i.test(l.inner + l.cls)) && !EBFU_SKIP.test(l.text + ' ' + l.href))
+    .map(l => ({ text: l.text, href: maskUrl(l.href), ...(l.onclick ? { onclick: l.onclick } : {}), ...(/video|camera|play|fa-|icon/i.test(l.inner + l.cls) && !l.text ? { icon: (l.cls + ' ' + (l.inner.match(/class=["']([^"']+)/) || [])[1]).trim().slice(0, 80) } : {}) }))
+    .slice(0, 90);
+  const clicks = [...html.matchAll(/<(button|div|span|i|img|td|tr|li|a)\b([^>]*\s(?:onclick|data-url|data-href|data-video|data-src|ng-click|@click|v-on:click)=["'][^"']{2,240}["'][^>]*)>/gi)]
+    .map(m => m[1] + ' ' + (m[2].match(/\s(?:onclick|data-url|data-href|data-video|data-src|ng-click|@click|v-on:click)=["'][^"']+["']/gi) || []).join(' ').slice(0, 240))
+    .filter(c => !EBFU_SKIP.test(c)).slice(0, 40);
+  const scripts = [...html.matchAll(/<script\b[^>]*\ssrc=["']([^"']+)["']/gi)].map(m => { try { return maskUrl(new URL(m[1], base).toString()); } catch { return m[1]; } }).slice(0, 30);
+  const hints = new Set();
+  for (const m of html.matchAll(/<script\b(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    for (const k of m[1].matchAll(/\$\.(?:ajax|post|get|getJSON)|fetch\(|XMLHttpRequest|\.load\(|url\s*:|video|player|m3u8|\.mp4|hls|jwplayer|videojs|plyr|api\//gi)) {
+      hints.add(m[1].slice(Math.max(0, k.index - 100), k.index + 200).replace(/\s+/g, ' '));
+      if (hints.size >= 20) break;
+    }
+    if (hints.size >= 20) break;
+  }
+  const media = [];
+  for (const m of html.matchAll(/<(iframe|video|source|embed|object)\b[^>]*\s(?:src|data|data-src)=["']([^"']+)["']/gi)) media.push(m[1] + ' ' + maskUrl(new URL(m[2], base).toString()));
+  for (const m of html.matchAll(/https?:\\?\/\\?\/[^"'\s<>()]+?\.(?:mp4|m3u8|webm|mpd)(?:\?[^"'\s<>()]*)?/gi)) media.push('file ' + maskUrl(m[0].replace(/\\\//g, '/')));
+  return { url: maskUrl(base), title: stripTags((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').slice(0, 120), kb: Math.round(html.length / 1024),
+    headings: [...html.matchAll(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]>/gi)].map(m => stripTags(m[1]).slice(0, 80)).filter(Boolean).slice(0, 20),
+    forms: parseForms(html, base).map(f => ({ action: maskUrl(f.action), method: f.method, id: f.id, inputs: f.inputs.map(i => i.type + ':' + i.name), onsubmit: f.onsubmit })),
+    links, clicks, scripts, hints: [...hints], media: [...new Set(media)].slice(0, 30) };
+}
+function pickLink(html, base, textRe, hrefRe, iconOk) {
+  const ls = pageLinks(html, base).filter(l => l.href && !/^javascript:|#$/.test(l.href) && /(^|\.)ebfu\.net$/i.test(new URL(l.href).hostname) && !EBFU_SKIP.test(l.text + ' ' + l.href));
+  return (ls.find(l => textRe.test(l.text)) || ls.find(l => hrefRe.test(l.href)) || (iconOk ? ls.find(l => /video|camera|fa-video|play/i.test(l.inner + ' ' + l.cls)) : null) || {}).href || null;
+}
+
+async function ebfuLogin(username, password, diag) {
+  if (!username || !password) return { ok: false, error: 'Enter your ebfu.net username and password.' };
+  const jar = new Map();
+  const first = await ebfuFetch(EBFU_BASE, jar, {}, diag);
+  const form = findLoginForm(first.text, first.url);
+  if (!form) return { ok: false, error: "Couldn't find the ebfu.net login form.", inspect: summarizePage(first.text, first.url) };
+  const fields = new URLSearchParams();
+  for (const f of form.inputs) {
+    if (f.type === 'password') fields.set(f.name, password);
+    else if (f === form.userField) fields.set(f.name, username);
+    else if (f.type === 'hidden') fields.set(f.name, f.value);
+    else if (f.type === 'checkbox' && f.checked) fields.set(f.name, f.value || 'on');
+    else if (f === form.submit) fields.set(f.name, f.value);
+  }
+  const isGet = form.method === 'GET';
+  const target = isGet ? form.action + (form.action.includes('?') ? '&' : '?') + fields : form.action;
+  const res = await ebfuFetch(target, jar, { method: isGet ? 'GET' : 'POST', body: isGet ? undefined : fields.toString(),
+    contentType: isGet ? undefined : 'application/x-www-form-urlencoded', referer: first.url }, diag);
+  const text = stripTags(res.text.replace(/<head\b[\s\S]*?<\/head>/i, ' '));
+  if (findLoginForm(res.text, res.url) || res.status >= 400) {
+    const msg = (text.match(/[^.!?]{0,80}(?:грешн|невалид|неправил|заключ|блокир|опит)[^.!?]{0,80}/i) || [])[0];
+    return { ok: false, error: msg ? 'ebfu.net says: ' + msg.trim() : 'ebfu.net did not accept the login.', inspect: summarizePage(res.text, res.url) };
+  }
+  const name = (res.text.match(/<(?:h[1-6]|span|div|b|strong)[^>]*>\s*([А-Я][а-я]+ [А-Я][а-я]+)\s*</) || [])[1] || '';
+  return { ok: true, session: jarStr(jar), name, landing: maskUrl(res.url) };
+}
+
+async function ebfuExplore(session, diag) {
+  if (!session) return { ok: false, error: 'Connect ebfu.net first.' };
+  const jar = jarFrom(session), report = { pages: [] };
+  const start = await ebfuFetch(EBFU_BASE, jar, {}, diag);
+  if (findLoginForm(start.text, start.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
+  report.pages.push({ step: 'start', ...summarizePage(start.text, start.url) });
+  const archiveUrl = pickLink(start.text, start.url, /видео\s*архив|видеоархив|video\s*archive/i, /video|archive|arhiv/i);
+  if (!archiveUrl) { report.note = 'No "Видеоархив" link found on the start page.'; return { ok: true, report, session: jarStr(jar) }; }
+  const archive = await ebfuFetch(archiveUrl, jar, { referer: start.url }, diag);
+  report.pages.push({ step: 'archive', ...summarizePage(archive.text, archive.url) });
+  const roundUrl = pickLink(archive.text, archive.url, /кръг|efbet|впфл|лига/i, /round|krug|kr=|rnd|league|liga|kolo/i, true);
+  if (roundUrl && roundUrl !== archiveUrl) {
+    const round = await ebfuFetch(roundUrl, jar, { referer: archive.url }, diag);
+    report.pages.push({ step: 'round', ...summarizePage(round.text, round.url) });
+    const videoUrl = pickLink(round.text, round.url, /видео|video|запис|гледай/i, /video|play|watch|vid=|record|stream/i, true);
+    if (videoUrl && videoUrl !== roundUrl) {
+      const video = await ebfuFetch(videoUrl, jar, { referer: round.url }, diag);
+      report.pages.push({ step: 'video', ...summarizePage(video.text, video.url) });
+    } else report.note = 'No video link found on the round page (the camera button may work through a script — see "clicks" and "hints").';
+  } else report.note = 'No league/round link found on the archive page.';
+  // the site's own scripts: addresses it calls (helps when buttons load videos with JavaScript)
+  const isEbfu = s => { try { return /(^|\.)ebfu\.net$/i.test(new URL(s).hostname); } catch { return false; } };
+  const own = [...new Set(report.pages.flatMap(p => p.scripts).filter(s => isEbfu(s) && !/jquery|bootstrap|font|analytics|gtag|moment|select2|datatables/i.test(s)))].slice(0, 3);
+  report.scriptCalls = [];
+  for (const src of own) {
+    try {
+      const js = (await ebfuFetch(src, jar, { referer: start.url }, diag)).text;
+      const calls = [...js.matchAll(/["'`](\/?(?:api|ajax|handlers?|services?|video|archive|arhiv|match)[\w\/.-]{2,80}(?:\?[^"'`\s]{0,60})?)["'`]/gi)].map(m => m[1]);
+      report.scriptCalls.push({ src, calls: [...new Set(calls)].slice(0, 40) });
+    } catch (e) { report.scriptCalls.push({ src, error: e.message }); }
+  }
+  return { ok: true, report, session: jarStr(jar) };
 }
 
 /* ---------------- helpers ---------------- */

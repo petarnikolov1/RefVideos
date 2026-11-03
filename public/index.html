@@ -1289,7 +1289,8 @@ async function deleteVideo(id){
 let ACC_TAB = 'login', ACC_KEY = '';
 function renderAccount(force){
   const box = $('#accountBox');
-  const key = [AUTH, USER && USER.id, PROFILE && PROFILE.approved, PROFILE && PROFILE.role, PROFILE && PROFILE.display_name, RECOVERY, ACC_TAB].join('|');
+  const key = [AUTH, USER && USER.id, PROFILE && PROFILE.approved, PROFILE && PROFILE.role, PROFILE && PROFILE.display_name, RECOVERY, ACC_TAB,
+    EBFU ? EBFU.name + EBFU.at : '-', EBFU_BUSY, EBFU_REPORT ? EBFU_REPORT.at : '-'].join('|');
   if (!force && key === ACC_KEY && box.firstChild) return;   // nothing changed — keep the form and what's typed in it
   ACC_KEY = key;
   preserveForm(box, () => drawAccount(box));
@@ -1307,7 +1308,8 @@ function drawAccount(box){
     box.innerHTML = `<div class="card"><h2>${esc((PROFILE && PROFILE.display_name) || USER.email)}</h2>
       <p class="muted">${esc(USER.email)}</p><p><b>Status:</b> ${esc(status)}</p>
       <p class="muted">Your read marks are saved to your account and follow you to other devices.</p>
-      <div class="bar">${approved() ? '<a class="btn primary" href="#videos">Upload a video</a>' : ''}${isAdmin() ? '<a class="btn" href="#admin">Admin</a>' : ''}<button id="btnLogout">Log out</button></div></div>`;
+      <div class="bar">${approved() ? '<a class="btn primary" href="#videos">Upload a video</a>' : ''}${isAdmin() ? '<a class="btn" href="#admin">Admin</a>' : ''}<button id="btnLogout">Log out</button></div></div>
+      ${approved() ? ebfuCard() : '<div class="card"><h2>ebfu.net</h2><p class="muted">Connecting your ebfu.net account opens once the admin approves you.</p></div>'}`;
     return;
   }
   const login = ACC_TAB === 'login';
@@ -1324,8 +1326,89 @@ function drawAccount(box){
   </div>`;
 }
 function accSay(t, cls){ const m = $('#accMsg'); if (m) { m.textContent = t; m.className = 'msg ' + (cls || ''); } }
+
+/* ======================= ebfu.net (each member's own account) ======================= */
+// The site logs in to ebfu.net with the member's own username and password, once. Only the ebfu.net
+// session is kept, in this browser; the password is never stored anywhere.
+const EBFU_KEY = 'bgRefWatch.ebfu', EBFU_FAILS = 'bgRefWatch.ebfuFails';
+let EBFU = loadJSON(EBFU_KEY), EBFU_BUSY = false, EBFU_REPORT = null, EBFU_MSG = null;
+const recentFails = () => (loadJSON(EBFU_FAILS) || []).filter(t => Date.now() - t < 30 * 60e3);
+function ebfuCard(){
+  const msg = EBFU_MSG ? `<div class="msg ${EBFU_MSG.cls || ''}">${esc(EBFU_MSG.text)}</div>` : '<div class="msg"></div>';
+  if (!EBFU) {
+    const blocked = recentFails().length >= 2;
+    return `<div class="card" id="ebfuCard"><h2>ebfu.net</h2>
+      <p class="muted">Connect your own ebfu.net account so the site can open match videos in the BFU video archive for you. Your password is used once to log in and is never stored. Only the ebfu.net login session is kept, on this device.</p>
+      <form class="form" id="ebfuForm" autocomplete="off">
+        <label>ebfu.net username<input type="text" name="ebfu_user" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+        <label>ebfu.net password<input type="password" name="ebfu_pass" required autocomplete="off"></label>
+        <p class="muted">ebfu.net locks an account after 5 wrong passwords, so the site stops after 2 failed tries for 30 minutes.</p>
+        <div class="bar"><button class="primary" type="submit" ${blocked || EBFU_BUSY ? 'disabled' : ''}>${EBFU_BUSY ? 'Connecting…' : 'Connect ebfu.net'}</button></div>
+        ${blocked ? '<div class="msg err">Two failed tries in the last 30 minutes. Check your username and password on ebfu.net itself, then try again later.</div>' : msg}
+      </form></div>`;
+  }
+  const r = EBFU_REPORT;
+  const steps = r ? ['start', 'archive', 'round', 'video'].map(k => `${r.report.pages.some(p => p.step === k) ? '✓' : '✗'} ${({ start:'start page', archive:'video archive', round:'league round', video:'match video' })[k]}`).join(' · ') : '';
+  return `<div class="card" id="ebfuCard"><h2>ebfu.net</h2>
+    <p><b>Connected</b>${EBFU.name ? ' as ' + esc(EBFU.name) : ''} · since ${esc(fmtDate(EBFU.at))}</p>
+    <p class="muted">Next step: "Check the video archive" opens the archive with your account and records how its pages are built (links, buttons, players) so the automatic match and minute search can be finished. Your calendar, history and settings pages are never opened.</p>
+    <div class="bar"><button class="primary" id="btnEbfuCheck" ${EBFU_BUSY ? 'disabled' : ''}>${EBFU_BUSY ? 'Checking…' : 'Check the video archive'}</button><button id="btnEbfuOff">Disconnect</button></div>
+    ${r ? `<p>${esc(steps)}</p>${r.report.note ? `<p class="muted">${esc(r.report.note)}</p>` : ''}
+      <div class="bar"><button class="primary" id="btnEbfuSend" ${r.sent ? 'disabled' : ''}>${r.sent ? '✓ Report sent' : 'Send this report to the developer'}</button></div>
+      <details class="muted"><summary>What's in the report</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:240px;overflow:auto">${esc(JSON.stringify(r.report, null, 1).slice(0, 6000))}</pre></details>` : ''}
+    ${msg}</div>`;
+}
+async function siteToken(){ const { data } = await SB.auth.getSession(); return data.session ? data.session.access_token : null; }
+async function ebfuCall(action, payload){
+  const token = await siteToken();
+  if (!token) throw new Error('Log in to the site again.');
+  const r = await fetch('/ebfu/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) });
+  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('The ebfu.net connection only works on the Cloudflare-hosted site.');
+  const j = await r.json();
+  if (j.diag && j.diag.length) log('ebfu.net ' + action + ': ' + j.diag.join(' → '));
+  return j;
+}
+function ebfuSay(text, cls){ EBFU_MSG = text ? { text, cls } : null; renderAccount(true); }
+async function ebfuConnect(form){
+  if (recentFails().length >= 2) return ebfuSay('Two failed tries in the last 30 minutes — wait before trying again.', 'err');
+  const f = new FormData(form), username = String(f.get('ebfu_user') || '').trim(), password = String(f.get('ebfu_pass') || '');
+  if (!username || !password) return;
+  EBFU_BUSY = true; EBFU_MSG = null; renderAccount(true);
+  try {
+    const j = await ebfuCall('login', { username, password });
+    EBFU_BUSY = false;
+    if (!j.ok) {
+      if (/ebfu\.net says|did not accept/.test(j.error || '')) saveJSON(EBFU_FAILS, recentFails().concat(Date.now()));
+      return ebfuSay(j.error || 'Could not connect.', 'err');
+    }
+    EBFU = { session: j.session, name: j.name || '', at: Date.now() };
+    saveJSON(EBFU_KEY, EBFU); saveJSON(EBFU_FAILS, []);
+    ebfuSay('Connected. Now tap "Check the video archive".', 'ok');
+  } catch (e) { EBFU_BUSY = false; ebfuSay(e.message, 'err'); }
+}
+async function ebfuCheck(){
+  EBFU_BUSY = true; EBFU_MSG = null; renderAccount(true);
+  try {
+    const j = await ebfuCall('explore', { session: EBFU.session });
+    EBFU_BUSY = false;
+    if (!j.ok) {
+      if (j.expired) { EBFU = null; saveJSON(EBFU_KEY, null); }
+      return ebfuSay(j.error || 'The check did not finish.', 'err');
+    }
+    if (j.session) { EBFU.session = j.session; saveJSON(EBFU_KEY, EBFU); }
+    EBFU_REPORT = { report: j.report, steps: j.diag || [], at: Date.now(), sent: false };
+    ebfuSay('Done. Send the report so the automatic search can be finished.', 'ok');
+  } catch (e) { EBFU_BUSY = false; ebfuSay(e.message, 'err'); }
+}
+async function ebfuSendReport(){
+  const { error } = await SB.from('ebfu_reports').insert({ report: { ...EBFU_REPORT.report, steps: EBFU_REPORT.steps } });
+  if (error) return ebfuSay('Could not send: ' + error.message, 'err');
+  EBFU_REPORT.sent = true;
+  ebfuSay('Report sent. Tell Claude it is there.', 'ok');
+}
 const redirectTo = () => location.origin + location.pathname;
 async function onAccountSubmit(form){
+  if (form.id === 'ebfuForm') return ebfuConnect(form);
   const f = new FormData(form), btn = form.querySelector('button[type=submit]');
   btn.disabled = true;
   try {
@@ -1416,6 +1499,9 @@ function initUI(){
   $('#accountBox').addEventListener('click', async e => {
     const tab = e.target.closest('[data-tab]'); if (tab) { ACC_TAB = tab.dataset.tab; renderAccount(true); return; }
     if (e.target.id === 'btnLogout') { await SB.auth.signOut(); return; }
+    if (e.target.id === 'btnEbfuCheck') return ebfuCheck();
+    if (e.target.id === 'btnEbfuSend') return ebfuSendReport();
+    if (e.target.id === 'btnEbfuOff') { EBFU = null; EBFU_REPORT = null; saveJSON(EBFU_KEY, null); return ebfuSay('Disconnected from ebfu.net on this device.', 'ok'); }
     if (e.target.id === 'btnForgot') {
       const email = $('#accountBox input[name=email]').value.trim();
       if (!email) return accSay('Type your email first, then tap "Forgot password?".', 'err');
