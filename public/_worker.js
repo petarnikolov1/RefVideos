@@ -9,7 +9,7 @@
 
 const FEED_HOSTS = ['news.google.com', 'www.bing.com', 'bing.com'];
 const FEED_CACHE_SECONDS = 900;
-const EXTRACT_VERSION = 3;   // bump to ignore results cached by older versions
+const EXTRACT_VERSION = 4;   // bump to ignore results cached by older versions
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 const BROWSER_HEADERS = { 'User-Agent': UA, 'Accept-Language': 'bg-BG,bg;q=0.9,en;q=0.6' };
 // Google shows a cookie-consent page to EU servers unless consent cookies are present
@@ -20,6 +20,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/feed') return handleFeed(request, url, ctx);
     if (url.pathname === '/extract') return handleExtract(request, url, ctx);
+    if (url.pathname === '/selftest') return handleSelftest(url, ctx);
     if (url.pathname === '/config.json') {
       return json({ supabaseUrl: env.SUPABASE_URL || '', supabaseKey: env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY || '' }, 200, 300);
     }
@@ -79,6 +80,46 @@ async function handleExtract(request, url, ctx) {
     result = { ok: false, error: String((e && e.message) || e), diag };
   }
   const response = json(result, 200, result.ok ? 21600 : 900);
+  if (cache) ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
+}
+
+/* ---------------- /selftest ----------------
+   Runs the whole chain on the server and reports each step: Google News feed → resolving two of its
+   links → opening those articles and a few sites known to block servers. Cached for 10 minutes. */
+const SELFTEST_ARTICLES = [
+  'https://sport.blitz.bg/efbet-liga/vizhte-nadupcheniya-krak-na-igracha-na-dunav-pri-situaciyata-vzrivila-futbola-ni_600191.html',
+  'https://fakti.bg/sport/1096583-sadiiskata-komisia-prizna-dve-greshki-v-parva-liga-ne-sa-dadeni-dva-cherveni-kartoni',
+];
+async function handleSelftest(url, ctx) {
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const cacheKey = new Request(url.origin + '/selftest?v=' + EXTRACT_VERSION, { method: 'GET' });
+  if (cache && !url.searchParams.has('fresh')) { const hit = await cache.match(cacheKey); if (hit) return hit; }
+  const out = { time: new Date().toISOString(), version: EXTRACT_VERSION };
+  let items = [];
+  try {
+    const r = await fetch('https://news.google.com/rss/search?q=' + encodeURIComponent('съдия efbet Лига') + '&hl=bg&gl=BG&ceid=BG:bg',
+      { headers: { ...BROWSER_HEADERS, Cookie: GOOGLE_COOKIES }, signal: AbortSignal.timeout(10000) });
+    const xml = await r.text();
+    items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 2).map(m => ({
+      title: decodeEntities((m[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1] || ''), link: ((m[1].match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '').trim() }));
+    out.googleFeed = { status: r.status, items: (xml.match(/<item>/g) || []).length };
+  } catch (e) { out.googleFeed = { error: e.message }; }
+  out.googleLinks = await Promise.all(items.map(async it => {
+    const diag = [], cut = it.title.lastIndexOf(' - ');
+    const title = cut > 15 ? it.title.slice(0, cut) : it.title, src = cut > 15 ? it.title.slice(cut + 3) : '';
+    let resolved = null;
+    try { resolved = await resolveGoogleNews(new URL(it.link), { title, src }, diag); } catch (e) { diag.push(e.message); }
+    return { title: title.slice(0, 90), source: src, resolved, diag };
+  }));
+  const urls = [...out.googleLinks.map(g => g.resolved).filter(Boolean), ...SELFTEST_ARTICLES];
+  out.articles = await Promise.all(urls.map(async u => {
+    const diag = [], page = await fetchArticle(u, diag);
+    return { url: u.slice(0, 110), opened: !!page, diag, kb: page ? Math.round(page.html.length / 1024) : 0,
+      iframes: page ? (page.html.match(/<iframe\b/gi) || []).length : 0,
+      youtube: page ? (page.html.match(/youtube(?:-nocookie)?\.com\/(?:embed|watch)|youtu\.be\/|videoid=/gi) || []).length : 0 };
+  }));
+  const response = json(out, 200, 600);
   if (cache) ctx.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
 }
@@ -151,26 +192,30 @@ async function findByTitle(title, src, diag) {
   return null;
 }
 
-// Some news sites block cloud servers; then the article is read through public relays
+// Some news sites block cloud servers; then the article is read through public relays and a reader
+// service (which opens the page like a browser, so videos added by scripts are included). The relays are
+// tried at the same time and the first good answer wins, so a blocked site costs seconds, not a minute.
 const isBotWall = h => h.length < 80000 && /cf-chl|challenge-platform|Just a moment\.\.\.|Attention Required|captcha|DDoS-Guard|Access denied|enable JavaScript and cookies/i.test(h.slice(0, 30000));
+const RELAYS = [
+  ['allorigins', u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u), { 'User-Agent': UA }],
+  ['codetabs', u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u), { 'User-Agent': UA }],
+  ['reader', u => 'https://r.jina.ai/' + u, { 'X-Return-Format': 'html', 'X-Timeout': '15' }],
+];
+async function tryRoute(name, href, headers, ms, diag) {
+  try {
+    const r = await fetch(href, { redirect: 'follow', signal: AbortSignal.timeout(ms), headers });
+    const html = await decodeBody(r);
+    if (r.ok && html.length > 1500 && !isBotWall(html)) return { html, finalUrl: r.url, name };
+    diag.push(`article ${name}: HTTP ${r.status}${isBotWall(html) ? ' bot check' : html.length <= 1500 ? ' empty' : ''}`);
+  } catch (e) { diag.push(`article ${name}: ${e.name === 'TimeoutError' ? 'timeout' : e.message}`); }
+  return null;
+}
 async function fetchArticle(articleUrl, diag) {
-  const routes = [
-    ['direct', u => u],
-    ['allorigins', u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u)],
-    ['codetabs', u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u)],
-  ];
-  for (const [name, make] of routes) {
-    try {
-      const r = await fetch(make(articleUrl), { redirect: 'follow', signal: AbortSignal.timeout(12000),
-        headers: name === 'direct' ? { ...BROWSER_HEADERS, Accept: 'text/html,application/xhtml+xml' } : { 'User-Agent': UA } });
-      const html = await decodeBody(r);
-      if (r.ok && html.length > 1500 && !isBotWall(html)) {
-        diag.push('article opened (' + name + ')');
-        return { html, finalUrl: name === 'direct' ? (r.url || articleUrl) : articleUrl };
-      }
-      diag.push(`article ${name}: HTTP ${r.status}${isBotWall(html) ? ' bot check' : html.length <= 1500 ? ' empty' : ''}`);
-    } catch (e) { diag.push(`article ${name}: ${e.name === 'TimeoutError' ? 'timeout' : e.message}`); }
-  }
+  const direct = await tryRoute('direct', articleUrl, { ...BROWSER_HEADERS, Accept: 'text/html,application/xhtml+xml' }, 8000, diag);
+  if (direct) { diag.push('article opened (direct)'); return { html: direct.html, finalUrl: direct.finalUrl || articleUrl }; }
+  const hit = await Promise.any(RELAYS.map(([name, make, headers]) =>
+    tryRoute(name, make(articleUrl), headers, 16000, diag).then(r => r || Promise.reject()))).catch(() => null);
+  if (hit) { diag.push('article opened (' + hit.name + ')'); return { html: hit.html, finalUrl: articleUrl }; }
   return null;
 }
 
