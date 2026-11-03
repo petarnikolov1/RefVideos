@@ -48,11 +48,11 @@ create trigger on_auth_user_created after insert on auth.users
 
 drop policy if exists "profiles: read own or admin" on public.profiles;
 create policy "profiles: read own or admin" on public.profiles
-  for select using (id = auth.uid() or public.is_admin());
+  for select to authenticated using (id = (select auth.uid()) or public.is_admin());
 
 drop policy if exists "profiles: admin updates" on public.profiles;
 create policy "profiles: admin updates" on public.profiles
-  for update using (public.is_admin()) with check (public.is_admin());
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- ───────────────────────── videos ─────────────────────────
 create table if not exists public.videos (
@@ -120,9 +120,13 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('videos', 'videos', true, 52428800, array['video/mp4', 'video/webm', 'video/quicktime'])
 on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
+-- Files are played through their public URL (public bucket), so nobody needs to *list* the bucket.
+-- Only the owner (and admins) can see their own entries through the API, which delete also needs.
 drop policy if exists "videos bucket: public read" on storage.objects;
-create policy "videos bucket: public read" on storage.objects
-  for select using (bucket_id = 'videos');
+drop policy if exists "videos bucket: owner or admin read" on storage.objects;
+create policy "videos bucket: owner or admin read" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'videos' and ((storage.foldername(name))[1] = (select auth.uid())::text or public.is_admin()));
 
 drop policy if exists "videos bucket: approved upload to own folder" on storage.objects;
 create policy "videos bucket: approved upload to own folder" on storage.objects
@@ -133,6 +137,15 @@ drop policy if exists "videos bucket: owner or admin delete" on storage.objects;
 create policy "videos bucket: owner or admin delete" on storage.objects
   for delete to authenticated
   using (bucket_id = 'videos' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));
+
+-- ───────────────────────── function permissions ─────────────────────────
+-- trigger functions are internal; the two checks are only needed by logged-in users
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.videos_set_uploader() from public, anon, authenticated;
+revoke execute on function public.is_admin() from public, anon;
+revoke execute on function public.is_approved() from public, anon;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_approved() to authenticated;
 
 -- ───────────────────────── make yourself admin ─────────────────────────
 -- 1) Register on the website first.  2) Put your email below and run just this line.
