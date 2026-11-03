@@ -27,15 +27,16 @@ A news site for refereeing in Bulgarian football — efbet Liga (1st League), 2n
 
 ## Supabase (accounts and video uploads)
 
-1. Create a free project at [supabase.com](https://supabase.com).
-2. **SQL Editor** → **New query** → paste all of `supabase-setup.sql` → **Run**.
-3. **Authentication → URL Configuration:** set **Site URL** to your site, for example `https://refvideos.pages.dev`, and add the same address under **Redirect URLs**.
-4. **Project Settings → API:** copy the **Project URL** and the **anon / publishable key**.
-5. In Cloudflare: your Pages project → **Settings → Variables and Secrets** → add `SUPABASE_URL` and `SUPABASE_ANON_KEY` with those values (Production). Then redeploy (**Deployments → Retry deployment**, or push any change).
-   - Alternatively, put both values at the top of the script in `public/index.html` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`). The anon key is meant to be public; the database is protected by the security rules in the SQL file.
-6. Register on the site with your own email. Then, in the SQL Editor, run the last line of `supabase-setup.sql` with your email to make yourself the admin.
+The site uses the **RefVideos** Supabase project (Frankfurt). The database, security rules and the `videos` storage bucket are already set up from `supabase-setup.sql`. The project URL and publishable key are at the top of the script in `public/index.html`; the key is meant to be public, and the data is protected by the security rules.
+
+Still to do in the Supabase dashboard:
+
+1. **Authentication → URL Configuration:** set **Site URL** to the site's address (for example `https://refvideos.pages.dev`) and add the same address under **Redirect URLs**, so confirmation and password-reset emails link back to the site.
+2. Register on the site, then make that account the admin. Run `update public.profiles set role = 'admin', approved = true where email = '…';` in the SQL Editor.
 
 New members start as **waiting for approval**. Approve them on the site's **Admin** page.
+
+To use a different Supabase project, run `supabase-setup.sql` there and change the two values in `index.html`. Alternatively, clear them and set `SUPABASE_URL` / `SUPABASE_ANON_KEY` as Cloudflare Pages variables.
 
 ## Running it locally
 

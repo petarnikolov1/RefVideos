@@ -1,5 +1,6 @@
 -- BG Referee Watch — Supabase setup
--- Run this once in Supabase: Dashboard → SQL Editor → New query → paste → Run.
+-- Already applied to the RefVideos Supabase project (eu-central-1).
+-- To set up a new project: Dashboard → SQL Editor → New query → paste → Run.
 -- It is safe to run again (everything is "create if missing" / "replace").
 --
 -- What it creates
@@ -22,12 +23,15 @@ create table if not exists public.profiles (
 );
 alter table public.profiles enable row level security;
 
-create or replace function public.is_admin() returns boolean
+create schema if not exists private;
+grant usage on schema private to authenticated;
+
+create or replace function private.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
 $$;
 
-create or replace function public.is_approved() returns boolean
+create or replace function private.is_approved() returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.profiles where id = auth.uid() and (approved or role = 'admin'));
 $$;
@@ -48,11 +52,11 @@ create trigger on_auth_user_created after insert on auth.users
 
 drop policy if exists "profiles: read own or admin" on public.profiles;
 create policy "profiles: read own or admin" on public.profiles
-  for select to authenticated using (id = (select auth.uid()) or public.is_admin());
+  for select to authenticated using (id = (select auth.uid()) or private.is_admin());
 
 drop policy if exists "profiles: admin updates" on public.profiles;
 create policy "profiles: admin updates" on public.profiles
-  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+  for update to authenticated using (private.is_admin()) with check (private.is_admin());
 
 -- ───────────────────────── videos ─────────────────────────
 create table if not exists public.videos (
@@ -73,6 +77,7 @@ create table if not exists public.videos (
   constraint video_source check (storage_path is not null or video_url is not null)
 );
 create index if not exists videos_article_key_idx on public.videos (article_key);
+create index if not exists videos_uploaded_by_idx on public.videos (uploaded_by);
 alter table public.videos enable row level security;
 
 -- uploader id and name are always set by the database, never trusted from the browser
@@ -92,15 +97,15 @@ create policy "videos: public read" on public.videos for select using (true);
 
 drop policy if exists "videos: approved users insert" on public.videos;
 create policy "videos: approved users insert" on public.videos
-  for insert to authenticated with check (public.is_approved());
+  for insert to authenticated with check (private.is_approved());
 
 drop policy if exists "videos: owner or admin update" on public.videos;
 create policy "videos: owner or admin update" on public.videos
-  for update to authenticated using (uploaded_by = auth.uid() or public.is_admin());
+  for update to authenticated using (uploaded_by = (select auth.uid()) or private.is_admin());
 
 drop policy if exists "videos: owner or admin delete" on public.videos;
 create policy "videos: owner or admin delete" on public.videos
-  for delete to authenticated using (uploaded_by = auth.uid() or public.is_admin());
+  for delete to authenticated using (uploaded_by = (select auth.uid()) or private.is_admin());
 
 -- ───────────────────────── read marks ─────────────────────────
 create table if not exists public.article_reads (
@@ -113,7 +118,7 @@ alter table public.article_reads enable row level security;
 
 drop policy if exists "reads: own rows" on public.article_reads;
 create policy "reads: own rows" on public.article_reads
-  for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+  for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 -- ───────────────────────── storage bucket ─────────────────────────
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -126,26 +131,28 @@ drop policy if exists "videos bucket: public read" on storage.objects;
 drop policy if exists "videos bucket: owner or admin read" on storage.objects;
 create policy "videos bucket: owner or admin read" on storage.objects
   for select to authenticated
-  using (bucket_id = 'videos' and ((storage.foldername(name))[1] = (select auth.uid())::text or public.is_admin()));
+  using (bucket_id = 'videos' and ((storage.foldername(name))[1] = (select auth.uid())::text or private.is_admin()));
 
 drop policy if exists "videos bucket: approved upload to own folder" on storage.objects;
 create policy "videos bucket: approved upload to own folder" on storage.objects
   for insert to authenticated
-  with check (bucket_id = 'videos' and public.is_approved() and (storage.foldername(name))[1] = auth.uid()::text);
+  with check (bucket_id = 'videos' and private.is_approved() and (storage.foldername(name))[1] = (select auth.uid())::text);
 
 drop policy if exists "videos bucket: owner or admin delete" on storage.objects;
 create policy "videos bucket: owner or admin delete" on storage.objects
   for delete to authenticated
-  using (bucket_id = 'videos' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));
+  using (bucket_id = 'videos' and ((storage.foldername(name))[1] = (select auth.uid())::text or private.is_admin()));
 
 -- ───────────────────────── function permissions ─────────────────────────
 -- trigger functions are internal; the two checks are only needed by logged-in users
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.videos_set_uploader() from public, anon, authenticated;
-revoke execute on function public.is_admin() from public, anon;
-revoke execute on function public.is_approved() from public, anon;
-grant execute on function public.is_admin() to authenticated;
-grant execute on function public.is_approved() to authenticated;
+revoke execute on function private.is_admin() from public, anon;
+revoke execute on function private.is_approved() from public, anon;
+drop function if exists public.is_admin();
+drop function if exists public.is_approved();
+grant execute on function private.is_admin() to authenticated;
+grant execute on function private.is_approved() to authenticated;
 
 -- ───────────────────────── make yourself admin ─────────────────────────
 -- 1) Register on the website first.  2) Put your email below and run just this line.
