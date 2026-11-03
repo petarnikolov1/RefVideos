@@ -15,7 +15,9 @@
   - "Refresh" only searches from the last update (minus 3 days overlap) until now.
   - It refreshes automatically when opened if the last update is older than 24 h, and every 24 h
     while the page stays open.
-  - Browsers block direct cross-site requests, so feeds are read through public CORS proxies
+  - Hosted on Cloudflare Pages together with _worker.js, the page reads feeds through its own
+    /feed relay first (fast and reliable) and only falls back to the public proxies below.
+  - Opened as a plain local file, browsers block direct cross-site requests, so feeds are read through public CORS proxies
     (tried in order, the working one is remembered). If they are slow or down, put your own proxy
     in Settings. A free Cloudflare Worker is enough:
 
@@ -384,7 +386,10 @@ function proxies(){
   const list = PROXIES.slice();
   const custom = (S.settings.proxy || '').trim();
   if (custom) list.unshift({ name:'custom', wrap:u => custom.includes('{url}') ? custom.replace('{url}', encodeURIComponent(u)) : custom + encodeURIComponent(u) });
-  const rank = p => (p.name === 'custom' ? 1000 : 0) + (p.name === S.proxyPref ? 5 : 0) - ((HEALTH[p.name] || 0) * 3);
+  // When hosted on Cloudflare Pages with the bundled _worker.js, the site has its own relay at /feed
+  if (/^https?:$/.test(location.protocol)) list.unshift({ name:'site', wrap:u => '/feed?url=' + encodeURIComponent(u) });
+  const rank = p => (p.name === 'custom' ? 1000 : p.name === 'site' ? 900 : 0) + (p.name === S.proxyPref ? 5 : 0)
+    - ((HEALTH[p.name] || 0) * (p.name === 'site' ? 300 : 3));
   return list.sort((a, b) => rank(b) - rank(a));
 }
 
