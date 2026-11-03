@@ -120,6 +120,40 @@ drop policy if exists "reads: own rows" on public.article_reads;
 create policy "reads: own rows" on public.article_reads
   for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
+-- ───────────────────────── comments on uploaded videos ─────────────────────────
+-- everyone can read; only approved members can write; the author or an admin can delete
+create table if not exists public.video_comments (
+  id          bigint generated always as identity primary key,
+  video_id    bigint not null references public.videos(id) on delete cascade,
+  user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  author_name text,
+  body        text not null check (char_length(btrim(body)) between 1 and 2000),
+  created_at  timestamptz not null default now()
+);
+create index if not exists video_comments_video_idx on public.video_comments (video_id, created_at);
+create index if not exists video_comments_user_idx on public.video_comments (user_id);
+alter table public.video_comments enable row level security;
+
+create or replace function public.comments_set_author() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.user_id     := auth.uid();
+  new.author_name := (select display_name from public.profiles where id = auth.uid());
+  return new;
+end; $$;
+drop trigger if exists comments_set_author on public.video_comments;
+create trigger comments_set_author before insert on public.video_comments
+  for each row execute function public.comments_set_author();
+
+drop policy if exists "comments: public read" on public.video_comments;
+create policy "comments: public read" on public.video_comments for select using (true);
+drop policy if exists "comments: approved members write" on public.video_comments;
+create policy "comments: approved members write" on public.video_comments
+  for insert to authenticated with check (private.is_approved());
+drop policy if exists "comments: author or admin delete" on public.video_comments;
+create policy "comments: author or admin delete" on public.video_comments
+  for delete to authenticated using (user_id = (select auth.uid()) or private.is_admin());
+
 -- ───────────────────────── storage bucket ─────────────────────────
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('videos', 'videos', true, 52428800, array['video/mp4', 'video/webm', 'video/quicktime'])
@@ -147,6 +181,7 @@ create policy "videos bucket: owner or admin delete" on storage.objects
 -- trigger functions are internal; the two checks are only needed by logged-in users
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.videos_set_uploader() from public, anon, authenticated;
+revoke execute on function public.comments_set_author() from public, anon, authenticated;
 revoke execute on function private.is_admin() from public, anon;
 revoke execute on function private.is_approved() from public, anon;
 drop function if exists public.is_admin();

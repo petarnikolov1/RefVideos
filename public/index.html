@@ -105,6 +105,12 @@
   pre#log{max-height:260px;overflow:auto;font-size:12px;white-space:pre-wrap;margin:10px 0 0}
   .empty{text-align:center;color:var(--muted);padding:40px 0}
   #more{display:block;margin:12px auto}
+  .comments{border-top:1px solid var(--line);margin-top:12px;padding-top:6px}
+  .comments h3{font-size:13px;color:var(--muted);margin:6px 0}
+  .cm{padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .cm .m{font-size:12px;color:var(--muted);white-space:normal}
+  .cform{display:grid;gap:6px;margin-top:8px}
+  button.link{border:none;background:none;padding:0 4px;color:var(--muted);text-decoration:underline;font-size:12px}
   table.users{width:100%;border-collapse:collapse;font-size:14px}
   table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   footer{padding:10px 0 40px;font-size:12px;color:var(--muted)}
@@ -221,7 +227,7 @@ const MAX_ARTICLES         = 6000;
 const PAGE_SIZE            = 50;
 const STORY_DAYS           = 3;     // articles more than this far apart are never grouped together
 const STORE_KEY            = 'bgRefWatch.v2';
-const XKEY                 = 'bgRefWatch.x1';
+const XKEY                 = 'bgRefWatch.x2';   // bumped: results from the older video finder are dropped
 const HOSTED               = /^https?:$/.test(location.protocol);
 
 const REFEREES = ['Георги Кабаков','Волен Чинков','Никола Попов','Мартин Марков','Драгомир Драганов',
@@ -428,7 +434,7 @@ function analyze(title, desc, q, strict){
 /* ======================= STORAGE ======================= */
 function loadJSON(k){ try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
 function saveJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
-try { localStorage.removeItem('bgRefWatch.v1'); } catch (e) {}
+try { localStorage.removeItem('bgRefWatch.v1'); localStorage.removeItem('bgRefWatch.x1'); } catch (e) {}
 
 const S = loadJSON(STORE_KEY) || {};
 S.articles = S.articles || {};
@@ -776,19 +782,22 @@ const XQ = [], XQSET = new Set();
 let xActive = 0;
 const xFresh = a => { const c = X[a.aid]; return c && Date.now() - c.t < (c.ok ? 3 * 864e5 : 6 * 3600e3); };
 
+const xFail = err => ({ t: Date.now(), ok: false, url: '', videos: [], minutes: [], err, diag: [] });
 async function extractArticle(a){
+  let r;
   try {
-    const r = await fetch('/extract?url=' + encodeURIComponent(a.link));
-    const type = r.headers.get('content-type') || '';
-    if (r.status === 404 || !type.includes('json')) { EXTRACT = 'off'; XQ.length = 0; XQSET.clear(); return; }
-    const j = await r.json();
-    EXTRACT = 'on';
-    X[a.aid] = { t: Date.now(), ok: !!j.ok, url: j.url || '', videos: (j.videos || []).slice(0, 8), minutes: (j.minutes || []).slice(0, 15), err: j.error || '' };
-    saveX();
-  } catch (e) {
-    X[a.aid] = { t: Date.now(), ok: false, url: '', videos: [], minutes: [], err: e.message };   // don't retry for a while
-    log('Video search failed: ' + e.message);
-  }
+    r = await fetch('/extract?url=' + encodeURIComponent(a.link) + '&title=' + encodeURIComponent(a.title) + '&src=' + encodeURIComponent(a.src || ''));
+  } catch (e) { X[a.aid] = xFail('network error'); return; }
+  const type = r.headers.get('content-type') || '';
+  // a plain page instead of JSON means the site isn't running the Cloudflare worker (e.g. opened as a local file)
+  if (!type.includes('json') && (r.ok || r.status === 404)) { EXTRACT = 'off'; XQ.length = 0; XQSET.clear(); log('Video finder is not available on this host'); return; }
+  let j;
+  try { j = await r.json(); } catch (e) { X[a.aid] = xFail('server error ' + r.status); saveX(); return; }   // one failure never switches the feature off
+  EXTRACT = 'on';
+  X[a.aid] = { t: Date.now(), ok: !!j.ok, url: j.url || '', videos: (j.videos || []).slice(0, 10), minutes: (j.minutes || []).slice(0, 20),
+    err: j.error || '', diag: (j.diag || []).slice(0, 12) };
+  if (!j.ok) log(`Couldn't open "${a.title.slice(0, 50)}" (${a.src}): ${j.error}${j.diag && j.diag.length ? ' — ' + j.diag.join(' → ') : ''}`);
+  saveX();
 }
 function queueExtract(arts, front){
   if (EXTRACT === 'off') return;
@@ -804,14 +813,15 @@ function pumpX(){
     extractArticle(a).finally(() => { xActive--; XQSET.delete(a.aid); scheduleRender(); pumpX(); });
   }
 }
-const extractTargets = s => s.arts.filter(a => !DUP.has(a.aid)).sort((x, y) => (y.vh - x.vh) || (y.score - x.score)).slice(0, 6);
+const extractTargets = s => s.arts.filter(a => !DUP.has(a.aid)).sort((x, y) => (y.vh - x.vh) || (y.score - x.score)).slice(0, 12);
 
-// Turn a video URL into an embeddable player (only well-known video hosts are embedded)
-function toEmbed(u){
+// Turn a video URL into an embeddable player. Well-known hosts are rebuilt from their video id;
+// a news site's own player (kind 'player' from the worker) is embedded as-is in a sandboxed frame.
+function toEmbed(u, kind){
   let url; try { url = new URL(u); } catch (e) { return null; }
   if (!/^https?:$/.test(url.protocol)) return null;
   const h = url.hostname.replace(/^(www|m|mobile)\./, '');
-  let id;
+  let id, m;
   if (h === 'youtu.be') id = url.pathname.slice(1, 12);
   else if (/(^|\.)youtube(-nocookie)?\.com$/.test(h)) id = url.searchParams.get('v') || (url.pathname.match(/\/(?:embed|shorts|live|v)\/([\w-]{11})/) || [])[1];
   if (id && /^[\w-]{11}$/.test(id)) return { kind:'YouTube', key:'yt:' + id, src:`https://www.youtube-nocookie.com/embed/${id}` };
@@ -819,70 +829,104 @@ function toEmbed(u){
   if (h.endsWith('dailymotion.com') || h === 'dai.ly') { id = (url.pathname.match(/(?:video\/|^\/)([a-z0-9]{6,})/i) || [])[1]; if (id) return { kind:'Dailymotion', key:'dm:' + id, src:`https://www.dailymotion.com/embed/video/${id}` }; }
   if (h.endsWith('vbox7.com')) { id = url.searchParams.get('vid') || (url.pathname.match(/play:(\w+)/) || [])[1]; if (id && /^\w+$/.test(id)) return { kind:'Vbox7', key:'vb:' + id, src:`https://www.vbox7.com/emb/external.php?vid=${id}` }; }
   if (h === 'streamable.com') { id = (url.pathname.match(/^\/(?:e\/)?(\w{4,})/) || [])[1]; if (id) return { kind:'Streamable', key:'st:' + id, src:`https://streamable.com/e/${id}` }; }
+  if (h === 'instagram.com' && (m = url.pathname.match(/^\/(p|reel|tv)\/([\w-]+)/))) return { kind:'Instagram', key:'ig:' + m[2], src:`https://www.instagram.com/${m[1] === 'tv' ? 'p' : m[1]}/${m[2]}/embed` };
+  if (h === 'tiktok.com' && (m = url.pathname.match(/\/video\/(\d+)|\/embed\/(?:v2\/)?(\d+)/))) { id = m[1] || m[2]; return { kind:'TikTok', key:'tt:' + id, src:`https://www.tiktok.com/embed/v2/${id}` }; }
   if (h.endsWith('facebook.com') || h === 'fb.watch') {
     const href = url.pathname.startsWith('/plugins/video.php') ? (url.searchParams.get('href') || '') : u;
-    if (/facebook\.com\/.+\/videos\/|facebook\.com\/watch|facebook\.com\/reel\/|fb\.watch\//.test(href))
+    if (/facebook\.com\/.+\/videos\/|facebook\.com\/watch|facebook\.com\/reel\/|facebook\.com\/share\/v\/|fb\.watch\//.test(href))
       return { kind:'Facebook', key:'fb:' + href, src:'https://www.facebook.com/plugins/video.php?show_text=false&href=' + encodeURIComponent(href) };
+    return null;
   }
+  if (kind === 'player' && url.protocol === 'https:' && url.origin !== location.origin)
+    return { kind:'Video player', key:'pl:' + url.origin + url.pathname, src:url.href, sandbox:true };
   return null;
+}
+function videoFile(u){
+  let url; try { url = new URL(u); } catch (e) { return null; }
+  if (url.protocol !== 'https:' || !/\.(mp4|webm|mov|m3u8)(\?|$)/i.test(url.pathname)) return null;
+  return { key:'f:' + url.origin + url.pathname, src:url.href, hls:/\.m3u8/i.test(url.pathname) };
 }
 function videoLink(u){
   let url; try { url = new URL(u); } catch (e) { return null; }
-  if (!/^https?:$/.test(url.protocol)) return null;
-  if (/(^|\.)(twitter|x)\.com$/.test(url.hostname) && /\/status\/\d+/.test(url.pathname)) return { label:'Video post on X', href:u };
-  if (/\.(mp4|webm|m3u8|mov)(\?|$)/i.test(url.pathname)) return { label:'Video file', href:u };
+  if (/^https?:$/.test(url.protocol) && /(^|\.)(twitter|x)\.com$/.test(url.hostname) && /\/status\/\d+/.test(url.pathname)) return { label:'Video post on X', href:u };
   return null;
 }
-const playerHtml = e => `<div class="player"><iframe src="${esc(e.src)}" loading="lazy" title="${esc(e.kind)} video" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+const playerHtml = e => `<div class="player"><iframe src="${esc(e.src)}" loading="lazy" title="${esc(e.kind)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"${e.sandbox ? ' sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"' : ''}></iframe></div>`;
+const fileHtml = f => `<video class="file" controls preload="metadata" playsinline src="${esc(f.src)}"></video>`;
 const minLabel = m => `${m.m}${m.plus ? '+' + m.plus : ''}'`;
 const MIN_TAGS = { penalty:'penalty', red:'red card', yellow:'yellow card', offside:'offside', goal:'goal', var:'VAR', foul:'foul' };
 
-function mediaHtml(s){
-  const out = [];
-  const uploads = VIDEOS.filter(v => v.article_key && s.aidSet.has(v.article_key));
-  uploads.forEach(v => out.push(uploadedPlayer(v) + `<div class="muted">Uploaded by ${esc(v.uploader_name || 'member')} · ${esc(v.title)}</div>`));
+// Everything the opened articles of a story gave us: players, video files, links, minutes, failures
+function storyMedia(s){
   const targets = extractTargets(s);
-  const vids = new Map(), links = new Map(), mins = new Map();
+  const vids = new Map(), files = new Map(), links = new Map(), mins = new Map(), failed = [];
+  let done = 0;
   for (const a of targets) {
     const r = X[a.aid]; if (!r) continue;
-    (r.videos || []).forEach(v => {
-      const e = toEmbed(v.url);
-      if (e) { if (!vids.has(e.key)) vids.set(e.key, { ...e, from: a.src }); return; }
-      const l = videoLink(v.url); if (l && !links.has(l.href)) links.set(l.href, { ...l, from: a.src });
-    });
-    (r.minutes || []).forEach(m => {
+    done++;
+    if (!r.ok) { failed.push({ a, r }); continue; }
+    for (const v of r.videos || []) {
+      const e = toEmbed(v.url, v.kind);
+      if (e) { if (!vids.has(e.key)) vids.set(e.key, { ...e, from: a.src, page: v.how === 'page' || v.how === 'script' }); continue; }
+      const f = videoFile(v.url);
+      if (f) { if (!files.has(f.key)) files.set(f.key, { ...f, from: a.src }); continue; }
+      const l = videoLink(v.url);
+      if (l && !links.has(l.href)) links.set(l.href, { ...l, from: a.src });
+    }
+    for (const m of r.minutes || []) {
       const k = m.m + '+' + (m.plus || 0);
       if (!mins.has(k)) mins.set(k, { ...m, tags: [...(m.tags || [])], from: a.src });
       else { const x = mins.get(k); (m.tags || []).forEach(t => x.tags.includes(t) || x.tags.push(t)); }
-    });
+    }
   }
-  [...vids.values()].slice(0, 3).forEach(e => out.push(playerHtml(e) + `<div class="muted">${esc(e.kind)} video from ${esc(e.from)}</div>`));
-  if (links.size) out.push('<div class="msg">' + [...links.values()].slice(0, 4).map(l => `<a class="btn small" href="${esc(safeUrl(l.href))}" target="_blank" rel="noopener noreferrer">▶ ${esc(l.label)} (${esc(l.from)})</a>`).join(' ') + '</div>');
+  const players = [...vids.values()].sort((a, b) => (a.sandbox ? 1 : 0) - (b.sandbox ? 1 : 0) || (a.page ? 1 : 0) - (b.page ? 1 : 0));
+  return { targets, players, files: [...files.values()], links: [...links.values()], failed,
+    mins: [...mins.values()].sort((a, b) => a.m - b.m || (a.plus || 0) - (b.plus || 0)),
+    pending: EXTRACT !== 'off' && done < targets.length };
+}
 
-  const minList = [...mins.values()].sort((a, b) => a.m - b.m || (a.plus || 0) - (b.plus || 0));
-  if (minList.length) out.push('<h3>Minutes mentioned</h3><div class="mins">' + minList.map(m =>
+function ebfuHtml(s, mins){
+  const match = storyMatch(s);
+  const sits = mins.length
+    ? 'Situations at ' + mins.map(m => `<span class="min">${minLabel(m)}</span>${m.tags.length ? esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) : ''}`).join(' ')
+    : (s.cats.filter(c => c !== 'other').length ? 'Situations: ' + esc(s.cats.filter(c => c !== 'other').map(c => CATS[c]).join(', ')) : '');
+  return `<div class="ebfu"><div><b>ebfu.net video archive</b> · ${match ? esc(match) + ' · ' : ''}${esc(fmtDay(s.first))}${s.divs.some(d => d !== 'unk') ? ' · ' + esc(s.divs.filter(d => d !== 'unk').map(d => DIVS[d]).join(', ')) : ''}</div>
+    ${sits ? `<div>${sits}</div>` : ''}
+    <div><a class="btn" href="${esc(EBFU_URL)}" target="_blank" rel="noopener">Open in ebfu.net</a>
+    <span class="muted">Opens with your own ebfu.net login. Jumping straight to the match and minute comes next.</span></div></div>`;
+}
+
+function mediaHtml(s){
+  const out = [], M = storyMedia(s);
+  const uploads = VIDEOS.filter(v => v.article_key && s.aidSet.has(v.article_key));
+  uploads.forEach(v => out.push(uploadedPlayer(v) + `<div class="muted">Uploaded by ${esc(v.uploader_name || 'member')} · ${esc(v.title)} · <a href="#video-${esc(v.id)}">💬 ${(COMMENTS[v.id] || []).length} comment${(COMMENTS[v.id] || []).length === 1 ? '' : 's'}</a></div>`));
+  const players = M.players.slice(0, 4);
+  players.forEach(e => out.push(playerHtml(e) + `<div class="muted">${esc(e.kind)} from ${esc(e.from)}${e.page ? ' (found on the article page)' : ''}</div>`));
+  M.files.slice(0, 2).forEach(f => out.push(fileHtml(f) + `<div class="muted">Video from ${esc(f.from)} · <a href="${esc(safeUrl(f.src))}" target="_blank" rel="noopener noreferrer">open the file</a></div>`));
+  if (M.links.length) out.push('<div class="msg">' + M.links.slice(0, 4).map(l => `<a class="btn small" href="${esc(safeUrl(l.href))}" target="_blank" rel="noopener noreferrer">▶ ${esc(l.label)} (${esc(l.from)})</a>`).join(' ') + '</div>');
+  if (M.mins.length) out.push('<h3>Minutes mentioned</h3><div class="mins">' + M.mins.map(m =>
     `<div class="minrow"><span class="min">${minLabel(m)}</span>${m.tags.length ? '<b>' + esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) + '</b> · ' : ''}<span class="muted">…${esc(m.ctx || '')}… (${esc(m.from)})</span></div>`).join('') + '</div>');
-  if (!vids.size && !uploads.length && minList.length) {
-    const match = storyMatch(s);
-    out.push(`<div class="ebfu"><div><b>Match video</b>${match ? ' · ' + esc(match) : ''} · ${esc(fmtDay(s.first))}</div>
-      <div>Situations at ${minList.map(m => `<span class="min">${minLabel(m)}</span>`).join('')}</div>
-      <div><a class="btn" href="${esc(EBFU_URL)}" target="_blank" rel="noopener">Open ebfu.net</a>
-      <span class="muted">Automatic match search there will be added next.</span></div></div>`);
-  }
-  const pending = EXTRACT !== 'off' && targets.some(a => !X[a.aid]);
+  if (s.scope === 'bg') out.push(ebfuHtml(s, M.mins));
   if (EXTRACT === 'off') out.push('<div class="muted">Finding videos inside articles works on the Cloudflare-hosted site.</div>');
-  else if (pending) out.push('<div class="muted">Looking for videos in the articles…</div>');
-  else if (!vids.size && !links.size && !uploads.length) out.push('<div class="muted">No video found in the articles.</div>');
-  const sig = [uploads.map(v => v.id), [...vids.keys()], [...links.keys()], [...mins.keys()], pending, EXTRACT].join('|');
+  else if (M.pending) out.push(`<div class="muted">Looking for videos in ${M.targets.length} article${M.targets.length > 1 ? 's' : ''}…</div>`);
+  else if (!players.length && !M.files.length && !M.links.length && !uploads.length) out.push('<div class="muted">No video found in the articles.</div>');
+  if (M.failed.length) out.push(`<details class="muted"><summary>Couldn't open ${M.failed.length} of ${M.targets.length} articles</summary>${M.failed.map(({ a, r }) =>
+    `<div>• ${esc(a.src)}: ${esc(r.err)}${r.diag && r.diag.length ? ' (' + esc(r.diag.join(' → ')) + ')' : ''}</div>`).join('')}</details>`);
+  if (EXTRACT !== 'off' && !M.pending) out.push('<div class="actions"><button class="small" data-act="retry">↻ Look for videos again</button></div>');
+  const sig = [uploads.map(v => v.id + ':' + (COMMENTS[v.id] || []).length), players.map(p => p.key), M.files.map(f => f.key), M.links.map(l => l.href),
+    M.mins.map(m => m.m + '+' + m.plus), M.failed.length, M.pending, EXTRACT].join('|');
   return { html: out.join(''), sig };
 }
-function storyHasVideo(s){
+function storyHasVideo(s, M){
   if (VIDEOS.some(v => v.article_key && s.aidSet.has(v.article_key))) return true;
-  return extractTargets(s).some(a => X[a.aid] && (X[a.aid].videos || []).some(v => toEmbed(v.url) || videoLink(v.url)));
+  M = M || storyMedia(s);
+  return M.players.length > 0 || M.files.length > 0 || M.links.length > 0;
 }
 
 /* ======================= SUPABASE: ACCOUNTS, VIDEOS, ADMIN ======================= */
 let SB = null, USER = null, PROFILE = null, AUTH = 'loading', RECOVERY = false, VIDEOS = [], USERS = [], PREFILL = null;
+let COMMENTS = {};   // video id -> comments, oldest first
+let VID_VER = 0;     // bumps when videos or comments change (re-draw the Videos list only then)
 const approved = () => !!(PROFILE && (PROFILE.approved || PROFILE.role === 'admin'));
 const isAdmin = () => !!(PROFILE && PROFILE.role === 'admin');
 
@@ -924,6 +968,36 @@ async function loadVideos(){
   const { data, error } = await SB.from('videos').select('*').order('created_at', { ascending: false }).limit(500);
   if (error) { log('Could not load videos: ' + error.message); return; }
   VIDEOS = data || [];
+  VID_VER++;
+  await loadComments();
+  renderAll();
+}
+async function loadComments(){
+  if (!SB || !VIDEOS.length) { COMMENTS = {}; return; }
+  const { data, error } = await SB.from('video_comments').select('id,video_id,user_id,author_name,body,created_at')
+    .in('video_id', VIDEOS.map(v => v.id)).order('created_at', { ascending: true }).limit(5000);
+  if (error) { log('Could not load comments: ' + error.message); return; }
+  COMMENTS = {};
+  (data || []).forEach(c => (COMMENTS[c.video_id] = COMMENTS[c.video_id] || []).push(c));
+  VID_VER++;
+}
+async function postComment(form){
+  const body = String(new FormData(form).get('body') || '').trim(), vid = Number(form.dataset.vid);
+  const msg = form.querySelector('.msg'), btn = form.querySelector('button[type=submit]');
+  if (!body) return;
+  btn.disabled = true;
+  const { error } = await SB.from('video_comments').insert({ video_id: vid, body: body.slice(0, 2000) });
+  btn.disabled = false;
+  if (error) { if (msg) { msg.textContent = 'Could not post: ' + error.message; msg.className = 'msg err'; } return; }
+  form.reset();
+  await loadComments();
+  renderAll();
+}
+async function deleteComment(id){
+  if (!confirm('Delete this comment?')) return;
+  const { error } = await SB.from('video_comments').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  await loadComments();
   renderAll();
 }
 async function loadUsers(){
@@ -945,9 +1019,11 @@ function uploadedPlayer(v){
 let VIEW = 'bg';
 const VIEWS = ['bg', 'world', 'videos', 'account', 'admin'];
 function go(v){ if (location.hash !== '#' + v) location.hash = v; else applyView(); }
+let SCROLL_TO = null;
 function applyView(){
   const v = (location.hash || '#bg').slice(1);
-  VIEW = VIEWS.includes(v) ? v : 'bg';
+  SCROLL_TO = v.startsWith('video-') ? 'v-' + v.slice(6) : null;   // #video-12 opens Videos at that clip
+  VIEW = SCROLL_TO ? 'videos' : VIEWS.includes(v) ? v : 'bg';
   if (VIEW === 'admin' && !isAdmin() && AUTH !== 'loading') VIEW = 'account';
   $('#view-news').hidden = !(VIEW === 'bg' || VIEW === 'world');
   $('#scanArea').hidden = !(VIEW === 'bg' || VIEW === 'world');
@@ -957,6 +1033,7 @@ function applyView(){
   shown = PAGE_SIZE;
   renderAll();
   if (VIEW === 'admin') loadUsers();
+  if (SCROLL_TO) { const el = document.getElementById(SCROLL_TO); if (el) el.scrollIntoView({ block: 'start' }); }
 }
 function renderNav(){
   const stories = buildStories();
@@ -1019,7 +1096,9 @@ function storyCard(s){
   const srcLine = esc(r.src) + (extra > 0 ? ` <span title="${esc([...new Set(others)].join(', '))}">+${extra} more source${extra > 1 ? 's' : ''}</span>` : '');
   const tags = (s.scope === 'world' ? s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`) : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`))
     .concat(s.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`));
-  if (storyHasVideo(s)) tags.unshift('<span class="tag vid">▶ Video</span>');
+  const M = storyMedia(s);
+  if (M.mins.length) tags.unshift(`<span class="tag">⏱ ${M.mins.slice(0, 4).map(minLabel).join(' ')}${M.mins.length > 4 ? ' …' : ''}</span>`);
+  if (storyHasVideo(s, M)) tags.unshift('<span class="tag vid">▶ Video</span>');
   const open = EXPANDED.has(s.key);
   let panel = '';
   if (open) {
@@ -1043,6 +1122,7 @@ function storyCard(s){
     <div class="actions">
       <button class="small" data-act="expand">${open ? '▴ Hide' : '▾ ' + (s.arts.length > 1 ? `All ${s.arts.length} articles & video` : 'Details & video')}</button>
       <button class="small" data-act="read">${read ? 'Mark unread' : 'Mark read'}</button>
+      ${s.scope === 'bg' ? `<a class="btn small" href="${esc(EBFU_URL)}" target="_blank" rel="noopener" title="Match video in the ebfu.net archive (your own login)">🎥 ebfu.net</a>` : ''}
     </div>${panel}
   </article>`;
 }
@@ -1076,33 +1156,70 @@ function render(){
   $('#more').hidden = list.length <= shown;
   updateLastRun();
   // look for videos in the stories on screen (first article of each), and all articles of opened stories
-  queueExtract(list.slice(0, 20).map(s => extractTargets(s)[0]));
+  queueExtract(list.slice(0, 30).flatMap(s => extractTargets(s).slice(0, 2)));
   list.filter(s => EXPANDED.has(s.key)).forEach(s => queueExtract(extractTargets(s), true));
 }
 
+/* ======================= UI: FORMS KEEP WHAT YOU TYPE ======================= */
+// Re-drawing a part of the page that holds a form would wipe what was typed; these keep it.
+const fieldKey = el => (el.closest('form') ? (el.closest('form').id || el.closest('form').dataset.vid || '') + ':' : '') + (el.name || el.id);
+function preserveForm(container, draw){
+  const vals = {}; let focus = null, s0 = null, s1 = null;
+  container.querySelectorAll('input,textarea,select').forEach(el => {
+    if (el.type === 'file' || el.type === 'hidden' || !(el.name || el.id)) return;
+    const k = fieldKey(el);
+    vals[k] = el.type === 'checkbox' ? el.checked : el.value;
+    if (el === document.activeElement) { focus = k; try { s0 = el.selectionStart; s1 = el.selectionEnd; } catch (e) {} }
+  });
+  draw();
+  container.querySelectorAll('input,textarea,select').forEach(el => {
+    const k = fieldKey(el);
+    if (k in vals) { if (el.type === 'checkbox') el.checked = vals[k]; else if (vals[k] !== '') el.value = vals[k]; }
+    if (k === focus) { el.focus(); try { if (s0 != null) el.setSelectionRange(s0, s1); } catch (e) {} }
+  });
+}
+
 /* ======================= UI: VIDEOS ======================= */
+let UP_KEY = '', LIST_KEY = '';
 function renderVideos(){
   const box = $('#uploadBox');
-  if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Video uploads need the Supabase connection, which isn't set up on this site yet.</div>`;
-  else if (AUTH === 'loading') box.innerHTML = '<p class="muted">Loading…</p>';
-  else if (!USER) box.innerHTML = `<div class="card"><b>Want to add a clip?</b><p class="muted">Members approved by the admin can upload match videos. <a href="#account">Log in or register</a>.</p></div>`;
-  else if (!approved()) box.innerHTML = `<div class="card"><b>Waiting for approval</b><p class="muted">Your account is registered. The admin needs to approve it before you can upload videos.</p></div>`;
-  else box.innerHTML = uploadForm();
-
+  // the upload form is only re-drawn when who is logged in (or the story it's for) changes — never while typing
+  const upKey = [AUTH, USER && USER.id, approved(), PREFILL ? PREFILL.article_key : ''].join('|');
+  if (upKey !== UP_KEY) {
+    UP_KEY = upKey;
+    if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Video uploads need the Supabase connection, which isn't set up on this site yet.</div>`;
+    else if (AUTH === 'loading') box.innerHTML = '<p class="muted">Loading…</p>';
+    else if (!USER) box.innerHTML = `<div class="card"><b>Want to add a clip?</b><p class="muted">Members approved by the admin can upload match videos and comment on them. <a href="#account">Log in or register</a>.</p></div>`;
+    else if (!approved()) box.innerHTML = `<div class="card"><b>Waiting for approval</b><p class="muted">Your account is registered. The admin needs to approve it before you can upload videos or comment.</p></div>`;
+    else box.innerHTML = uploadForm();
+  }
   const text = norm($('#vq').value);
+  const listKey = [VID_VER, text, USER && USER.id, approved(), isAdmin(), AUTH].join('|');
+  if (listKey === LIST_KEY) return;
+  LIST_KEY = listKey;
   const vids = VIDEOS.filter(v => !text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name].join(' ')).includes(text));
-  $('#videoList').innerHTML = vids.length ? vids.map(v => {
-    const canDelete = USER && (v.uploaded_by === USER.id || isAdmin());
-    return `<article class="card">
-      <div class="meta"><span>${esc(fmtDate(Date.parse(v.created_at)))}</span><span>·</span><span>by ${esc(v.uploader_name || 'member')}</span>${v.division ? `<span>·</span><span>${esc(DIVS[v.division] || v.division)}</span>` : ''}</div>
-      <h2>${esc(v.title)}</h2>
-      <div class="muted">${[v.match, v.match_date && fmtDay(Date.parse(v.match_date)), v.minutes && 'minutes ' + v.minutes].filter(Boolean).map(esc).join(' · ')}</div>
-      ${uploadedPlayer(v)}
-      ${v.description ? `<p class="desc">${esc(v.description)}</p>` : ''}
-      <div class="actions">${v.article_url ? `<a class="btn small" href="${esc(safeUrl(v.article_url))}" target="_blank" rel="noopener noreferrer">Related article</a>` : ''}
-        ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Delete</button>` : ''}</div>
-    </article>`;
-  }).join('') : `<div class="empty">${AUTH === 'off' ? '' : 'No videos uploaded yet.'}</div>`;
+  preserveForm($('#videoList'), () => {
+    $('#videoList').innerHTML = vids.length ? vids.map(videoCard).join('') : `<div class="empty">${AUTH === 'off' ? '' : 'No videos uploaded yet.'}</div>`;
+  });
+}
+function videoCard(v){
+  const canDelete = USER && (v.uploaded_by === USER.id || isAdmin());
+  const cs = COMMENTS[v.id] || [];
+  const comments = cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'member')}</b> · ${esc(fmtDate(Date.parse(c.created_at)))}
+      ${USER && (c.user_id === USER.id || isAdmin()) ? `<button class="small link" data-cdel="${esc(c.id)}">delete</button>` : ''}</div><div>${esc(c.body)}</div></div>`).join('');
+  const form = approved()
+    ? `<form class="cform" data-vid="${esc(v.id)}"><textarea name="body" maxlength="2000" required placeholder="Write a comment…"></textarea><div class="bar"><button class="small primary" type="submit">Post comment</button></div><div class="msg"></div></form>`
+    : `<p class="muted">${USER ? 'Commenting opens once the admin approves your account.' : '<a href="#account">Log in</a> as an approved member to comment.'}</p>`;
+  return `<article class="card" id="v-${esc(v.id)}">
+    <div class="meta"><span>${esc(fmtDate(Date.parse(v.created_at)))}</span><span>·</span><span>by ${esc(v.uploader_name || 'member')}</span>${v.division ? `<span>·</span><span>${esc(DIVS[v.division] || v.division)}</span>` : ''}</div>
+    <h2>${esc(v.title)}</h2>
+    <div class="muted">${[v.match, v.match_date && fmtDay(Date.parse(v.match_date)), v.minutes && 'minutes ' + v.minutes].filter(Boolean).map(esc).join(' · ')}</div>
+    ${uploadedPlayer(v)}
+    ${v.description ? `<p class="desc">${esc(v.description)}</p>` : ''}
+    <div class="actions">${v.article_url ? `<a class="btn small" href="${esc(safeUrl(v.article_url))}" target="_blank" rel="noopener noreferrer">Related article</a>` : ''}
+      ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Delete video</button>` : ''}</div>
+    <div class="comments"><h3>💬 ${cs.length} comment${cs.length === 1 ? '' : 's'}</h3>${comments}${form}</div>
+  </article>`;
 }
 function uploadForm(){
   const p = PREFILL || {};
@@ -1119,7 +1236,7 @@ function uploadForm(){
         <label>Division<select name="division"><option value="">—</option>${Object.entries(DIVS).filter(([k]) => k !== 'unk').map(([k, l]) => `<option value="${k}" ${p.division === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       </div>
       <label>Video file (MP4/WebM/MOV, up to ${MAX_UPLOAD_MB} MB)<input type="file" name="file" accept="video/mp4,video/webm,video/quicktime"></label>
-      <label>…or a video link (YouTube, Facebook, Vimeo, Vbox7)<input type="url" name="video_url" placeholder="https://www.youtube.com/watch?v=…"></label>
+      <label>…or a video link (YouTube, Facebook, Vimeo, Vbox7, Instagram, TikTok)<input type="url" name="video_url" placeholder="https://www.youtube.com/watch?v=…"></label>
       <label>Description<textarea name="description" maxlength="2000"></textarea></label>
       <input type="hidden" name="article_key" value="${esc(p.article_key || '')}">
       <input type="hidden" name="article_url" value="${esc(p.article_url || '')}">
@@ -1152,6 +1269,7 @@ async function submitUpload(form){
     const { error } = await SB.from('videos').insert(row);
     if (error) { if (path) await SB.storage.from('videos').remove([path]); throw error; }
     PREFILL = null;
+    form.reset();
     await loadVideos();
     const m = $('#upMsg'); if (m) { m.textContent = 'Uploaded — the video is now on the site.'; m.className = 'msg ok'; }
   } catch (e) {
@@ -1168,9 +1286,15 @@ async function deleteVideo(id){
 }
 
 /* ======================= UI: ACCOUNT ======================= */
-let ACC_TAB = 'login';
-function renderAccount(){
+let ACC_TAB = 'login', ACC_KEY = '';
+function renderAccount(force){
   const box = $('#accountBox');
+  const key = [AUTH, USER && USER.id, PROFILE && PROFILE.approved, PROFILE && PROFILE.role, PROFILE && PROFILE.display_name, RECOVERY, ACC_TAB].join('|');
+  if (!force && key === ACC_KEY && box.firstChild) return;   // nothing changed — keep the form and what's typed in it
+  ACC_KEY = key;
+  preserveForm(box, () => drawAccount(box));
+}
+function drawAccount(box){
   if (AUTH === 'off') { box.innerHTML = `<div class="card"><h2>Accounts</h2><p class="muted">Logging in isn't set up on this site yet. All news stays open to everyone — an account is only needed to upload videos.</p></div>`; return; }
   if (AUTH === 'error') { box.innerHTML = `<div class="warn">The login service could not be loaded. Try again later.</div>`; return; }
   if (AUTH === 'loading') { box.innerHTML = '<p class="muted">Loading…</p>'; return; }
@@ -1217,15 +1341,19 @@ async function onAccountSubmit(form){
     } else if (form.id === 'pwForm') {
       const { error } = await SB.auth.updateUser({ password: f.get('password') });
       if (error) throw error;
-      RECOVERY = false; renderAccount();
+      RECOVERY = false; renderAccount(true);
     }
   } catch (e) { accSay(e.message || String(e), 'err'); }
   finally { btn.disabled = false; }
 }
 
 /* ======================= UI: ADMIN ======================= */
+let ADMIN_KEY = '';
 function renderAdmin(){
   const box = $('#adminBox');
+  const key = isAdmin() + '|' + USERS.map(u => u.id + (u.approved ? 1 : 0)).join(',');
+  if (key === ADMIN_KEY && box.firstChild) return;
+  ADMIN_KEY = key;
   if (!isAdmin()) { box.innerHTML = '<p class="muted">Admins only.</p>'; return; }
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin');
   const rows = u => `<tr><td><b>${esc(u.display_name || '—')}</b><div class="muted">${esc(u.email || '')}</div><div class="muted">registered ${esc(fmtDay(Date.parse(u.created_at)))}</div></td>
@@ -1234,7 +1362,7 @@ function renderAdmin(){
   box.innerHTML = `<div class="card"><h2>Members</h2><p class="muted">${pending.length} waiting for approval · ${USERS.length} total</p>
     <table class="users"><thead><tr><th>Member</th><th>Status</th><th></th></tr></thead><tbody>${pending.concat(USERS.filter(u => !pending.includes(u))).map(rows).join('')}</tbody></table>
     <div class="bar"><button id="btnUsers">Reload</button></div></div>
-    <p class="muted">Approved members can upload videos. Admins can delete any video from the Videos page.</p>`;
+    <p class="muted">Approved members can upload videos and comment on them. Admins can delete any video or comment from the Videos page.</p>`;
 }
 async function setApproved(id, val){
   const { error } = await SB.from('profiles').update({ approved: val }).eq('id', id);
@@ -1268,6 +1396,7 @@ function initUI(){
     const card = b.closest('.card'), s = buildStories().find(x => x.key === card.dataset.key); if (!s) return;
     if (b.dataset.act === 'expand') { EXPANDED.has(s.key) ? EXPANDED.delete(s.key) : EXPANDED.add(s.key); render(); }
     if (b.dataset.act === 'read') setRead(s.arts.map(a => a.aid), !storyRead(s));
+    if (b.dataset.act === 'retry') { const t = extractTargets(s); t.forEach(a => delete X[a.aid]); saveX(); queueExtract(t, true); render(); }
     if (b.dataset.act === 'upload') {
       const mins = new Set(); extractTargets(s).forEach(a => (X[a.aid] ? X[a.aid].minutes : []).forEach(m => mins.add(minLabel(m).replace("'", ''))));
       PREFILL = { article_key: s.rep.aid, article_url: s.rep.link, storyTitle: s.rep.title, title: '', match: storyMatch(s),
@@ -1276,12 +1405,16 @@ function initUI(){
     }
   });
 
-  $('#videoList').addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (b) deleteVideo(b.dataset.del); });
+  $('#videoList').addEventListener('click', e => {
+    const b = e.target.closest('[data-del]'); if (b) deleteVideo(b.dataset.del);
+    const c = e.target.closest('[data-cdel]'); if (c) deleteComment(c.dataset.cdel);
+  });
+  $('#videoList').addEventListener('submit', e => { const f = e.target.closest('.cform'); if (f) { e.preventDefault(); postComment(f); } });
   $('#uploadBox').addEventListener('submit', e => { if (e.target.id === 'upForm') { e.preventDefault(); submitUpload(e.target); } });
   $('#uploadBox').addEventListener('click', e => { if (e.target.closest('[data-act="clearPrefill"]')) { PREFILL = null; renderVideos(); } });
   $('#accountBox').addEventListener('submit', e => { e.preventDefault(); onAccountSubmit(e.target); });
   $('#accountBox').addEventListener('click', async e => {
-    const tab = e.target.closest('[data-tab]'); if (tab) { ACC_TAB = tab.dataset.tab; renderAccount(); return; }
+    const tab = e.target.closest('[data-tab]'); if (tab) { ACC_TAB = tab.dataset.tab; renderAccount(true); return; }
     if (e.target.id === 'btnLogout') { await SB.auth.signOut(); return; }
     if (e.target.id === 'btnForgot') {
       const email = $('#accountBox input[name=email]').value.trim();
@@ -1323,7 +1456,7 @@ setTimeout(autoCheck, 500);
 setInterval(autoCheck, 10 * 60e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
 
-window.BGRW = { analyze, runScan, buildStories, toEmbed, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS }) };
+window.BGRW = { analyze, runScan, buildStories, toEmbed, renderAll, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
 })();
 </script>
 </body>
