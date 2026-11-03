@@ -545,9 +545,58 @@ function summarizePage(html, base) {
     forms: parseForms(html, base).map(f => ({ action: maskUrl(f.action), method: f.method, id: f.id, inputs: f.inputs.map(i => i.type + ':' + i.name), onsubmit: f.onsubmit })),
     links, clicks, scripts, hints: [...hints], media: [...new Set(media)].slice(0, 30) };
 }
-function pickLink(html, base, textRe, hrefRe, iconOk) {
-  const ls = pageLinks(html, base).filter(l => l.href && !/^javascript:|#$/.test(l.href) && /(^|\.)ebfu\.net$/i.test(new URL(l.href).hostname) && !EBFU_SKIP.test(l.text + ' ' + l.href));
-  return (ls.find(l => textRe.test(l.text)) || ls.find(l => hrefRe.test(l.href)) || (iconOk ? ls.find(l => /video|camera|fa-video|play/i.test(l.inner + ' ' + l.cls)) : null) || {}).href || null;
+// Everything that can be tapped, and where it leads: a real link, an address inside onclick/data-*,
+// or an ASP.NET "postback" (a form submit done by a script). Icon-only camera buttons are flagged.
+const CAMERA = /fa-video|fa-camera|video-camera|bi-camera|bi-camera-video|mdi-video|glyphicon-facetime|camera|\bvideo\b|видео/i;
+const maskAttrs = t => String(t).replace(/=\s*(["'])([^"']{40,})\1/g, (m, q) => '=' + q + '…' + q).slice(0, 300);
+function clickables(html, base) {
+  const out = [];
+  const add = (attrs, inner, tag) => {
+    const href = attrOf(attrs, 'href'), onclick = attrOf(attrs, 'onclick');
+    const dh = attrOf(attrs, 'data-href') || attrOf(attrs, 'data-url') || attrOf(attrs, 'data-link');
+    const js = /^javascript:/i.test(href) ? href.slice(11) : onclick;
+    let how = null, url = null, target = null, arg = null, m;
+    if ((m = js.match(/__doPostBack\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]/))) { how = 'postback'; target = m[1]; arg = m[2]; }
+    else if (href && !/^(javascript:|#)/i.test(href)) { how = 'get'; url = href; }
+    else if ((m = js.match(/(?:window\.)?location(?:\.href)?\s*=\s*['"]([^'"]+)['"]/) || js.match(/window\.open\(\s*['"]([^'"]+)['"]/) || js.match(/location\.(?:assign|replace)\(\s*['"]([^'"]+)['"]/))) { how = 'get'; url = m[1]; }
+    else if (dh) { how = 'get'; url = dh; }
+    if (url) { try { url = new URL(url, base).toString(); if (!/(^|\.)ebfu\.net$/i.test(new URL(url).hostname)) { how = null; url = null; } } catch { how = null; url = null; } }
+    const f = js.match(/^\s*(?:return\s+)?([A-Za-z_$][\w$.]*)\s*\(([^)]*)\)/);
+    const fn = f && !/^(?:__doPostBack|location|window\.location|window\.open)$/.test(f[1]) ? { name: f[1], args: f[2].slice(0, 80) } : null;
+    out.push({ text: stripTags(inner).slice(0, 80), how, url, target, arg, fn, camera: CAMERA.test(attrs + ' ' + inner) && stripTags(inner).length < 30,
+      tag: maskAttrs(tag + ' ' + attrs.replace(/\s+/g, ' ')) });
+  };
+  for (const m of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) add(m[1], m[2], 'a');
+  for (const m of html.matchAll(/<(button|div|span|li|td|tr|i)\b([^>]*\s(?:onclick|data-href|data-url|data-link|data-id|data-video|data-mid|data-match|data-bs-toggle|data-toggle)\s*=[^>]*)>([\s\S]{0,600}?)<\/\1>/gi)) add(m[2], m[3], m[1]);
+  return out.filter(c => !EBFU_SKIP.test(c.text + ' ' + (c.url || '') + ' ' + (c.target || '') + ' ' + (c.fn ? c.fn.name : '')));
+}
+async function follow(c, page, jar, diag) {
+  if (c.how === 'get') return ebfuFetch(c.url, jar, { referer: page.url }, diag);
+  if (c.how === 'postback') {
+    const forms = parseForms(page.text, page.url);
+    const form = forms.find(f => f.inputs.some(i => i.name === '__VIEWSTATE')) || forms[0];
+    if (!form) throw new Error('postback without a form');
+    const fields = new URLSearchParams();
+    form.inputs.filter(i => i.type === 'hidden').forEach(i => fields.set(i.name, i.value));
+    fields.set('__EVENTTARGET', c.target); fields.set('__EVENTARGUMENT', c.arg || '');
+    return ebfuFetch(form.action, jar, { method: 'POST', body: fields.toString(), contentType: 'application/x-www-form-urlencoded', referer: page.url }, diag);
+  }
+  return null;
+}
+const roundNo = t => { const m = String(t).match(/кръг\D{0,6}(\d{1,2})/i) || String(t).match(/(\d{1,2})\s*$/); return m ? Number(m[1]) : 0; };
+const maskText = t => String(t).replace(/https?:\/\/[^\s"'<>\\]+/g, u => maskUrl(u)).replace(/[A-Za-z0-9_-]{40,}/g, '…');
+// the HTML around the first camera button (one match card), with long values shortened
+function cardSample(html) {
+  const i = html.search(/fa-video|fa-camera|video-camera|bi-camera|mdi-video|camera/i);
+  if (i < 0) return '';
+  return maskText(html.slice(Math.max(0, i - 1400), i + 400).replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/\s+/g, ' ')).replace(/=\s*(["'])([^"']{40,})\1/g, (m, q) => '=' + q + '…' + q);
+}
+// find a named function in the page's inline scripts and its own script files
+function findFunction(name, sources) {
+  const short = name.split('.').pop().replace(/[$]/g, '\\$');
+  const re = new RegExp(`(?:function\\s+${short}\\s*\\(|${short}\\s*[:=]\\s*(?:async\\s*)?function\\s*\\(|${short}\\s*[:=]\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>)`);
+  for (const src of sources) { const m = src.text.match(re); if (m) return { where: src.where, code: maskText(src.text.slice(m.index, m.index + 900).replace(/\s+/g, ' ')) }; }
+  return null;
 }
 
 async function ebfuLogin(username, password, diag) {
@@ -579,36 +628,75 @@ async function ebfuLogin(username, password, diag) {
 
 async function ebfuExplore(session, diag) {
   if (!session) return { ok: false, error: 'Connect ebfu.net first.' };
-  const jar = jarFrom(session), report = { pages: [] };
+  const jar = jarFrom(session), report = { pages: [], notes: [] };
   const start = await ebfuFetch(EBFU_BASE, jar, {}, diag);
   if (findLoginForm(start.text, start.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
   report.pages.push({ step: 'start', ...summarizePage(start.text, start.url) });
-  const archiveUrl = pickLink(start.text, start.url, /видео\s*архив|видеоархив|video\s*archive/i, /video|archive|arhiv/i);
-  if (!archiveUrl) { report.note = 'No "Видеоархив" link found on the start page.'; return { ok: true, report, session: jarStr(jar) }; }
-  const archive = await ebfuFetch(archiveUrl, jar, { referer: start.url }, diag);
-  report.pages.push({ step: 'archive', ...summarizePage(archive.text, archive.url) });
-  const roundUrl = pickLink(archive.text, archive.url, /кръг|efbet|впфл|лига/i, /round|krug|kr=|rnd|league|liga|kolo/i, true);
-  if (roundUrl && roundUrl !== archiveUrl) {
-    const round = await ebfuFetch(roundUrl, jar, { referer: archive.url }, diag);
-    report.pages.push({ step: 'round', ...summarizePage(round.text, round.url) });
-    const videoUrl = pickLink(round.text, round.url, /видео|video|запис|гледай/i, /video|play|watch|vid=|record|stream/i, true);
-    if (videoUrl && videoUrl !== roundUrl) {
-      const video = await ebfuFetch(videoUrl, jar, { referer: round.url }, diag);
-      report.pages.push({ step: 'video', ...summarizePage(video.text, video.url) });
-    } else report.note = 'No video link found on the round page (the camera button may work through a script — see "clicks" and "hints").';
-  } else report.note = 'No league/round link found on the archive page.';
-  // the site's own scripts: addresses it calls (helps when buttons load videos with JavaScript)
-  const isEbfu = s => { try { return /(^|\.)ebfu\.net$/i.test(new URL(s).hostname); } catch { return false; } };
-  const own = [...new Set(report.pages.flatMap(p => p.scripts).filter(s => isEbfu(s) && !/jquery|bootstrap|font|analytics|gtag|moment|select2|datatables/i.test(s)))].slice(0, 3);
+  const scripts = [{ where: 'start page', text: start.text }];
+  const done = () => ({ ok: true, report, session: jarStr(jar) });
+
+  // 1. "Видеоархив" (in the burger menu on phones, straight in the menu on computers — same page underneath)
+  const toArchive = clickables(start.text, start.url).find(c => c.how && /видео\s*архив|видеоархив|video\s*archive/i.test(c.text))
+    || clickables(start.text, start.url).find(c => c.how && /video|archive|arhiv/i.test((c.url || '') + c.target));
+  if (!toArchive) { report.notes.push('No "Видеоархив" item found on the start page.'); return done(); }
+  const archive = await follow(toArchive, start, jar, diag);
+  report.pages.push({ step: 'archive', via: toArchive.how, ...summarizePage(archive.text, archive.url) });
+  scripts.push({ where: 'archive page', text: archive.text });
+
+  // 2. league round tiles ("efbet Лига КРЪГ 12", "ВПФЛ КРЪГ 3", "В ЮЗ …", "U17 …"): take the newest efbet Лига round
+  const tiles = clickables(archive.text, archive.url).filter(c => c.how && /кръг|krug|round|rnd/i.test(c.text + ' ' + (c.url || '') + ' ' + c.tag));
+  report.roundTiles = tiles.slice(0, 60).map(c => ({ text: c.text, how: c.how, ...(c.url ? { url: maskUrl(c.url) } : {}), ...(c.target ? { postback: c.target } : {}) }));
+  const efbet = tiles.filter(c => /efbet/i.test(c.text));
+  const order = (efbet.length ? efbet : tiles).slice().sort((x, y) => roundNo(y.text) - roundNo(x.text));
+  if (!order.length) { report.notes.push('No league/round tiles found on the archive page.'); return done(); }
+  // newest round first; a round just played may have no videos yet, so up to two older ones are tried
+  let round = null, tile = null, cams = [];
+  for (const t of order.slice(0, 3)) {
+    const pg = await follow(t, archive, jar, diag).catch(e => { report.notes.push(t.text + ': ' + e.message); return null; });
+    if (!pg || pg.status >= 400) { report.notes.push(t.text + ': HTTP ' + (pg ? pg.status : '?')); continue; }
+    round = pg; tile = t; cams = clickables(pg.text, pg.url).filter(c => c.camera);
+    if (cams.length) break;
+    report.notes.push(t.text + ': no camera buttons, trying an older round');
+  }
+  if (!round) return done();
+  report.pages.push({ step: 'round', tile: tile.text, via: tile.how, ...summarizePage(round.text, round.url) });
+  scripts.push({ where: 'round page', text: round.text });
+  report.matchCard = cardSample(round.text);
+
+  // 3. the camera button of the first match: a link, a postback, or a script that opens the pop-up player
+  report.cameraButtons = cams.slice(0, 4).map(c => ({ how: c.how || 'script', ...(c.url ? { url: maskUrl(c.url) } : {}), ...(c.target ? { postback: c.target } : {}), ...(c.fn ? { calls: c.fn.name + '(' + c.fn.args + ')' } : {}), tag: c.tag }));
+  if (!cams.length) report.notes.push('No camera button recognised on the round page (see matchCard and clicks).');
+
+  // the site's own scripts (not libraries): the addresses they call and the camera function
+  const isEbfu = x => { try { return /(^|\.)ebfu\.net$/i.test(new URL(x).hostname); } catch { return false; } };
+  const own = [...new Set(report.pages.flatMap(pg => pg.scripts).filter(x => isEbfu(x) && !/jquery|bootstrap|font|analytics|gtag|moment|select2|datatables|popper|sweetalert|toastr/i.test(x)))].slice(0, 4);
   report.scriptCalls = [];
   for (const src of own) {
     try {
-      const js = (await ebfuFetch(src, jar, { referer: start.url }, diag)).text;
-      const calls = [...js.matchAll(/["'`](\/?(?:api|ajax|handlers?|services?|video|archive|arhiv|match)[\w\/.-]{2,80}(?:\?[^"'`\s]{0,60})?)["'`]/gi)].map(m => m[1]);
+      const js = (await ebfuFetch(src, jar, { referer: round.url }, diag)).text;
+      scripts.push({ where: src, text: js });
+      const calls = [...js.matchAll(/["'`](\/?(?:api|ajax|handlers?|services?|video|archive|arhiv|match|stream|player)[\w\/.-]{2,80}(?:\?[^"'`\s]{0,60})?)["'`]/gi)].map(m => m[1]);
       report.scriptCalls.push({ src, calls: [...new Set(calls)].slice(0, 40) });
     } catch (e) { report.scriptCalls.push({ src, error: e.message }); }
   }
-  return { ok: true, report, session: jarStr(jar) };
+  const cam = cams[0];
+  if (cam && cam.how) {
+    const video = await follow(cam, round, jar, diag);
+    report.pages.push({ step: 'video', via: cam.how, ...summarizePage(video.text, video.url) });
+  } else if (cam && cam.fn) {
+    const fn = findFunction(cam.fn.name, scripts);
+    report.cameraFunction = fn || { missing: cam.fn.name };
+    // try the address that function loads the video from, once, with this match's own id
+    const arg = (cam.fn.args.match(/['"]?([\w-]{1,40})['"]?/) || [])[1];
+    const path = fn && (fn.code.match(/["'`](\/?[\w\/.-]+(?:\.(?:ashx|aspx|php|json)|\/[\w-]*)(?:\?[\w.-]*=)?)["'`]\s*\+/) || [])[1];
+    if (arg && path) {
+      try {
+        const probe = await ebfuFetch(new URL(path + encodeURIComponent(arg), round.url).toString(), jar, { referer: round.url }, diag);
+        report.cameraProbe = { url: maskUrl(new URL(path, round.url).toString()) + '…', status: probe.status, type: probe.type, preview: maskText(probe.text.slice(0, 600)) };
+      } catch (e) { report.cameraProbe = { error: e.message }; }
+    } else report.notes.push('The camera button runs ' + cam.fn.name + '(); its video address is built inside that function (see cameraFunction).');
+  }
+  return done();
 }
 
 /* ---------------- helpers ---------------- */
