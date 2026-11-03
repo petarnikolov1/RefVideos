@@ -93,19 +93,17 @@ const SELFTEST_ARTICLES = [
 ];
 async function handleSelftest(url, ctx) {
   const cache = typeof caches !== 'undefined' ? caches.default : null;
-  const cacheKey = new Request(url.origin + '/selftest?v=' + EXTRACT_VERSION, { method: 'GET' });
+  const cacheKey = new Request(url.origin + '/selftest?v=' + EXTRACT_VERSION + '&w=' + (url.searchParams.get('wait') || ''), { method: 'GET' });
   if (cache && !url.searchParams.has('fresh')) { const hit = await cache.match(cacheKey); if (hit) return hit; }
   const started = Date.now();
   const out = { time: new Date().toISOString(), version: EXTRACT_VERSION, finished: false, seconds: 0,
     googleFeed: 'running', googleLinks: [], googleArticles: [],
     blockedSites: SELFTEST_ARTICLES.map(u => ({ url: u.slice(0, 90), opened: 'running', diag: [] })) };
+  // light check only (does the page open, and how): the full video search is what /extract does per article
   const open = async (u, slot) => {
-    const page = await fetchArticle(u, slot.diag);
+    const page = await fetchArticle(u, slot.diag, true);
     slot.opened = !!page;
-    if (page) {
-      const r = extractFromHtml(page.html, page.finalUrl);
-      slot.kb = Math.round(page.html.length / 1024); slot.videos = r.videos.map(v => v.kind + ' ' + v.url.slice(0, 80)); slot.minutes = r.minutes.map(m => m.m + (m.plus ? '+' + m.plus : ''));
-    }
+    if (page) slot.kb = Math.round(page.size / 1024);
   };
   const googlePart = (async () => {
     let items = [];
@@ -127,7 +125,8 @@ async function handleSelftest(url, ctx) {
   })();
   const sitesPart = Promise.all(SELFTEST_ARTICLES.map((u, i) => open(u, out.blockedSites[i])));
   let timer;
-  await Promise.race([Promise.all([googlePart, sitesPart]).then(() => { out.finished = true; }), new Promise(r => { timer = setTimeout(r, 20000); })]);
+  const limit = Math.min(25000, Math.max(3000, Number(url.searchParams.get('wait')) * 1000 || 8000));   // answer within ~8 s by default
+  await Promise.race([Promise.all([googlePart, sitesPart]).then(() => { out.finished = true; }), new Promise(r => { timer = setTimeout(r, limit); })]);
   clearTimeout(timer);
   out.seconds = Math.round((Date.now() - started) / 100) / 10;
   const response = json(out, 200, out.finished ? 600 : 60);
@@ -243,7 +242,7 @@ async function readBytes(r, max) {
   for (const p of parts) { if (o >= out.length) break; const take = p.subarray(0, out.length - o); out.set(take, o); o += take.length; }
   return out;
 }
-async function fetchArticle(articleUrl, diag) {
+async function fetchArticle(articleUrl, diag, probeOnly) {
   let hit = await tryRoute('direct', articleUrl, { ...BROWSER_HEADERS, Accept: 'text/html,application/xhtml+xml' }, 8000, diag);
   if (!hit) {
     const ctrls = RELAYS.map(() => new AbortController());
@@ -253,6 +252,7 @@ async function fetchArticle(articleUrl, diag) {
   }
   if (!hit) return null;
   diag.push('article opened (' + hit.name + ')');
+  if (probeOnly) return { size: hit.bytes.length };
   return { html: decodeBytes(hit.bytes, hit.contentType), finalUrl: hit.name === 'direct' ? (hit.finalUrl || articleUrl) : articleUrl };
 }
 
