@@ -5,65 +5,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BG Referee Watch</title>
 <!--
-  BG Referee Watch — one-file news feed of refereeing stories from Bulgarian football
-  (efbet Liga / 1st League, 2nd League, 3rd Amateur League, Bulgarian Cup).
+  BG Referee Watch — refereeing stories from Bulgarian football (efbet Liga, 2nd League, 3rd League,
+  Bulgarian Cup) plus a separate World section (top-5 leagues + Champions League, biggest stories only).
 
-  HOW IT SEARCHES
-  - Runs ~40 targeted Bulgarian-language searches on Google News (RSS) and ~12 on Bing News (RSS).
-  - The full-season scan splits the season into time windows (default: 2 weeks) and runs every
-    search in every window, so older stories are not pushed out by newer ones.
-  - "Refresh" only searches from the last update (minus 3 days overlap) until now.
-  - It refreshes automatically when opened if the last update is older than 24 h, and every 24 h
-    while the page stays open.
-  - Hosted on Cloudflare Pages together with _worker.js, the page reads feeds through its own
-    /feed relay first (fast and reliable) and only falls back to the public proxies below.
-  - Opened as a plain local file, browsers block direct cross-site requests, so feeds are read through public CORS proxies
-    (tried in order, the working one is remembered). If they are slow or down, put your own proxy
-    in Settings. A free Cloudflare Worker is enough:
-
-      export default { async fetch(req) {
-        const u = new URL(req.url).searchParams.get('url');
-        if (!u) return new Response('missing ?url=', { status: 400 });
-        const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        return new Response(r.body, { status: r.status, headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': r.headers.get('Content-Type') || 'text/xml' } });
-      } };
-
-    …then use  https://YOUR-WORKER.workers.dev/?url={url}  as the custom proxy.
+  - News: ~50 Bulgarian-language searches on Google News + Bing News per time window of the season.
+    Articles about the same incident are grouped into one story; exact re-posts are marked "Duplicate".
+  - Videos: on Cloudflare, /extract (in _worker.js) opens each article and finds embedded videos and the
+    match minutes mentioned. Registered users approved by an admin can upload their own clips.
+  - Accounts (optional, only needed to upload): Supabase. Fill in SUPABASE_URL / SUPABASE_ANON_KEY below,
+    or set them as environment variables in Cloudflare Pages. Database setup: supabase-setup.sql.
+  - Read marks are kept in this browser and, when logged in, synced to the account.
 -->
 <style>
   :root{
     color-scheme: light dark;
     --bg:#f5f6f8; --card:#ffffff; --text:#16191d; --muted:#667085; --line:#e4e7ec;
-    --accent:#0f766e; --accent-ink:#ffffff; --hot:#c2410c; --new:#1d4ed8; --badge-ink:#ffffff;
-    --chip:#eef1f5; --warn-bg:#fff7e6; --warn-line:#f0c36d;
+    --accent:#0f766e; --accent-ink:#ffffff; --hot:#c2410c; --new:#1d4ed8; --ok:#15803d; --badge-ink:#ffffff;
+    --chip:#eef1f5; --warn-bg:#fff7e6; --warn-line:#f0c36d; --err:#b42318;
   }
   @media (prefers-color-scheme: dark){
     :root{
       --bg:#0e1013; --card:#16191e; --text:#e7e9ec; --muted:#98a1ad; --line:#272c34;
-      --accent:#2dd4bf; --accent-ink:#06201d; --hot:#fb923c; --new:#93c5fd; --badge-ink:#0e1013;
-      --chip:#20252d; --warn-bg:#2a2112; --warn-line:#7a5a1e;
+      --accent:#2dd4bf; --accent-ink:#06201d; --hot:#fb923c; --new:#93c5fd; --ok:#4ade80; --badge-ink:#0e1013;
+      --chip:#20252d; --warn-bg:#2a2112; --warn-line:#7a5a1e; --err:#f97066;
     }
   }
   *{box-sizing:border-box}
   html,body{margin:0}
   body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  a{color:inherit}
   .wrap{max-width:860px;margin:0 auto;padding:0 16px}
   header{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-  header .wrap{padding-top:14px;padding-bottom:12px}
-  h1{font-size:20px;margin:0}
-  .sub{margin:2px 0 10px;color:var(--muted);font-size:13px}
-  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-  button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
-  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+  header .wrap{padding-top:12px;padding-bottom:10px}
+  .toprow{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+  h1{font-size:19px;margin:0}
+  nav{display:flex;gap:4px;flex-wrap:wrap}
+  nav button{border:none;background:transparent;padding:6px 10px;border-radius:8px;font-size:14px;color:var(--muted)}
+  nav button.on{background:var(--chip);color:var(--text);font-weight:600}
+  nav .n{font-size:12px;opacity:.75;margin-left:3px}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+  button,.btn{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer;text-decoration:none;display:inline-block}
+  button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+  button.small{font-size:13px;padding:4px 10px}
   button:disabled{opacity:.5;cursor:default}
   .muted{color:var(--muted);font-size:13px}
   .pbar{height:6px;background:var(--chip);border-radius:3px;overflow:hidden;margin-top:10px}
   #pfill{height:100%;width:0;background:var(--accent);transition:width .3s}
   #ptext{margin-top:4px}
-  .filters{padding:14px 0 4px}
-  input[type=search],input[type=date],input[type=text],select,textarea{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);max-width:100%}
+  .intro{margin:14px 0 0;color:var(--muted);font-size:13.5px}
+  .filters{padding:12px 0 4px}
+  input[type=search],input[type=date],input[type=text],input[type=email],input[type=password],input[type=url],select,textarea{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);max-width:100%}
   input[type=search]{width:100%}
   textarea{width:100%;min-height:70px}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
@@ -73,25 +64,49 @@
   .row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px}
   .row label{display:flex;gap:5px;align-items:center;font-size:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0}
+  .card.read h2{font-weight:500;color:var(--muted)}
   .meta{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .card h2{font-size:16px;margin:4px 0;line-height:1.35;font-weight:600}
-  .card h2 a{color:inherit;text-decoration:none}
+  .card h2 a{text-decoration:none}
   .card h2 a:hover{text-decoration:underline}
   .desc{margin:4px 0 0;font-size:14px;color:var(--muted)}
   .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
   .tag{font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--chip)}
   .tag.div{background:transparent;border:1px solid var(--line)}
+  .tag.vid{background:var(--accent);color:var(--accent-ink);font-weight:600}
   .badge{font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;color:var(--badge-ink)}
-  .badge.hot{background:var(--hot)}
-  .badge.new{background:var(--new)}
+  .badge.hot{background:var(--hot)} .badge.new{background:var(--new)} .badge.read{background:var(--ok)}
+  .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .panel{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
+  .panel h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:10px 0 6px}
+  .arts{list-style:none;margin:0;padding:0}
+  .arts li{padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .arts li:last-child{border-bottom:none}
+  .arts .m{font-size:12px;color:var(--muted)}
+  .arts a{text-decoration:none} .arts a:hover{text-decoration:underline}
+  .dup{font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--muted);margin-left:4px}
+  .chk{color:var(--ok);font-weight:700;margin-left:4px}
+  .player{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden;margin:8px 0}
+  .player iframe,.player video{position:absolute;inset:0;width:100%;height:100%;border:0}
+  video.file{width:100%;max-height:480px;background:#000;border-radius:8px;margin:8px 0}
+  .mins{display:grid;gap:6px;margin:6px 0}
+  .min{display:inline-block;font-weight:700;font-variant-numeric:tabular-nums;background:var(--chip);border-radius:6px;padding:1px 7px;margin-right:6px}
+  .minrow{font-size:13.5px}
+  .ebfu{background:var(--chip);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:14px;display:grid;gap:6px}
   .warn{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:10px 12px;font-size:14px;margin:10px 0}
+  .msg{font-size:14px;margin:8px 0}
+  .msg.err{color:var(--err)} .msg.ok{color:var(--ok)}
   details.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:14px 0}
   summary{cursor:pointer;font-weight:600}
   .form{display:grid;gap:12px;margin-top:12px}
   .form label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+  .form .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:520px){ .form .two{grid-template-columns:1fr} }
   pre#log{max-height:260px;overflow:auto;font-size:12px;white-space:pre-wrap;margin:10px 0 0}
   .empty{text-align:center;color:var(--muted);padding:40px 0}
   #more{display:block;margin:12px auto}
+  table.users{width:100%;border-collapse:collapse;font-size:14px}
+  table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   footer{padding:10px 0 40px;font-size:12px;color:var(--muted)}
 </style>
 </head>
@@ -99,100 +114,121 @@
 
 <header>
   <div class="wrap">
-    <h1>BG Referee Watch</h1>
-    <p class="sub">Refereeing news from Bulgaria's efbet Liga, 2nd League and 3rd League · season since <span id="seasonLbl"></span></p>
-    <div class="bar">
-      <button id="btnRefresh" class="primary">↻ Refresh</button>
-      <button id="btnFull">Full-season deep scan</button>
-      <button id="btnStop" hidden>Stop</button>
-      <span id="lastRun" class="muted"></span>
+    <div class="toprow">
+      <h1>BG Referee Watch</h1>
+      <nav id="nav"></nav>
     </div>
-    <div id="progress" hidden>
-      <div class="pbar"><div id="pfill"></div></div>
-      <div id="ptext" class="muted"></div>
+    <div id="scanArea">
+      <div class="bar">
+        <button id="btnRefresh" class="primary">↻ Refresh</button>
+        <button id="btnFull">Full-season deep scan</button>
+        <button id="btnStop" hidden>Stop</button>
+        <span id="lastRun" class="muted"></span>
+      </div>
+      <div id="progress" hidden>
+        <div class="pbar"><div id="pfill"></div></div>
+        <div id="ptext" class="muted"></div>
+      </div>
     </div>
   </div>
 </header>
 
 <main class="wrap">
-  <section class="filters">
-    <input id="q" type="search" placeholder="Filter by team, referee, word…">
-    <div id="divChips" class="chips"></div>
-    <div id="catChips" class="chips"></div>
-    <div class="row">
-      <select id="sort">
-        <option value="date">Newest first</option>
-        <option value="score">Most important first</option>
-      </select>
-      <label><input type="checkbox" id="onlyNew"> Only new</label>
-      <label><input type="checkbox" id="onlyHot"> Only hot</label>
-      <span id="count" class="muted"></span>
-    </div>
-  </section>
-
-  <div id="warn" class="warn" hidden></div>
-  <section id="feed"></section>
-  <button id="more" hidden>Show more</button>
-
-  <details class="box">
-    <summary>Settings</summary>
-    <div class="form">
-      <label>Season start (stories before this date are ignored)
-        <input type="date" id="setSeason">
-      </label>
-      <label>Search depth for the full-season scan
-        <select id="setDepth">
-          <option value="30">Monthly windows — fastest (~200 searches)</option>
-          <option value="14">2-week windows — deep (~350 searches)</option>
-          <option value="7">Weekly windows — deepest, slow (~700 searches)</option>
+  <!-- Bulgaria + World share this view -->
+  <section id="view-news">
+    <p class="intro" id="intro"></p>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Filter by team, referee, word…">
+      <div id="groupChips" class="chips"></div>
+      <div id="catChips" class="chips"></div>
+      <div class="row">
+        <select id="sort">
+          <option value="date">Newest first</option>
+          <option value="score">Most important first</option>
         </select>
-      </label>
-      <label>Custom CORS proxy (optional, tried first). Use {url} where the feed address goes
-        <input type="text" id="setProxy" placeholder="https://my-proxy.workers.dev/?url={url}">
-      </label>
-      <label>Extra searches (one per line, Bulgarian works best — e.g. a referee's name or a club)
-        <textarea id="setExtra" placeholder="Хебър съдия&#10;&quot;Станимир Тренчев&quot;"></textarea>
-      </label>
-      <div class="bar">
-        <button id="btnSave" class="primary">Save settings</button>
-        <button id="btnClear">Delete all saved news</button>
+        <label><input type="checkbox" id="onlyNew"> Only new</label>
+        <label><input type="checkbox" id="onlyHot"> Only hot</label>
+        <label><input type="checkbox" id="hideRead"> Hide read</label>
+        <span id="count" class="muted"></span>
       </div>
     </div>
-  </details>
+    <div id="warn" class="warn" hidden></div>
+    <section id="feed"></section>
+    <button id="more" hidden>Show more</button>
 
-  <details class="box">
-    <summary>Diagnostics log</summary>
-    <pre id="log"></pre>
-  </details>
+    <details class="box">
+      <summary>Search settings</summary>
+      <div class="form">
+        <label>Season start (stories before this date are ignored)
+          <input type="date" id="setSeason">
+        </label>
+        <label>Search depth for the full-season scan
+          <select id="setDepth">
+            <option value="30">Monthly windows — fastest</option>
+            <option value="14">2-week windows — deep</option>
+            <option value="7">Weekly windows — deepest, slow</option>
+          </select>
+        </label>
+        <label>Custom CORS proxy (optional, tried first). Use {url} where the feed address goes
+          <input type="text" id="setProxy" placeholder="https://my-proxy.workers.dev/?url={url}">
+        </label>
+        <label>Extra searches (one per line, Bulgarian works best)
+          <textarea id="setExtra" placeholder="Хебър съдия&#10;&quot;Станимир Тренчев&quot;"></textarea>
+        </label>
+        <div class="bar">
+          <button id="btnSave" class="primary">Save settings</button>
+          <button id="btnClear">Delete all saved news</button>
+        </div>
+      </div>
+    </details>
+    <details class="box">
+      <summary>Diagnostics log</summary>
+      <pre id="log"></pre>
+    </details>
+    <footer>
+      Stories come from Google News and Bing News search feeds and link to the original publishers.
+      Grouping, division and topic tags are automatic, so a few may be off.
+    </footer>
+  </section>
 
-  <footer>
-    Stories come from Google News and Bing News search feeds in Bulgarian and link to the original publishers.
-    Division and topic tags are assigned automatically from keywords, so a few may be off.
-  </footer>
+  <section id="view-videos" hidden>
+    <p class="intro">Match clips uploaded by approved members, newest first.</p>
+    <div id="uploadBox"></div>
+    <div class="filters"><input id="vq" type="search" placeholder="Filter videos by team, referee, word…"></div>
+    <div id="videoList"></div>
+  </section>
+
+  <section id="view-account" hidden><div id="accountBox"></div></section>
+  <section id="view-admin" hidden><div id="adminBox"></div></section>
 </main>
 
 <script>
 (() => {
 'use strict';
 
-/* ======================= EDITABLE SETTINGS ======================= */
-const SEASON_START_DEFAULT = '2026-07-01'; // 2026/27 season — efbet Liga kicked off 17 July 2026
-const AUTO_REFRESH_HOURS   = 24;           // automatic search when the data is older than this
-const CONCURRENCY          = 3;            // parallel requests
-const TIMEOUT_MS           = 15000;        // per request, per proxy
-const MAX_ITEMS            = 6000;         // stories kept in browser storage
-const PAGE_SIZE            = 100;
-const STORE_KEY            = 'bgRefWatch.v1';
+/* ======================= CONFIG ======================= */
+const SUPABASE_URL      = '';   // e.g. 'https://abcd1234.supabase.co' (or set SUPABASE_URL in Cloudflare Pages)
+const SUPABASE_ANON_KEY = '';   // the project's anon / publishable key — safe to publish, tables are protected by RLS
+const SUPABASE_JS       = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+const EBFU_URL          = 'https://ebfu.net/';   // match-video site — automatic search will be added once the process is defined
+const MAX_UPLOAD_MB     = 50;   // Supabase free plan upload limit
 
-// Referee names used as an extra search (edit freely)
+const SEASON_START_DEFAULT = '2026-07-01'; // 2026/27 season — efbet Liga kicked off 17 July 2026
+const AUTO_REFRESH_HOURS   = 24;
+const CONCURRENCY          = 3;
+const TIMEOUT_MS           = 15000;
+const MAX_ARTICLES         = 6000;
+const PAGE_SIZE            = 50;
+const STORY_DAYS           = 3;     // articles more than this far apart are never grouped together
+const STORE_KEY            = 'bgRefWatch.v2';
+const XKEY                 = 'bgRefWatch.x1';
+const HOSTED               = /^https?:$/.test(location.protocol);
+
 const REFEREES = ['Георги Кабаков','Волен Чинков','Никола Попов','Мартин Марков','Драгомир Драганов',
                   'Радослав Гидженов','Ивайло Стоянов','Венцислав Митрев','Станимир Тренчев'];
-
-// Bulgarian sports sites searched individually
+const REF_SURNAMES = ['Кабаков','Чинков','Гидженов','Тренчев','Митрев'];
 const SITES = ['sportal.bg','gong.bg','blitz.bg','topsport.bg','dsport.bg','bulgarian-football.com',
                'bfunion.bg','novsport.com','btvnovinite.bg','24chasa.bg'];
-
-// Public CORS proxies, tried in order (the one that works is moved to the front)
 const PROXIES = [
   { name:'allorigins',   wrap:u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
   { name:'codetabs',     wrap:u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u) },
@@ -207,11 +243,13 @@ const INC = OR(['съдия','съдийство','ВАР','дузпа','"чер
 const LG  = OR(['"efbet Лига"','"Първа лига"','"Втора лига"','"Трета лига"']);
 const BGX = OR(['"efbet Лига"','"Втора лига"','"Трета лига"','БФС','Левски','ЦСКА','Лудогорец','Локомотив',
                 'Ботев','"Черно море"','Славия','Арда','Септември','Спартак','Дунав']);
+const WREF = OR(['съдия','съдията','рефер','арбитър','ВАР','VAR','дузпа','"червен картон"','засада']);
+const Q = (q, ctx = 'bg', div = null) => ({ q, ctx, div });
 
-// ctx 'bg'  = the query itself guarantees Bulgarian domestic football context
+// ctx 'bg'    = the query guarantees Bulgarian domestic context (Google matched it in the article)
 // ctx 'loose' = results must pass the local Bulgarian-football + refereeing check
+// ctx 'world' = top-5 leagues / Champions League searches
 function googleQueries(){
-  const Q = (q, ctx = 'bg', div = null) => ({ q, ctx, div });
   const list = [
     Q(`${REF} "efbet Лига"`, 'bg', 'd1'),
     Q(`${REF} "Първа лига" футбол`, 'bg', 'd1'),
@@ -243,15 +281,26 @@ function googleQueries(){
     Q(`("служебна загуба" OR "служебно 3:0" OR "без публика") футбол БФС`),
     Q(`("уреден мач" OR "уредени мачове" OR "черно тото" OR манипулиране) футбол България`, 'loose'),
     ...SITES.map(s => Q(`site:${s} ${INC} ${BGX}`)),
+    // World: top-5 leagues + Champions League
+    Q(`${WREF} ("Висшата лига" OR "Премиър лийг" OR "английското първенство")`, 'world'),
+    Q(`${WREF} ("Ла Лига" OR "испанското първенство" OR "Реал Мадрид" OR Барселона)`, 'world'),
+    Q(`${WREF} ("Серия А" OR "италианското първенство" OR Ювентус OR Интер OR Милан)`, 'world'),
+    Q(`${WREF} (Бундеслигата OR Бундеслига OR Байерн OR Дортмунд)`, 'world'),
+    Q(`${WREF} ("Лига 1" OR "френското първенство" OR ПСЖ)`, 'world'),
+    Q(`${WREF} ("Шампионска лига" OR "Шампионската лига")`, 'world'),
+    Q(`(Ливърпул OR "Манчестър Юнайтед" OR "Манчестър Сити" OR Арсенал OR Челси) (съдия OR ВАР OR дузпа OR "червен картон")`, 'world'),
+    Q(`("съдийски скандал" OR "скандално съдийство" OR "ВАР скандал" OR "VAR скандал") (Висшата OR "Ла Лига" OR "Серия А" OR Бундеслигата OR "Лига 1" OR "Шампионска лига")`, 'world'),
   ];
-  const extra = (S.settings.extra || '').split('\n').map(s => s.trim()).filter(Boolean);
-  extra.forEach(e => list.push(Q(e, 'loose')));
+  (S.settings.extra || '').split('\n').map(s => s.trim()).filter(Boolean).forEach(e => list.push(Q(e, 'loose')));
   return list;
 }
 
-const BING_QUERIES = ['съдия efbet Лига','съдийство Левски ЦСКА Лудогорец','ВАР efbet Лига','дузпа efbet Лига',
-  'червен картон efbet Лига','съдия Втора лига футбол','съдия Трета лига футбол','Съдийска комисия БФС',
-  'Дисциплинарна комисия БФС наказания','скандал съдия мач футбол','нападнаха съдия футбол','отменен гол засада ВАР'];
+const BING_QUERIES = [
+  ...['съдия efbet Лига','съдийство Левски ЦСКА Лудогорец','ВАР efbet Лига','дузпа efbet Лига','червен картон efbet Лига',
+      'съдия Втора лига футбол','съдия Трета лига футбол','Съдийска комисия БФС','Дисциплинарна комисия БФС наказания',
+      'скандал съдия мач футбол','нападнаха съдия футбол','отменен гол засада ВАР'].map(q => Q(q, 'loose')),
+  Q('ВАР скандал Висшата лига', 'world'), Q('съдия скандал Шампионска лига', 'world'),
+];
 
 const gUrl = (q, a, b) => 'https://news.google.com/rss/search?q=' +
   encodeURIComponent(`${q} after:${ymd(a)} before:${ymd(b)}`) + '&hl=bg&gl=BG&ceid=BG:bg';
@@ -261,8 +310,9 @@ const bingUrl = q => 'https://www.bing.com/news/search?q=' + encodeURIComponent(
 /* ======================= CLASSIFICATION ======================= */
 const B = '(?<![\\p{L}\\p{N}])', E = '(?![\\p{L}\\p{N}])', W = '\\p{L}*';
 const rx = s => new RegExp(B + '(?:' + s + ')', 'iu');
+const CS = list => new RegExp('(?<![\\p{L}\\p{N}])(?:' + list.join('|') + ')(?![\\p{L}])', 'u'); // case-sensitive names
 const RX = {
-  referee:   rx(`съди(?:я|ята|и|ите|йск${W}|йств${W})${E}|съдийск${W}|съдийств${W}|рефер${W}|арбит${W}|отсъ(?:ди|жда|дено|дена|ди)${W}`),
+  referee:   rx(`съди(?:я|ята|и|ите|йск${W}|йств${W})${E}|съдийск${W}|съдийств${W}|рефер${W}|арбит${W}|отсъ(?:ди|жда|дено|дена)${W}`),
   var:       rx(`(?:вар|var)(?:-?(?:а|ът|ове))?${E}|hawk-?eye|хоук-?ай|видеоарбит${W}|видеоповтор${W}|видеосъди${W}`),
   red:       rx(`червен${W} картон${W}|изгон${W}|втори жълт${W}|с човек по-малко|с играч по-малко|в десет души|остана${W} с десет`),
   penalty:   rx(`дузп${W}|наказател${W} удар${W}|11-метров${W}|единадесетметров${W}|бял(?:а|ата) точка`),
@@ -278,23 +328,52 @@ const RX = {
   league3:   rx(`трета(?:та)? (?:аматьорска )?(?:футболна )?лига|трет${W} ешелон|трет${W} дивизи${W}|аматьорск${W} (?:футболн${W} )?лига|(?:група |зона )?[„"«]?(?:югозапад|югоизток|северозапад|североизток)${W}`),
   cup:       rx(`купа(?:та)? на българия|суперкупа(?:та)?(?: на българия)?`),
   bgOrg:     rx(`бфс${E}|български(?:я)? футболен съюз|бпфл${E}|професионалн${W} футболн${W} лига`),
-  euro:      rx(`лига(?:та)? европа|шампионска(?:та)? лига|лига(?:та)? на конференциите|конферентна${W} лига|световн${W} първенство|евро 20\\d\\d|национал${W} отбор`),
+  euro:      rx(`лига(?:та)? европа|лига(?:та)? на конференциите|конферентна${W} лига|световн${W} първенство|световно${E}|евро 20\\d\\d|национал${W} отбор|националн${W} тим|квалификаци${W}`),
+  foreign:   rx(`англи${W}|англичан${W}|испан${W}|итали${W}|герман${W}|франц${W}|френск${W}|португал${W}|холанд${W}|нидерланд${W}|турск${W}|турци${W}|гърц${W}|гръцк${W}|румън${W}|сръбск${W}|сърби${W}|хърват${W}|руск${W}|русия|украин${W}|украйн${W}|шотланд${W}|белги${W}|саудит${W}|млс${E}|mls${E}|бразил${W}|аржентин${W}|мексик${W}|фифа${E}|fifa${E}|уефа${E}|uefa${E}|москва|истанбул|атина|солун|букурещ|белград|загреб|кипър${W}|кипърск${W}|израел${W}|полск${W}|полша|чехи${W}|чешк${W}|австри${W}|швейцар${W}|унгар${W}|европейск${W}`),
   otherSport:rx(`баскетбол${W}|волейбол${W}|хандбал${W}|футзал${W}|плаж${W} футбол${W}|мини-?футбол${W}|хокей${W}|тенис${W}|бокс${W}|mma${E}|формула 1|ръгби|водна топка`),
+  video:     rx(`видео${W}|video${E}|клип${W}|кадри${E}|вижте${E}|гледайте`),
 };
-// Club names are matched case-sensitively (e.g. "Септември" the club vs "септември" the month)
-const CS = list => new RegExp('(?<![\\p{L}\\p{N}])(?:' + list.join('|') + ')(?![\\p{L}])', 'u');
-const CLUB1 = CS(['Левски','ЦСКА(?!\\s*(?:II|2|Москва))','ЦСКА 1948','Лудогорец(?!\\s*(?:II|2|III|3))','Черно море(?!\\s*(?:II|2))',
-  'Локомотив\\s*\\(?(?:Пловдив|Пд|София|Сф)\\)?','Локо\\s*\\(?(?:Пд|Сф)\\)?','Ботев\\s*\\(?(?:Пловдив|Пд|Враца|Вр)\\)?(?!\\s*(?:II|2))',
-  'Славия','Арда','Септември','Спартак\\s*\\(?Варна\\)?','Дунав']);
-const CLUB2 = CS(['Берое','Добруджа','Монтана','Фратрия','Янтра','Вихрен','Етър','Хебър','Марица','Пирин','Литекс','Спортист',
-  'Черноморец','Нефтохимик','Беласица','Миньор','Севлиево','Марек','Струмска слава','Витоша','Сливнишки герой',
-  'Спартак\\s*\\(?Плевен\\)?','Локомотив\\s*\\(?(?:Горна Оряховица|ГО|Г\\. Оряховица)\\)?','ЦСКА\\s*(?:II|2)',
-  'Лудогорец\\s*(?:II|2)','Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2)']);
-// Surnames distinctive enough to match on their own (common ones like "Попов" need the full name)
-const REF_SURNAMES = ['Кабаков','Чинков','Гидженов','Тренчев','Митрев'];
+
+// Bulgarian clubs: [key, division, display name, pattern]
+const CLUBS = [
+  ['levski','d1','Левски'], ['cska','d1','ЦСКА','ЦСКА(?!\\s*(?:1948|II|2|Москва))'], ['cska48','d1','ЦСКА 1948'],
+  ['ludo','d1','Лудогорец','Лудогорец(?!\\s*(?:II|2|III|3))'], ['chm','d1','Черно море','Черно море(?!\\s*(?:II|2))'],
+  ['lokpd','d1','Локомотив Пловдив','Локомотив\\s*\\(?(?:Пловдив|Пд)\\)?|Локо\\s*\\(?Пд\\)?'],
+  ['loksf','d1','Локомотив София','Локомотив\\s*\\(?(?:София|Сф)\\)?|Локо\\s*\\(?Сф\\)?'],
+  ['botpd','d1','Ботев Пловдив','Ботев\\s*\\(?(?:Пловдив|Пд)\\)?(?!\\s*(?:II|2))'], ['botvr','d1','Ботев Враца','Ботев\\s*\\(?(?:Враца|Вр)\\)?'],
+  ['slavia','d1','Славия'], ['arda','d1','Арда'], ['septemvri','d1','Септември'],
+  ['spartakvn','d1','Спартак Варна','Спартак\\s*\\(?Варна\\)?'], ['dunav','d1','Дунав'],
+  ['beroe','d2','Берое'], ['dobrudzha','d2','Добруджа'], ['montana','d2','Монтана'], ['fratria','d2','Фратрия'],
+  ['yantra','d2','Янтра'], ['vihren','d2','Вихрен'], ['etar','d2','Етър'], ['hebar','d2','Хебър'], ['maritsa','d2','Марица'],
+  ['pirin','d2','Пирин'], ['litex','d2','Литекс'], ['sportist','d2','Спортист'], ['chernomorets','d2','Черноморец'],
+  ['neftochimic','d2','Нефтохимик'], ['belasitsa','d2','Беласица'], ['minyor','d2','Миньор'], ['sevlievo','d2','Севлиево'],
+  ['marek','d2','Марек'], ['strumska','d2','Струмска слава'], ['vitosha','d2','Витоша'], ['slivnishki','d2','Сливнишки герой'],
+  ['spartakpl','d2','Спартак Плевен','Спартак\\s*\\(?Плевен\\)?'],
+  ['lokgo','d2','Локомотив ГО','Локомотив\\s*\\(?(?:Горна Оряховица|ГО|Г\\. Оряховица)\\)?'],
+  ['cska2','d2','ЦСКА II','ЦСКА\\s*(?:II|2)'], ['ludo2','d2','Лудогорец II','Лудогорец\\s*(?:II|2)'],
+  ['botev2','d2','Ботев II','Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2)'],
+].map(([k, div, label, pat]) => ({ k, div, label, re: CS([pat || label]) }));
+const CLUB_LABEL = Object.fromEntries(CLUBS.map(c => [c.k, c.label]));
+const clubsIn = t => CLUBS.filter(c => c.re.test(t)).map(c => c.k);
 const REFNAMES = CS(REFEREES.concat(REF_SURNAMES).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
+// World section: only these competitions (league names are case-insensitive, club names case-sensitive)
+const WORLD = [
+  { k:'eng', label:'England', lg: rx(`висш${W} лига${W}|премиър лийг${W}|английск${W} (?:първенство|елит|висша)${W}|премиършип`),
+    cl: CS(['Ливърпул','Манчестър(?: Юнайтед| Сити)?','Арсенал','Челси','Тотнъм','Нюкасъл','Астън Вила','Уест Хям','Евертън']) },
+  { k:'esp', label:'Spain', lg: rx(`ла лига${W}|примера дивисион|испанск${W} първенство${W}`),
+    cl: CS(['Реал Мадрид','Реал','Барселона','Барса','Атлетико(?: Мадрид)?','Севиля','Виляреал','Бетис','Валенсия','Атлетик Билбао']) },
+  { k:'ita', label:'Italy', lg: rx(`серия а${E}|серие а${E}|калчо|италианск${W} първенство${W}`),
+    cl: CS(['Ювентус','Милан','Интер','Наполи','Рома','Лацио','Аталанта','Фиорентина']) },
+  { k:'ger', label:'Germany', lg: rx(`бундеслига${W}|германск${W} първенство${W}`),
+    cl: CS(['Байерн(?: Мюнхен)?','Борусия(?: Дортмунд)?','Дортмунд','Лайпциг','Байер Леверкузен','Леверкузен','Айнтрахт','Щутгарт']) },
+  { k:'fra', label:'France', lg: rx(`лига 1${E}|френск${W} първенство${W}|лига едно`),
+    cl: CS(['ПСЖ','Пари Сен Жермен','Марсилия','Лион','Монако']) },
+  { k:'ucl', label:'Champions League', lg: rx(`шампионска${W} лига${W}|лига${W} на шампионите|champions league`), cl: null },
+];
+
 const DIVS = { d1:'1st League (efbet)', d2:'2nd League', d3:'3rd League', cup:'Bulgarian Cup', unk:'Unclassified' };
+const COMPS = Object.fromEntries(WORLD.map(w => [w.k, w.label]));
 const CATS = { red:'Red cards', penalty:'Penalties', offside:'Offsides / disallowed goals', var:'VAR',
   committee:'Referee committee & appointments', discipline:'Discipline & sanctions', fights:'Fights & incidents',
   dispute:'Disputes & scandals', other:'Other' };
@@ -304,55 +383,74 @@ function analyze(title, desc, q, strict){
   const t = title + ' \n ' + (desc || '');
   const L1 = RX.league1.test(t), L2 = RX.league2.test(t), L3 = RX.league3.test(t), CUP = RX.cup.test(t);
   const anyLeague = L1 || L2 || L3 || CUP;
-  if (RX.otherSport.test(t) && !anyLeague) return null;        // basketball, volleyball…
-  if (RX.euro.test(t) && !anyLeague) return null;              // European cups, national teams
-  const c1 = CLUB1.test(t), c2 = CLUB2.test(t), refName = REFNAMES.test(t);
-  const bg = anyLeague || c1 || c2 || refName || RX.bgOrg.test(t);
-  const foot = anyLeague || c1 || c2 || RX.foot.test(t);
+  if (RX.otherSport.test(t) && !anyLeague) return null;                 // basketball, volleyball…
+  const clubs = clubsIn(t), refName = REFNAMES.test(t);
+  const bgSignal = anyLeague || clubs.length > 0 || refName || RX.bgOrg.test(t);
+  const comps = WORLD.filter(w => w.lg.test(t) || (w.cl && w.cl.test(t))).map(w => w.k);
+
+  let scope;
+  if (anyLeague) scope = 'bg';
+  else if (comps.length) scope = (clubs.length && !comps.includes('ucl')) ? 'bg' : 'world';
+  else if (RX.euro.test(t)) return null;                               // Europa/Conference League, national teams, World Cup
+  else if (RX.foreign.test(t) && !clubs.length && !refName) return null; // other foreign football
+  else if (bgSignal) scope = 'bg';
+  else if (q.ctx === 'bg' && !strict) scope = 'bg';
+  else return null;
 
   const cats = [];
   for (const k of ['red','penalty','offside','var','committee','discipline','fights']) if (RX[k].test(t)) cats.push(k);
   const refHit = RX.referee.test(t) || refName;
   if (RX.dispStrong.test(t) || (RX.dispWeak.test(t) && refHit)) cats.push('dispute');
 
-  const relevant = refHit || cats.length > 0;
-  if (strict || q.ctx === 'loose') { if (!bg || !foot || !relevant) return null; }
+  if (scope === 'world') {
+    if (!(refHit || cats.some(c => ['red','penalty','offside','var'].includes(c)))) return null;
+  } else if (strict || q.ctx !== 'bg') {
+    const foot = anyLeague || clubs.length > 0 || RX.foot.test(t);
+    if (!bgSignal || !foot || !(refHit || cats.length)) return null;
+  }
 
   const divs = [];
-  if (L1) divs.push('d1'); if (L2) divs.push('d2'); if (L3) divs.push('d3'); if (CUP) divs.push('cup');
-  if (!divs.length) { if (c1) divs.push('d1'); if (c2) divs.push('d2'); }
-  const hinted = !divs.length && !!q.div;               // division guessed from the search, not the text
-  if (hinted) divs.push(q.div);
-  if (!divs.length) divs.push('unk');
+  let hinted = false;
+  if (scope === 'bg') {
+    if (L1) divs.push('d1'); if (L2) divs.push('d2'); if (L3) divs.push('d3'); if (CUP) divs.push('cup');
+    if (!divs.length) for (const d of new Set(clubs.map(k => CLUBS.find(c => c.k === k).div))) divs.push(d);
+    if (!divs.length && q.div && q.ctx === 'bg') { divs.push(q.div); hinted = true; }
+    if (!divs.length) divs.push('unk');
+  }
 
   let score = 1;
-  for (const c of cats) {
-    const inTitle = (c === 'dispute' ? RX.dispStrong : RX[c]).test(title);
-    score += WGT[c] * (inTitle ? 2 : 1);
-  }
+  for (const c of cats) score += WGT[c] * ((c === 'dispute' ? RX.dispStrong : RX[c]).test(title) ? 2 : 1);
   if (RX.referee.test(title) || REFNAMES.test(title)) score += 2;
   if (!cats.length) cats.push('other');
-  return { divs, cats, score, hinted };
+  return { scope, divs, comps, cats, score, hinted, clubs, vh: RX.video.test(title) };
 }
 
 /* ======================= STORAGE ======================= */
-function load(){ try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { return null; } }
-function save(){
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); }
-  catch (e) {
-    try { // too big: keep the newest stories only
-      const keep = Object.values(S.items).sort((a, b) => b.date - a.date).slice(0, Math.floor(MAX_ITEMS / 2));
-      S.items = Object.fromEntries(keep.map(i => [i.id, i]));
-      localStorage.setItem(STORE_KEY, JSON.stringify(S));
-    } catch (e2) { log('Could not save to browser storage: ' + e2.message); }
-  }
-}
-const S = load() || {};
-S.items = S.items || {};
+function loadJSON(k){ try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+function saveJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+try { localStorage.removeItem('bgRefWatch.v1'); } catch (e) {}
+
+const S = loadJSON(STORE_KEY) || {};
+S.articles = S.articles || {};
+S.reads = S.reads || {};
 S.settings = Object.assign({ seasonStart: SEASON_START_DEFAULT, windowDays: 14, proxy: '', extra: '' }, S.settings || {});
 S.newIds = S.newIds || [];
 S.lastRunAt = S.lastRunAt || 0;
 S.proxyPref = S.proxyPref || '';
+const X = loadJSON(XKEY) || {};          // video/minute extraction cache per article
+let VER = 1;                             // bumps whenever articles change (re-group stories)
+
+function save(){
+  if (saveJSON(STORE_KEY, S)) return;
+  const keep = Object.values(S.articles).sort((a, b) => b.date - a.date).slice(0, Math.floor(MAX_ARTICLES / 2));
+  S.articles = Object.fromEntries(keep.map(a => [a.aid, a])); VER++;
+  if (!saveJSON(STORE_KEY, S)) log('Could not save to browser storage');
+}
+function saveX(){
+  const keys = Object.keys(X);
+  if (keys.length > 1500) keys.sort((a, b) => X[a].t - X[b].t).slice(0, keys.length - 1200).forEach(k => delete X[k]);
+  saveJSON(XKEY, X);
+}
 
 /* ======================= HELPERS ======================= */
 const $ = s => document.querySelector(s);
@@ -362,37 +460,35 @@ const norm = s => (s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim(
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '#';
 const fmtDate = ts => new Date(ts).toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+const fmtDay = ts => new Date(ts).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
 const seasonStartTs = () => { const t = Date.parse(S.settings.seasonStart + 'T00:00:00'); return isFinite(t) ? t : Date.parse(SEASON_START_DEFAULT); };
 
 const LOG = [];
 function log(msg){
-  const line = new Date().toLocaleTimeString('en-GB') + '  ' + msg;
-  LOG.push(line); if (LOG.length > 300) LOG.shift();
+  LOG.push(new Date().toLocaleTimeString('en-GB') + '  ' + msg); if (LOG.length > 300) LOG.shift();
   const el = $('#log'); if (el) el.textContent = LOG.slice().reverse().join('\n');
 }
-
 function htmlToText(html){
   if (!html) return '';
   try { return (new DOMParser().parseFromString(html, 'text/html').body.textContent || '').replace(/\s+/g, ' ').trim(); }
   catch (e) { return String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); }
 }
-function unBing(link){
-  try { const u = new URL(link); return u.searchParams.get('url') || link; } catch (e) { return link; }
+function unBing(link){ try { return new URL(link).searchParams.get('url') || link; } catch (e) { return link; } }
+function loadScript(src){
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('could not load ' + src)); document.head.appendChild(s); });
 }
 
-/* ======================= FETCHING ======================= */
+/* ======================= FEED FETCHING ======================= */
 const HEALTH = {};
 function proxies(){
   const list = PROXIES.slice();
   const custom = (S.settings.proxy || '').trim();
   if (custom) list.unshift({ name:'custom', wrap:u => custom.includes('{url}') ? custom.replace('{url}', encodeURIComponent(u)) : custom + encodeURIComponent(u) });
-  // When hosted on Cloudflare Pages with the bundled _worker.js, the site has its own relay at /feed
-  if (/^https?:$/.test(location.protocol)) list.unshift({ name:'site', wrap:u => '/feed?url=' + encodeURIComponent(u) });
+  if (HOSTED) list.unshift({ name:'site', wrap:u => '/feed?url=' + encodeURIComponent(u) }); // the site's own relay on Cloudflare
   const rank = p => (p.name === 'custom' ? 1000 : p.name === 'site' ? 900 : 0) + (p.name === S.proxyPref ? 5 : 0)
     - ((HEALTH[p.name] || 0) * (p.name === 'site' ? 300 : 3));
   return list.sort((a, b) => rank(b) - rank(a));
 }
-
 async function fetchText(url, signal){
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -404,17 +500,14 @@ async function fetchText(url, signal){
     return await r.text();
   } finally { clearTimeout(timer); signal.removeEventListener('abort', stop); }
 }
-
 function parseXml(txt){
   if (!/<(rss|channel|feed)[\s>]/i.test(txt)) throw new Error('response is not a feed');
   const doc = new DOMParser().parseFromString(txt, 'text/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new Error('broken XML');
-  const out = [];
-  for (const it of Array.from(doc.getElementsByTagName('item'))) {
+  return Array.from(doc.getElementsByTagName('item')).map(it => {
     const get = n => { for (const c of Array.from(it.children)) if ((c.localName || '').toLowerCase() === n) return c.textContent.trim(); return ''; };
-    out.push({ title:get('title'), link:get('link'), date:new Date(get('pubdate')), desc:htmlToText(get('description')), source:get('source') });
-  }
-  return out;
+    return { title:get('title'), link:get('link'), date:new Date(get('pubdate')), desc:htmlToText(get('description')), source:get('source') };
+  });
 }
 function parseJson(txt){
   const j = JSON.parse(txt);
@@ -422,7 +515,6 @@ function parseJson(txt){
   return (j.items || []).map(x => ({ title:x.title || '', link:x.link || '',
     date:new Date(String(x.pubDate || '').replace(' ', 'T') + 'Z'), desc:htmlToText(x.description || ''), source:x.author || '' }));
 }
-
 async function getFeed(url, signal){
   let lastErr = new Error('no proxy available');
   for (const p of proxies()) {
@@ -447,52 +539,53 @@ let running = false, abortCtrl = null, lastRender = 0;
 
 function buildWindows(from, to, days){
   const out = [], step = days * 864e5;
-  for (let s = from.getTime(); s <= to.getTime(); s += step) {
+  for (let s = from.getTime(); s <= to.getTime(); s += step)
     out.push([new Date(s - 864e5), new Date(Math.min(s + step, to.getTime()) + 2 * 864e5)]);
-  }
   return out;
 }
 
 function ingest(raw, task, runStart, minTs){
   let title = (raw.title || '').replace(/\s+/g, ' ').trim();
   if (!title) return null;
-  let src = (raw.source || '').trim();
-  let link = raw.link || '';
+  let src = (raw.source || '').trim(), link = raw.link || '';
   if (task.kind === 'google') {
     const i = title.lastIndexOf(' - ');
     if (i > 15) { if (!src) src = title.slice(i + 3).trim(); title = title.slice(0, i).trim(); }
-  } else {
-    link = unBing(link);
-  }
+  } else link = unBing(link);
   if (!src) { try { src = new URL(link).hostname.replace(/^www\./, ''); } catch (e) {} }
   let desc = (raw.desc || '').trim();
-  if (desc && norm(desc).startsWith(norm(title).slice(0, 40))) desc = '';  // Google's description just repeats the title
-  if (desc.length > 400) desc = desc.slice(0, 397) + '…';
+  if (desc && norm(desc).startsWith(norm(title).slice(0, 40))) desc = '';   // Google's description repeats the title
+  if (desc.length > 300) desc = desc.slice(0, 297) + '…';
 
   const a = analyze(title, desc, task.q, task.kind === 'bing');
   if (!a) return null;
-
   let d = raw.date instanceof Date ? raw.date.getTime() : NaN;
   if (!isFinite(d) || d > runStart + 864e5) d = runStart;
   if (d < minTs) return null;
 
-  const id = norm(title).slice(0, 90);
-  if (id.length < 8) return null;
-  const ex = S.items[id];
+  const base = norm(title).slice(0, 90);
+  if (base.length < 8) return null;
+  const aid = base + '|' + norm(src || 'unknown').slice(0, 30);
+  const ex = S.articles[aid];
   if (ex) {
-    if (src && !ex.src.includes(src) && ex.src.length < 12) ex.src.push(src);
-    if (!ex.desc && desc) ex.desc = desc;
-    if (d < ex.date) ex.date = d;
-    const mergeTags = (have, add, filler) => { const s = new Set(have.concat(add)); if (s.size > 1) s.delete(filler); return [...s]; };
-    const informative = !a.hinted && !(a.divs.length === 1 && a.divs[0] === 'unk');
-    if (informative) { ex.divs = ex.hinted ? a.divs.slice() : mergeTags(ex.divs, a.divs, 'unk'); ex.hinted = false; }
-    else if (a.hinted && ex.divs.length === 1 && ex.divs[0] === 'unk') { ex.divs = a.divs.slice(); ex.hinted = true; }
-    ex.cats = mergeTags(ex.cats, a.cats, 'other');
+    let changed = false;
+    if (!ex.desc && desc) { ex.desc = desc; changed = true; }
+    if (d < ex.date) { ex.date = d; changed = true; }
+    const union = (have, add, filler) => { const s = new Set(have.concat(add)); if (s.size > 1) s.delete(filler); return [...s]; };
+    if (ex.scope === 'bg' && a.scope === 'bg') {
+      const informative = !a.hinted && !(a.divs.length === 1 && a.divs[0] === 'unk');
+      if (informative) { ex.divs = ex.hinted ? a.divs.slice() : union(ex.divs, a.divs, 'unk'); ex.hinted = false; changed = true; }
+      else if (a.hinted && ex.divs.length === 1 && ex.divs[0] === 'unk') { ex.divs = a.divs.slice(); ex.hinted = true; changed = true; }
+    }
+    ex.cats = union(ex.cats, a.cats, 'other');
     ex.score = Math.max(ex.score, a.score);
+    if (changed) VER++;
     return null;
   }
-  S.items[id] = { id, title, link, desc, src: src ? [src] : [], date: d, found: runStart, divs: a.divs, cats: a.cats, score: a.score, hinted: a.hinted };
-  return id;
+  S.articles[aid] = { aid, title, link, desc, src, date: d, found: runStart, scope: a.scope, divs: a.divs, comps: a.comps,
+    cats: a.cats, score: a.score, hinted: a.hinted, clubs: a.clubs, vh: a.vh };
+  VER++;
+  return aid;
 }
 
 async function pool(list, n, fn, signal){
@@ -507,18 +600,14 @@ async function runScan(full){
   running = true;
   abortCtrl = new AbortController();
   const signal = abortCtrl.signal;
-  setBusy(true);
-  hideWarn();
+  setBusy(true); hideWarn();
 
-  const runStart = Date.now();
-  const minTs = seasonStartTs();
-  const seasonStart = new Date(minTs);
-  const isFirst = Object.keys(S.items).length === 0;
+  const runStart = Date.now(), minTs = seasonStartTs(), seasonStart = new Date(minTs);
+  const isFirst = Object.keys(S.articles).length === 0;
   const from = (full || !S.lastRunAt) ? seasonStart : new Date(Math.max(minTs, S.lastRunAt - 3 * 864e5));
-  const windows = buildWindows(from, new Date(), Number(S.settings.windowDays) || 14).reverse(); // newest first
+  const windows = buildWindows(from, new Date(), Number(S.settings.windowDays) || 14).reverse();
   const queries = googleQueries();
-
-  const tasks = BING_QUERIES.map(q => ({ kind:'bing', q:{ q, ctx:'loose', div:null } }));
+  const tasks = BING_QUERIES.map(q => ({ kind:'bing', q }));
   windows.forEach(([a, b]) => queries.forEach(q => tasks.push({ kind:'google', q, a, b })));
 
   let total = tasks.length, done = 0, ok = 0, fail = 0, gaveUp = false;
@@ -541,9 +630,7 @@ async function runScan(full){
       if (fail >= 15 && ok === 0 && !gaveUp) { gaveUp = true; abortCtrl.abort(); }
     }
   };
-
   await pool(tasks, CONCURRENCY, exec, signal);
-
   if (failed.length && !signal.aborted && ok > 0) {
     const retry = failed.splice(0);
     total += retry.length;
@@ -555,29 +642,344 @@ async function runScan(full){
   const stopped = signal.aborted;
   if (!stopped && ok > 0) S.lastRunAt = runStart;
   S.newIds = isFirst ? [] : [...added];
-  trimItems();
+  trimArticles();
   save();
   running = false;
   setBusy(false);
   render();
-
-  const msg = `${gaveUp ? 'Gave up' : stopped ? 'Stopped' : 'Done'}: ${added.size} new stor${added.size === 1 ? 'y' : 'ies'} · ${ok} searches OK, ${fail} failed`;
+  const msg = `${gaveUp ? 'Gave up' : stopped ? 'Stopped' : 'Done'}: ${added.size} new article${added.size === 1 ? '' : 's'} · ${ok} searches OK, ${fail} failed`;
   log(msg);
   $('#ptext').textContent = msg;
-  if (ok === 0 && (gaveUp || !stopped)) showWarn('No search succeeded — the public CORS proxies are blocked, down or rate-limited right now. The page retries automatically every few minutes while open; you can also set your own proxy in Settings (instructions at the top of this file).');
+  if (ok === 0 && (gaveUp || !stopped)) showWarn('No search succeeded — the feed relays are blocked, down or rate-limited right now. The page retries automatically while open.');
   else if (!stopped && fail > total * 0.4) showWarn(`${fail} of ${total} searches failed, so some stories may be missing. Press Refresh later to fill the gaps.`);
 }
-
-function trimItems(){
-  const all = Object.values(S.items);
-  if (all.length <= MAX_ITEMS) return;
+function trimArticles(){
+  const all = Object.values(S.articles);
+  if (all.length <= MAX_ARTICLES) return;
   all.sort((a, b) => b.date - a.date);
-  S.items = Object.fromEntries(all.slice(0, MAX_ITEMS).map(i => [i.id, i]));
+  S.articles = Object.fromEntries(all.slice(0, MAX_ARTICLES).map(a => [a.aid, a])); VER++;
 }
 
-/* ======================= UI ======================= */
-const selDivs = new Set(), selCats = new Set();
-let shown = PAGE_SIZE;
+/* ======================= STORY GROUPING ======================= */
+const stem = w => w.slice(0, 5);
+const STOP = new Set(('като след срещу между което които която който това този тази така също може вече само беше бяха няма преди около ' +
+  'какво както когато заради днес вчера утре съдия съдията съдии съдийство съдийска съдийски съдийско рефер рефера арбитър ' +
+  'футбол футболен футболна мача мачът мачове лига лигата efbet ефбет кръг кръга отбор отбора видео снимки гледайте вижте ' +
+  'скандал скандално скандален сезон първа втора трета минута').split(' ').map(stem));
+const NAME_SKIP = new Set(['Видео','Вижте','Гледайте','Скандал','Съдията','Съдийската','Дисциплинарната','Официално','Ексклузивно','Снимки','Голям']);
+const FEAT = new Map();
+function feat(a){
+  let f = FEAT.get(a.aid);
+  if (f) return f;
+  const words = norm(a.title).split(' ');
+  const tok = new Set(words.filter(w => w.length >= 4 && !/^\d+$/.test(w)).map(stem).filter(s => !STOP.has(s)));
+  const names = new Set();
+  a.title.split(/\s+/).slice(1).forEach(w => {
+    const m = w.match(/^[„"«(]?([А-Я][а-яё]{3,})/);
+    if (m && !NAME_SKIP.has(m[1]) && !CLUBS.some(c => c.re.test(m[1]))) names.add(stem(m[1].toLowerCase()));
+  });
+  f = { tok, names, clubs: new Set(a.clubs || []), cats: new Set((a.cats || []).filter(c => c !== 'other')),
+        base: norm(a.title), full: new Set(words.filter(Boolean)) };
+  FEAT.set(a.aid, f);
+  return f;
+}
+const inter = (a, b) => { let n = 0; for (const x of a) if (b.has(x)) n++; return n; };
+const jacc = (a, b) => { const i = inter(a, b); return i ? i / (a.size + b.size - i) : 0; };
+function linked(a, b){
+  const j = jacc(a.tok, b.tok);
+  if (j >= 0.5) return true;
+  const sc = inter(a.clubs, b.clubs), sn = inter(a.names, b.names), sk = inter(a.cats, b.cats);
+  if (sc >= 2 && (sk >= 1 || j >= 0.2)) return true;           // same match + same kind of incident
+  if (sc >= 1 && sn >= 1 && (sk >= 1 || j >= 0.25)) return true; // same club + same player/referee
+  if (sn >= 2) return true;
+  return j >= 0.34 && sc + sn >= 1;
+}
+
+let STORY_CACHE = { ver: -1, season: '', list: [] };
+const DUP = new Map();   // aid -> aid of the earlier identical article
+function buildStories(){
+  if (STORY_CACHE.ver === VER && STORY_CACHE.season === S.settings.seasonStart) return STORY_CACHE.list;
+  const min = seasonStartTs();
+  const arts = Object.values(S.articles).filter(a => a.date >= min).sort((x, y) => x.date - y.date);
+  const parent = arts.map((_, i) => i);
+  const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const F = arts.map(feat), span = STORY_DAYS * 864e5;
+  for (let i = 0; i < arts.length; i++)
+    for (let j = i + 1; j < arts.length && arts[j].date - arts[i].date <= span; j++) {
+      if (arts[i].scope !== arts[j].scope) continue;
+      const ri = find(i), rj = find(j);
+      if (ri !== rj && linked(F[i], F[j])) parent[rj] = ri;
+    }
+  const groups = new Map();
+  arts.forEach((a, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(a); });
+  DUP.clear();
+  const newSet = new Set(S.newIds);
+  const list = [];
+  for (const g of groups.values()) {            // g is sorted oldest → newest
+    const originals = [];
+    for (const a of g) {
+      const f = feat(a);
+      const d = originals.find(o => o.f.base === f.base || jacc(o.f.full, f.full) >= 0.85);
+      if (d) DUP.set(a.aid, d.a.aid); else originals.push({ a, f });
+    }
+    const rep = g.slice().sort((x, y) => (y.score - x.score) || ((DUP.has(x.aid) ? 1 : 0) - (DUP.has(y.aid) ? 1 : 0)) || (x.date - y.date))[0];
+    const union = (key, filler) => { const s = new Set(g.flatMap(a => a[key] || [])); if (filler && s.size > 1) s.delete(filler); return [...s]; };
+    const sources = new Set(g.map(a => a.src)).size;
+    const score = rep.score + Math.min(6, sources - 1);
+    list.push({
+      key: g[0].aid, scope: rep.scope, arts: g.slice().reverse(), aidSet: new Set(g.map(a => a.aid)), rep,
+      date: g[g.length - 1].date, first: g[0].date, sources, score,
+      divs: union('divs', 'unk'), comps: union('comps'), cats: union('cats', 'other'),
+      hot: score >= 12 || sources >= 4, hasNew: g.some(a => newSet.has(a.aid)), vh: g.some(a => a.vh),
+      important: sources >= 2 || rep.score >= 10,
+    });
+  }
+  STORY_CACHE = { ver: VER, season: S.settings.seasonStart, list };
+  return list;
+}
+function storyMatch(s){
+  const count = {};
+  s.arts.forEach(a => (a.clubs || []).forEach(k => count[k] = (count[k] || 0) + 1));
+  const top = Object.entries(count).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => CLUB_LABEL[k]);
+  return top.length === 2 ? top.join(' – ') : top[0] || '';
+}
+
+/* ======================= READ MARKS ======================= */
+const isRead = aid => !!S.reads[aid];
+const storyRead = s => isRead(s.rep.aid) || s.arts.every(a => isRead(a.aid));
+function setRead(aids, on){
+  const now = Date.now();
+  aids.forEach(a => { if (on) S.reads[a] = S.reads[a] || now; else delete S.reads[a]; });
+  save(); scheduleRender();
+  if (SB && USER) {
+    const q = on
+      ? SB.from('article_reads').upsert(aids.map(k => ({ article_key: k, read_at: new Date(S.reads[k]).toISOString() })), { onConflict: 'user_id,article_key', ignoreDuplicates: true })
+      : SB.from('article_reads').delete().in('article_key', aids);
+    q.then(({ error }) => error && log('Read sync failed: ' + error.message));
+  }
+}
+async function syncReads(){
+  if (!SB || !USER) return;
+  const { data, error } = await SB.from('article_reads').select('article_key,read_at').limit(10000);
+  if (error) { log('Could not load read marks: ' + error.message); return; }
+  const remote = new Set();
+  (data || []).forEach(r => { remote.add(r.article_key); if (!S.reads[r.article_key]) S.reads[r.article_key] = Date.parse(r.read_at) || Date.now(); });
+  const up = Object.keys(S.reads).filter(k => !remote.has(k)).slice(0, 2000)
+    .map(k => ({ article_key: k, read_at: new Date(S.reads[k]).toISOString() }));
+  if (up.length) await SB.from('article_reads').upsert(up, { onConflict: 'user_id,article_key', ignoreDuplicates: true });
+  save(); scheduleRender();
+}
+
+/* ======================= VIDEOS IN ARTICLES ======================= */
+let EXTRACT = HOSTED ? 'unknown' : 'off';      // 'on' once /extract answers, 'off' if not on Cloudflare
+const XQ = [], XQSET = new Set();
+let xActive = 0;
+const xFresh = a => { const c = X[a.aid]; return c && Date.now() - c.t < (c.ok ? 3 * 864e5 : 6 * 3600e3); };
+
+async function extractArticle(a){
+  try {
+    const r = await fetch('/extract?url=' + encodeURIComponent(a.link));
+    const type = r.headers.get('content-type') || '';
+    if (r.status === 404 || !type.includes('json')) { EXTRACT = 'off'; XQ.length = 0; XQSET.clear(); return; }
+    const j = await r.json();
+    EXTRACT = 'on';
+    X[a.aid] = { t: Date.now(), ok: !!j.ok, url: j.url || '', videos: (j.videos || []).slice(0, 8), minutes: (j.minutes || []).slice(0, 15), err: j.error || '' };
+    saveX();
+  } catch (e) {
+    X[a.aid] = { t: Date.now(), ok: false, url: '', videos: [], minutes: [], err: e.message };   // don't retry for a while
+    log('Video search failed: ' + e.message);
+  }
+}
+function queueExtract(arts, front){
+  if (EXTRACT === 'off') return;
+  for (const a of arts) {
+    if (!a || xFresh(a) || XQSET.has(a.aid)) continue;
+    XQSET.add(a.aid); front ? XQ.unshift(a) : XQ.push(a);
+  }
+  pumpX();
+}
+function pumpX(){
+  while (xActive < 2 && XQ.length && EXTRACT !== 'off') {
+    const a = XQ.shift(); xActive++;
+    extractArticle(a).finally(() => { xActive--; XQSET.delete(a.aid); scheduleRender(); pumpX(); });
+  }
+}
+const extractTargets = s => s.arts.filter(a => !DUP.has(a.aid)).sort((x, y) => (y.vh - x.vh) || (y.score - x.score)).slice(0, 6);
+
+// Turn a video URL into an embeddable player (only well-known video hosts are embedded)
+function toEmbed(u){
+  let url; try { url = new URL(u); } catch (e) { return null; }
+  if (!/^https?:$/.test(url.protocol)) return null;
+  const h = url.hostname.replace(/^(www|m|mobile)\./, '');
+  let id;
+  if (h === 'youtu.be') id = url.pathname.slice(1, 12);
+  else if (/(^|\.)youtube(-nocookie)?\.com$/.test(h)) id = url.searchParams.get('v') || (url.pathname.match(/\/(?:embed|shorts|live|v)\/([\w-]{11})/) || [])[1];
+  if (id && /^[\w-]{11}$/.test(id)) return { kind:'YouTube', key:'yt:' + id, src:`https://www.youtube-nocookie.com/embed/${id}` };
+  if (h === 'vimeo.com' || h === 'player.vimeo.com') { id = (url.pathname.match(/(\d{6,})/) || [])[1]; if (id) return { kind:'Vimeo', key:'vm:' + id, src:`https://player.vimeo.com/video/${id}` }; }
+  if (h.endsWith('dailymotion.com') || h === 'dai.ly') { id = (url.pathname.match(/(?:video\/|^\/)([a-z0-9]{6,})/i) || [])[1]; if (id) return { kind:'Dailymotion', key:'dm:' + id, src:`https://www.dailymotion.com/embed/video/${id}` }; }
+  if (h.endsWith('vbox7.com')) { id = url.searchParams.get('vid') || (url.pathname.match(/play:(\w+)/) || [])[1]; if (id && /^\w+$/.test(id)) return { kind:'Vbox7', key:'vb:' + id, src:`https://www.vbox7.com/emb/external.php?vid=${id}` }; }
+  if (h === 'streamable.com') { id = (url.pathname.match(/^\/(?:e\/)?(\w{4,})/) || [])[1]; if (id) return { kind:'Streamable', key:'st:' + id, src:`https://streamable.com/e/${id}` }; }
+  if (h.endsWith('facebook.com') || h === 'fb.watch') {
+    const href = url.pathname.startsWith('/plugins/video.php') ? (url.searchParams.get('href') || '') : u;
+    if (/facebook\.com\/.+\/videos\/|facebook\.com\/watch|facebook\.com\/reel\/|fb\.watch\//.test(href))
+      return { kind:'Facebook', key:'fb:' + href, src:'https://www.facebook.com/plugins/video.php?show_text=false&href=' + encodeURIComponent(href) };
+  }
+  return null;
+}
+function videoLink(u){
+  let url; try { url = new URL(u); } catch (e) { return null; }
+  if (!/^https?:$/.test(url.protocol)) return null;
+  if (/(^|\.)(twitter|x)\.com$/.test(url.hostname) && /\/status\/\d+/.test(url.pathname)) return { label:'Video post on X', href:u };
+  if (/\.(mp4|webm|m3u8|mov)(\?|$)/i.test(url.pathname)) return { label:'Video file', href:u };
+  return null;
+}
+const playerHtml = e => `<div class="player"><iframe src="${esc(e.src)}" loading="lazy" title="${esc(e.kind)} video" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+const minLabel = m => `${m.m}${m.plus ? '+' + m.plus : ''}'`;
+const MIN_TAGS = { penalty:'penalty', red:'red card', yellow:'yellow card', offside:'offside', goal:'goal', var:'VAR', foul:'foul' };
+
+function mediaHtml(s){
+  const out = [];
+  const uploads = VIDEOS.filter(v => v.article_key && s.aidSet.has(v.article_key));
+  uploads.forEach(v => out.push(uploadedPlayer(v) + `<div class="muted">Uploaded by ${esc(v.uploader_name || 'member')} · ${esc(v.title)}</div>`));
+  const targets = extractTargets(s);
+  const vids = new Map(), links = new Map(), mins = new Map();
+  for (const a of targets) {
+    const r = X[a.aid]; if (!r) continue;
+    (r.videos || []).forEach(v => {
+      const e = toEmbed(v.url);
+      if (e) { if (!vids.has(e.key)) vids.set(e.key, { ...e, from: a.src }); return; }
+      const l = videoLink(v.url); if (l && !links.has(l.href)) links.set(l.href, { ...l, from: a.src });
+    });
+    (r.minutes || []).forEach(m => {
+      const k = m.m + '+' + (m.plus || 0);
+      if (!mins.has(k)) mins.set(k, { ...m, tags: [...(m.tags || [])], from: a.src });
+      else { const x = mins.get(k); (m.tags || []).forEach(t => x.tags.includes(t) || x.tags.push(t)); }
+    });
+  }
+  [...vids.values()].slice(0, 3).forEach(e => out.push(playerHtml(e) + `<div class="muted">${esc(e.kind)} video from ${esc(e.from)}</div>`));
+  if (links.size) out.push('<div class="msg">' + [...links.values()].slice(0, 4).map(l => `<a class="btn small" href="${esc(safeUrl(l.href))}" target="_blank" rel="noopener noreferrer">▶ ${esc(l.label)} (${esc(l.from)})</a>`).join(' ') + '</div>');
+
+  const minList = [...mins.values()].sort((a, b) => a.m - b.m || (a.plus || 0) - (b.plus || 0));
+  if (minList.length) out.push('<h3>Minutes mentioned</h3><div class="mins">' + minList.map(m =>
+    `<div class="minrow"><span class="min">${minLabel(m)}</span>${m.tags.length ? '<b>' + esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) + '</b> · ' : ''}<span class="muted">…${esc(m.ctx || '')}… (${esc(m.from)})</span></div>`).join('') + '</div>');
+  if (!vids.size && !uploads.length && minList.length) {
+    const match = storyMatch(s);
+    out.push(`<div class="ebfu"><div><b>Match video</b>${match ? ' · ' + esc(match) : ''} · ${esc(fmtDay(s.first))}</div>
+      <div>Situations at ${minList.map(m => `<span class="min">${minLabel(m)}</span>`).join('')}</div>
+      <div><a class="btn" href="${esc(EBFU_URL)}" target="_blank" rel="noopener">Open ebfu.net</a>
+      <span class="muted">Automatic match search there will be added next.</span></div></div>`);
+  }
+  const pending = EXTRACT !== 'off' && targets.some(a => !X[a.aid]);
+  if (EXTRACT === 'off') out.push('<div class="muted">Finding videos inside articles works on the Cloudflare-hosted site.</div>');
+  else if (pending) out.push('<div class="muted">Looking for videos in the articles…</div>');
+  else if (!vids.size && !links.size && !uploads.length) out.push('<div class="muted">No video found in the articles.</div>');
+  const sig = [uploads.map(v => v.id), [...vids.keys()], [...links.keys()], [...mins.keys()], pending, EXTRACT].join('|');
+  return { html: out.join(''), sig };
+}
+function storyHasVideo(s){
+  if (VIDEOS.some(v => v.article_key && s.aidSet.has(v.article_key))) return true;
+  return extractTargets(s).some(a => X[a.aid] && (X[a.aid].videos || []).some(v => toEmbed(v.url) || videoLink(v.url)));
+}
+
+/* ======================= SUPABASE: ACCOUNTS, VIDEOS, ADMIN ======================= */
+let SB = null, USER = null, PROFILE = null, AUTH = 'loading', RECOVERY = false, VIDEOS = [], USERS = [], PREFILL = null;
+const approved = () => !!(PROFILE && (PROFILE.approved || PROFILE.role === 'admin'));
+const isAdmin = () => !!(PROFILE && PROFILE.role === 'admin');
+
+async function initSupabase(){
+  let url = SUPABASE_URL, key = SUPABASE_ANON_KEY;
+  if ((!url || !key) && HOSTED) {
+    try { const r = await fetch('/config.json'); if (r.ok && (r.headers.get('content-type') || '').includes('json')) { const j = await r.json(); url = url || j.supabaseUrl; key = key || j.supabaseKey; } } catch (e) {}
+  }
+  if (!url || !key) { AUTH = 'off'; renderAll(); return; }
+  try {
+    if (!window.supabase) await loadScript(SUPABASE_JS);
+    SB = window.supabase.createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  } catch (e) { AUTH = 'error'; log('Supabase failed to load: ' + e.message); renderAll(); return; }
+  SB.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY') { RECOVERY = true; go('account'); }
+    setTimeout(() => handleSession(session), 0);   // never await Supabase calls inside this callback
+  });
+  const { data } = await SB.auth.getSession();
+  await handleSession(data.session);
+  loadVideos();
+}
+async function handleSession(session){
+  const uid = session && session.user ? session.user.id : null;
+  if (uid && USER && USER.id === uid && PROFILE) { AUTH = 'ready'; return; }
+  USER = session ? session.user : null; PROFILE = null;
+  if (!USER) USERS = [];
+  if (USER) {
+    const { data, error } = await SB.from('profiles').select('id,email,display_name,role,approved,created_at').eq('id', USER.id).maybeSingle();
+    if (error) log('Could not load profile: ' + error.message);
+    PROFILE = data || null;
+    syncReads();
+    if (isAdmin()) loadUsers();
+  }
+  AUTH = 'ready';
+  renderAll();
+}
+async function loadVideos(){
+  if (!SB) return;
+  const { data, error } = await SB.from('videos').select('*').order('created_at', { ascending: false }).limit(500);
+  if (error) { log('Could not load videos: ' + error.message); return; }
+  VIDEOS = data || [];
+  renderAll();
+}
+async function loadUsers(){
+  if (!SB || !isAdmin()) return;
+  const { data, error } = await SB.from('profiles').select('id,email,display_name,role,approved,created_at').order('created_at', { ascending: false });
+  if (error) { log('Could not load users: ' + error.message); return; }
+  USERS = data || [];
+  renderAdmin(); renderNav();
+}
+const publicUrl = path => SB ? SB.storage.from('videos').getPublicUrl(path).data.publicUrl : '';
+function uploadedPlayer(v){
+  if (v.storage_path) return `<video class="file" controls preload="metadata" playsinline src="${esc(publicUrl(v.storage_path))}"></video>`;
+  const e = toEmbed(v.video_url || '');
+  if (e) return playerHtml(e);
+  return `<div class="msg"><a class="btn small" href="${esc(safeUrl(v.video_url))}" target="_blank" rel="noopener noreferrer">▶ Watch video</a></div>`;
+}
+
+/* ======================= UI: NAVIGATION ======================= */
+let VIEW = 'bg';
+const VIEWS = ['bg', 'world', 'videos', 'account', 'admin'];
+function go(v){ if (location.hash !== '#' + v) location.hash = v; else applyView(); }
+function applyView(){
+  const v = (location.hash || '#bg').slice(1);
+  VIEW = VIEWS.includes(v) ? v : 'bg';
+  if (VIEW === 'admin' && !isAdmin() && AUTH !== 'loading') VIEW = 'account';
+  $('#view-news').hidden = !(VIEW === 'bg' || VIEW === 'world');
+  $('#scanArea').hidden = !(VIEW === 'bg' || VIEW === 'world');
+  $('#view-videos').hidden = VIEW !== 'videos';
+  $('#view-account').hidden = VIEW !== 'account';
+  $('#view-admin').hidden = VIEW !== 'admin';
+  shown = PAGE_SIZE;
+  renderAll();
+  if (VIEW === 'admin') loadUsers();
+}
+function renderNav(){
+  const stories = buildStories();
+  const nb = stories.filter(s => s.scope === 'bg').length, nw = stories.filter(s => s.scope === 'world' && s.important).length;
+  const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
+  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['videos', 'Videos', VIDEOS.length],
+    ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
+  if (isAdmin()) items.push(['admin', 'Admin', pending || null]);
+  $('#nav').innerHTML = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
+}
+function renderAll(){
+  renderNav();
+  if (VIEW === 'bg' || VIEW === 'world') render();
+  else if (VIEW === 'videos') renderVideos();
+  else if (VIEW === 'account') renderAccount();
+  else if (VIEW === 'admin') renderAdmin();
+}
+
+/* ======================= UI: NEWS ======================= */
+const SEL = { bg: { group: new Set(), cats: new Set() }, world: { group: new Set(), cats: new Set() } };
+const EXPANDED = new Set();
+let shown = PAGE_SIZE, renderTimer = null;
+function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 350); }
 
 function setBusy(b){
   $('#btnRefresh').disabled = b; $('#btnFull').disabled = b;
@@ -587,91 +989,315 @@ function setBusy(b){
 }
 function progress(done, total, added, fail){
   $('#pfill').style.width = Math.round(done / total * 100) + '%';
-  $('#ptext').textContent = `Searching… ${done}/${total} searches · ${added} new stories${fail ? ' · ' + fail + ' failed' : ''}`;
-  if (Date.now() - lastRender > 1500) { lastRender = Date.now(); render(); }
+  $('#ptext').textContent = `Searching… ${done}/${total} searches · ${added} new articles${fail ? ' · ' + fail + ' failed' : ''}`;
+  if (Date.now() - lastRender > 2500) { lastRender = Date.now(); renderAll(); }
 }
 function showWarn(t){ const w = $('#warn'); w.textContent = t; w.hidden = false; }
 function hideWarn(){ $('#warn').hidden = true; }
 function updateLastRun(){
-  $('#seasonLbl').textContent = new Date(seasonStartTs()).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' });
   $('#lastRun').textContent = running ? '' : S.lastRunAt
-    ? 'Updated ' + fmtDate(S.lastRunAt) + ' · auto-update every ' + AUTO_REFRESH_HOURS + ' h'
-    : 'Not searched yet';
+    ? 'Updated ' + fmtDate(S.lastRunAt) + ' · auto-update every ' + AUTO_REFRESH_HOURS + ' h' : 'Not searched yet';
 }
 
-function baseList(){
-  const min = seasonStartTs();
+function filteredStories(){
+  const scope = VIEW === 'world' ? 'world' : 'bg';
   const text = norm($('#q').value);
-  const newSet = new Set(S.newIds);
-  return Object.values(S.items).filter(it =>
-    it.date >= min &&
-    (!$('#onlyNew').checked || newSet.has(it.id)) &&
-    (!$('#onlyHot').checked || isHot(it)) &&
-    (!text || norm(it.title + ' ' + it.desc + ' ' + it.src.join(' ')).includes(text)));
+  return buildStories().filter(s => s.scope === scope && (scope !== 'world' || s.important) &&
+    (!$('#onlyNew').checked || s.hasNew) && (!$('#onlyHot').checked || s.hot) && (!$('#hideRead').checked || !storyRead(s)) &&
+    (!text || s.arts.some(a => norm(a.title + ' ' + a.desc + ' ' + a.src).includes(text))));
 }
-const isHot = it => it.score >= 12 || it.src.length >= 4;
-
 function renderChips(el, labels, sel, list, key){
   const counts = {};
-  list.forEach(it => it[key].forEach(k => counts[k] = (counts[k] || 0) + 1));
+  list.forEach(s => s[key].forEach(k => counts[k] = (counts[k] || 0) + 1));
   el.innerHTML = Object.entries(labels).map(([k, label]) =>
     `<button class="chip${sel.has(k) ? ' on' : ''}" data-k="${k}">${esc(label)}<span class="n">${counts[k] || 0}</span></button>`).join('');
 }
 
+function storyCard(s){
+  const newSet = new Set(S.newIds), read = storyRead(s), r = s.rep, extra = s.sources - 1;
+  const others = s.arts.filter(a => a.src !== r.src).map(a => a.src);
+  const srcLine = esc(r.src) + (extra > 0 ? ` <span title="${esc([...new Set(others)].join(', '))}">+${extra} more source${extra > 1 ? 's' : ''}</span>` : '');
+  const tags = (s.scope === 'world' ? s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`) : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`))
+    .concat(s.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`));
+  if (storyHasVideo(s)) tags.unshift('<span class="tag vid">▶ Video</span>');
+  const open = EXPANDED.has(s.key);
+  let panel = '';
+  if (open) {
+    const media = mediaHtml(s);
+    panel = `<div class="panel">
+      <h3>${s.arts.length} article${s.arts.length > 1 ? 's' : ''} from ${s.sources} source${s.sources > 1 ? 's' : ''}</h3>
+      <ul class="arts">${s.arts.map(a => `<li><div class="m">${esc(fmtDate(a.date))} · ${esc(a.src)}${newSet.has(a.aid) ? ' · <b>new</b>' : ''}</div>
+        <a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${DUP.has(a.aid) ? '<span class="dup">Duplicate</span>' : ''}${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}</ul>
+      <h3>Video</h3>
+      <div class="media" data-key="${esc(s.key)}" data-sig="${esc(media.sig)}">${media.html}</div>
+      <div class="actions">${approved() ? '<button class="small" data-act="upload">⬆ Upload a video for this story</button>'
+        : SB ? `<span class="muted">${USER ? 'Uploading videos needs admin approval of your account.' : '<a href="#account">Log in</a> to upload a video for this story.'}</span>` : ''}</div>
+    </div>`;
+  }
+  return `<article class="card${read ? ' read' : ''}" data-key="${esc(s.key)}">
+    <div class="meta">${s.hot ? '<span class="badge hot">HOT</span>' : ''}${s.hasNew ? '<span class="badge new">NEW</span>' : ''}${read ? '<span class="badge read">✓ READ</span>' : ''}
+      <span>${esc(fmtDate(s.date))}</span><span>·</span><span>${srcLine}</span></div>
+    <h2><a href="${esc(safeUrl(r.link))}" data-aid="${esc(r.aid)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h2>
+    ${r.desc ? `<p class="desc">${esc(r.desc)}</p>` : ''}
+    <div class="tags">${tags.join('')}</div>
+    <div class="actions">
+      <button class="small" data-act="expand">${open ? '▴ Hide' : '▾ ' + (s.arts.length > 1 ? `All ${s.arts.length} articles & video` : 'Details & video')}</button>
+      <button class="small" data-act="read">${read ? 'Mark unread' : 'Mark read'}</button>
+    </div>${panel}
+  </article>`;
+}
+
 function render(){
-  const base = baseList();
-  const byCat = base.filter(it => !selCats.size || it.cats.some(c => selCats.has(c)));
-  const byDiv = base.filter(it => !selDivs.size || it.divs.some(d => selDivs.has(d)));
-  renderChips($('#divChips'), DIVS, selDivs, byCat, 'divs');
-  renderChips($('#catChips'), CATS, selCats, byDiv, 'cats');
+  const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
+  $('#intro').textContent = world
+    ? 'Only the biggest refereeing stories from the Premier League, La Liga, Serie A, Bundesliga, Ligue 1 and the Champions League — covered by at least two outlets or rated major.'
+    : 'Refereeing stories from the efbet Liga, 2nd League, 3rd League and the Bulgarian Cup. Articles about the same incident are grouped into one story.';
+  const base = filteredStories();
+  const groupKey = world ? 'comps' : 'divs';
+  const byCat = base.filter(s => !sel.cats.size || s.cats.some(c => sel.cats.has(c)));
+  const byGroup = base.filter(s => !sel.group.size || s[groupKey].some(d => sel.group.has(d)));
+  renderChips($('#groupChips'), world ? COMPS : DIVS, sel.group, byCat, groupKey);
+  renderChips($('#catChips'), CATS, sel.cats, byGroup, 'cats');
+  const list = byCat.filter(s => byGroup.includes(s));
+  list.sort($('#sort').value === 'score' ? (a, b) => b.score - a.score || b.date - a.date : (a, b) => b.date - a.date);
 
-  const list = base.filter(it => (!selDivs.size || it.divs.some(d => selDivs.has(d))) && (!selCats.size || it.cats.some(c => selCats.has(c))));
-  const sortBy = $('#sort').value;
-  list.sort(sortBy === 'score'
-    ? (a, b) => (b.score + b.src.length) - (a.score + a.src.length) || b.date - a.date
-    : (a, b) => b.date - a.date);
-
-  const total = Object.keys(S.items).length;
-  $('#count').textContent = `${list.length} of ${total} stories`;
-  const newSet = new Set(S.newIds);
+  const totalArts = list.reduce((n, s) => n + s.arts.length, 0);
+  $('#count').textContent = `${list.length} stories · ${totalArts} articles`;
   const feed = $('#feed');
+  // keep already-loaded video players alive across re-renders
+  const keep = new Map([...feed.querySelectorAll('.media[data-key]')].map(m => [m.dataset.key, m]));
   if (!list.length) {
-    feed.innerHTML = `<div class="empty">${running ? 'Searching… stories will appear here as they are found.' : total ? 'No stories match these filters.' : 'No stories yet — press Refresh to search.'}</div>`;
+    const any = Object.keys(S.articles).length;
+    feed.innerHTML = `<div class="empty">${running ? 'Searching… stories will appear here as they are found.' : any ? 'No stories match these filters.' : 'No stories yet — press Refresh to search.'}</div>`;
   } else {
-    feed.innerHTML = list.slice(0, shown).map(it => {
-      const srcs = it.src.length ? esc(it.src[0]) + (it.src.length > 1 ? ` <span title="${esc(it.src.join(', '))}">+${it.src.length - 1} more</span>` : '') : '';
-      return `<article class="card">
-        <div class="meta">${isHot(it) ? '<span class="badge hot">HOT</span>' : ''}${newSet.has(it.id) ? '<span class="badge new">NEW</span>' : ''}
-          <span>${esc(fmtDate(it.date))}</span>${srcs ? '<span>·</span><span>' + srcs + '</span>' : ''}</div>
-        <h2><a href="${esc(safeUrl(it.link))}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a></h2>
-        ${it.desc ? `<p class="desc">${esc(it.desc)}</p>` : ''}
-        <div class="tags">${it.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`).join('')}${it.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`).join('')}</div>
-      </article>`;
-    }).join('');
+    feed.innerHTML = list.slice(0, shown).map(storyCard).join('');
+    feed.querySelectorAll('.media[data-key]').forEach(m => { const old = keep.get(m.dataset.key); if (old && old.dataset.sig === m.dataset.sig) m.replaceWith(old); });
   }
   $('#more').hidden = list.length <= shown;
   updateLastRun();
+  // look for videos in the stories on screen (first article of each), and all articles of opened stories
+  queueExtract(list.slice(0, 20).map(s => extractTargets(s)[0]));
+  list.filter(s => EXPANDED.has(s.key)).forEach(s => queueExtract(extractTargets(s), true));
 }
 
-function bindChips(el, sel){
-  el.addEventListener('click', e => {
-    const b = e.target.closest('.chip'); if (!b) return;
-    const k = b.dataset.k; sel.has(k) ? sel.delete(k) : sel.add(k);
-    shown = PAGE_SIZE; render();
-  });
+/* ======================= UI: VIDEOS ======================= */
+function renderVideos(){
+  const box = $('#uploadBox');
+  if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Video uploads need the Supabase connection, which isn't set up on this site yet.</div>`;
+  else if (AUTH === 'loading') box.innerHTML = '<p class="muted">Loading…</p>';
+  else if (!USER) box.innerHTML = `<div class="card"><b>Want to add a clip?</b><p class="muted">Members approved by the admin can upload match videos. <a href="#account">Log in or register</a>.</p></div>`;
+  else if (!approved()) box.innerHTML = `<div class="card"><b>Waiting for approval</b><p class="muted">Your account is registered. The admin needs to approve it before you can upload videos.</p></div>`;
+  else box.innerHTML = uploadForm();
+
+  const text = norm($('#vq').value);
+  const vids = VIDEOS.filter(v => !text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name].join(' ')).includes(text));
+  $('#videoList').innerHTML = vids.length ? vids.map(v => {
+    const canDelete = USER && (v.uploaded_by === USER.id || isAdmin());
+    return `<article class="card">
+      <div class="meta"><span>${esc(fmtDate(Date.parse(v.created_at)))}</span><span>·</span><span>by ${esc(v.uploader_name || 'member')}</span>${v.division ? `<span>·</span><span>${esc(DIVS[v.division] || v.division)}</span>` : ''}</div>
+      <h2>${esc(v.title)}</h2>
+      <div class="muted">${[v.match, v.match_date && fmtDay(Date.parse(v.match_date)), v.minutes && 'minutes ' + v.minutes].filter(Boolean).map(esc).join(' · ')}</div>
+      ${uploadedPlayer(v)}
+      ${v.description ? `<p class="desc">${esc(v.description)}</p>` : ''}
+      <div class="actions">${v.article_url ? `<a class="btn small" href="${esc(safeUrl(v.article_url))}" target="_blank" rel="noopener noreferrer">Related article</a>` : ''}
+        ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Delete</button>` : ''}</div>
+    </article>`;
+  }).join('') : `<div class="empty">${AUTH === 'off' ? '' : 'No videos uploaded yet.'}</div>`;
+}
+function uploadForm(){
+  const p = PREFILL || {};
+  return `<details class="box" ${PREFILL ? 'open' : ''}><summary>⬆ Upload a video</summary>
+    <form class="form" id="upForm">
+      ${p.article_key ? `<div class="muted">For the story: <b>${esc(p.storyTitle)}</b></div>` : ''}
+      <label>Title *<input type="text" name="title" required minlength="3" maxlength="200" value="${esc(p.title || '')}"></label>
+      <div class="two">
+        <label>Match<input type="text" name="match" placeholder="Левски – Дунав" value="${esc(p.match || '')}"></label>
+        <label>Match date<input type="date" name="match_date" value="${esc(p.match_date || '')}"></label>
+      </div>
+      <div class="two">
+        <label>Minute(s)<input type="text" name="minutes" placeholder="23, 67, 90+2" value="${esc(p.minutes || '')}"></label>
+        <label>Division<select name="division"><option value="">—</option>${Object.entries(DIVS).filter(([k]) => k !== 'unk').map(([k, l]) => `<option value="${k}" ${p.division === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      </div>
+      <label>Video file (MP4/WebM/MOV, up to ${MAX_UPLOAD_MB} MB)<input type="file" name="file" accept="video/mp4,video/webm,video/quicktime"></label>
+      <label>…or a video link (YouTube, Facebook, Vimeo, Vbox7)<input type="url" name="video_url" placeholder="https://www.youtube.com/watch?v=…"></label>
+      <label>Description<textarea name="description" maxlength="2000"></textarea></label>
+      <input type="hidden" name="article_key" value="${esc(p.article_key || '')}">
+      <input type="hidden" name="article_url" value="${esc(p.article_url || '')}">
+      <div class="bar"><button class="primary" type="submit">Upload</button>${PREFILL ? '<button type="button" data-act="clearPrefill">Not for a story</button>' : ''}</div>
+      <div id="upMsg" class="msg"></div>
+    </form></details>`;
+}
+async function submitUpload(form){
+  const msg = $('#upMsg'), btn = form.querySelector('button[type=submit]');
+  const f = new FormData(form);
+  const file = f.get('file'), link = String(f.get('video_url') || '').trim();
+  const say = (t, cls) => { msg.textContent = t; msg.className = 'msg ' + (cls || ''); };
+  if (!(file && file.size) && !link) return say('Choose a video file or paste a video link.', 'err');
+  if (file && file.size > MAX_UPLOAD_MB * 1048576) return say(`The file is larger than ${MAX_UPLOAD_MB} MB.`, 'err');
+  if (link && !/^https:\/\//i.test(link)) return say('The video link must start with https://', 'err');
+  btn.disabled = true;
+  let path = null;
+  try {
+    if (file && file.size) {
+      say('Uploading the file…');
+      path = `${USER.id}/${Date.now()}-${(file.name || 'video').replace(/[^\w.-]+/g, '_').slice(-80)}`;
+      const { error } = await SB.storage.from('videos').upload(path, file, { contentType: file.type || 'video/mp4', upsert: false });
+      if (error) throw error;
+    }
+    const row = { title: String(f.get('title')).trim(), match: String(f.get('match') || '').trim() || null,
+      match_date: f.get('match_date') || null, minutes: String(f.get('minutes') || '').trim() || null,
+      division: f.get('division') || null, description: String(f.get('description') || '').trim() || null,
+      article_key: f.get('article_key') || null, article_url: f.get('article_url') || null,
+      storage_path: path, video_url: path ? null : link };
+    const { error } = await SB.from('videos').insert(row);
+    if (error) { if (path) await SB.storage.from('videos').remove([path]); throw error; }
+    PREFILL = null;
+    await loadVideos();
+    const m = $('#upMsg'); if (m) { m.textContent = 'Uploaded — the video is now on the site.'; m.className = 'msg ok'; }
+  } catch (e) {
+    say('Upload failed: ' + (e.message || e), 'err');
+  } finally { btn.disabled = false; }
+}
+async function deleteVideo(id){
+  const v = VIDEOS.find(x => String(x.id) === String(id));
+  if (!v || !confirm('Delete this video?')) return;
+  const { error } = await SB.from('videos').delete().eq('id', v.id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  if (v.storage_path) await SB.storage.from('videos').remove([v.storage_path]);
+  loadVideos();
 }
 
+/* ======================= UI: ACCOUNT ======================= */
+let ACC_TAB = 'login';
+function renderAccount(){
+  const box = $('#accountBox');
+  if (AUTH === 'off') { box.innerHTML = `<div class="card"><h2>Accounts</h2><p class="muted">Logging in isn't set up on this site yet. All news stays open to everyone — an account is only needed to upload videos.</p></div>`; return; }
+  if (AUTH === 'error') { box.innerHTML = `<div class="warn">The login service could not be loaded. Try again later.</div>`; return; }
+  if (AUTH === 'loading') { box.innerHTML = '<p class="muted">Loading…</p>'; return; }
+  if (RECOVERY) {
+    box.innerHTML = `<div class="card"><h2>Set a new password</h2><form class="form" id="pwForm"><label>New password<input type="password" name="password" minlength="8" required autocomplete="new-password"></label><button class="primary" type="submit">Save password</button><div id="accMsg" class="msg"></div></form></div>`;
+    return;
+  }
+  if (USER) {
+    const status = isAdmin() ? 'Admin' : approved() ? 'Approved member — you can upload videos' : 'Waiting for admin approval';
+    box.innerHTML = `<div class="card"><h2>${esc((PROFILE && PROFILE.display_name) || USER.email)}</h2>
+      <p class="muted">${esc(USER.email)}</p><p><b>Status:</b> ${esc(status)}</p>
+      <p class="muted">Your read marks are saved to your account and follow you to other devices.</p>
+      <div class="bar">${approved() ? '<a class="btn primary" href="#videos">Upload a video</a>' : ''}${isAdmin() ? '<a class="btn" href="#admin">Admin</a>' : ''}<button id="btnLogout">Log out</button></div></div>`;
+    return;
+  }
+  const login = ACC_TAB === 'login';
+  box.innerHTML = `<div class="card">
+    <div class="bar"><button class="${login ? 'primary' : ''}" data-tab="login">Log in</button><button class="${!login ? 'primary' : ''}" data-tab="register">Register</button></div>
+    <form class="form" id="${login ? 'loginForm' : 'regForm'}">
+      ${login ? '' : '<label>Name shown on your uploads<input type="text" name="name" required maxlength="60" autocomplete="nickname"></label>'}
+      <label>Email<input type="email" name="email" required autocomplete="email"></label>
+      <label>Password${login ? '' : ' (at least 8 characters)'}<input type="password" name="password" required ${login ? 'autocomplete="current-password"' : 'minlength="8" autocomplete="new-password"'}></label>
+      <div class="bar"><button class="primary" type="submit">${login ? 'Log in' : 'Create account'}</button>${login ? '<button type="button" id="btnForgot">Forgot password?</button>' : ''}</div>
+      <div id="accMsg" class="msg"></div>
+    </form>
+    <p class="muted">You don't need an account to read the news. Accounts are for uploading match videos (after admin approval) and keeping your read marks across devices.</p>
+  </div>`;
+}
+function accSay(t, cls){ const m = $('#accMsg'); if (m) { m.textContent = t; m.className = 'msg ' + (cls || ''); } }
+const redirectTo = () => location.origin + location.pathname;
+async function onAccountSubmit(form){
+  const f = new FormData(form), btn = form.querySelector('button[type=submit]');
+  btn.disabled = true;
+  try {
+    if (form.id === 'loginForm') {
+      const { error } = await SB.auth.signInWithPassword({ email: f.get('email'), password: f.get('password') });
+      if (error) throw error;
+      accSay('Logged in.', 'ok');
+    } else if (form.id === 'regForm') {
+      const { data, error } = await SB.auth.signUp({ email: f.get('email'), password: f.get('password'),
+        options: { data: { display_name: String(f.get('name')).trim() }, emailRedirectTo: redirectTo() } });
+      if (error) throw error;
+      accSay(data.session ? 'Account created. The admin will approve it so you can upload videos.' : 'Check your email and open the confirmation link. After that, the admin can approve your account.', 'ok');
+    } else if (form.id === 'pwForm') {
+      const { error } = await SB.auth.updateUser({ password: f.get('password') });
+      if (error) throw error;
+      RECOVERY = false; renderAccount();
+    }
+  } catch (e) { accSay(e.message || String(e), 'err'); }
+  finally { btn.disabled = false; }
+}
+
+/* ======================= UI: ADMIN ======================= */
+function renderAdmin(){
+  const box = $('#adminBox');
+  if (!isAdmin()) { box.innerHTML = '<p class="muted">Admins only.</p>'; return; }
+  const pending = USERS.filter(u => !u.approved && u.role !== 'admin');
+  const rows = u => `<tr><td><b>${esc(u.display_name || '—')}</b><div class="muted">${esc(u.email || '')}</div><div class="muted">registered ${esc(fmtDay(Date.parse(u.created_at)))}</div></td>
+    <td>${u.role === 'admin' ? 'Admin' : u.approved ? 'Approved' : '<b>Pending</b>'}</td>
+    <td>${u.role === 'admin' ? '' : u.approved ? `<button class="small" data-approve="${esc(u.id)}" data-val="0">Revoke</button>` : `<button class="small primary" data-approve="${esc(u.id)}" data-val="1">Approve</button>`}</td></tr>`;
+  box.innerHTML = `<div class="card"><h2>Members</h2><p class="muted">${pending.length} waiting for approval · ${USERS.length} total</p>
+    <table class="users"><thead><tr><th>Member</th><th>Status</th><th></th></tr></thead><tbody>${pending.concat(USERS.filter(u => !pending.includes(u))).map(rows).join('')}</tbody></table>
+    <div class="bar"><button id="btnUsers">Reload</button></div></div>
+    <p class="muted">Approved members can upload videos. Admins can delete any video from the Videos page.</p>`;
+}
+async function setApproved(id, val){
+  const { error } = await SB.from('profiles').update({ approved: val }).eq('id', id);
+  if (error) alert('Could not update: ' + error.message);
+  loadUsers();
+}
+
+/* ======================= EVENTS & INIT ======================= */
 function initUI(){
-  bindChips($('#divChips'), selDivs);
-  bindChips($('#catChips'), selCats);
+  window.addEventListener('hashchange', applyView);
+  $('#nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) go(b.dataset.view); });
+
+  ['#groupChips', '#catChips'].forEach(id => $(id).addEventListener('click', e => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    const sel = SEL[VIEW === 'world' ? 'world' : 'bg'][id === '#groupChips' ? 'group' : 'cats'];
+    sel.has(b.dataset.k) ? sel.delete(b.dataset.k) : sel.add(b.dataset.k);
+    shown = PAGE_SIZE; render();
+  }));
   let t;
   $('#q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { shown = PAGE_SIZE; render(); }, 200); });
-  ['#sort', '#onlyNew', '#onlyHot'].forEach(s => $(s).addEventListener('change', () => { shown = PAGE_SIZE; render(); }));
+  $('#vq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderVideos, 200); });
+  ['#sort', '#onlyNew', '#onlyHot', '#hideRead'].forEach(s => $(s).addEventListener('change', () => { shown = PAGE_SIZE; render(); }));
   $('#more').addEventListener('click', () => { shown += PAGE_SIZE; render(); });
+
+  const feed = $('#feed');
+  const onLink = e => { const a = e.target.closest('a[data-aid]'); if (a) setRead([a.dataset.aid], true); };
+  feed.addEventListener('click', onLink);
+  feed.addEventListener('auxclick', onLink);
+  feed.addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const card = b.closest('.card'), s = buildStories().find(x => x.key === card.dataset.key); if (!s) return;
+    if (b.dataset.act === 'expand') { EXPANDED.has(s.key) ? EXPANDED.delete(s.key) : EXPANDED.add(s.key); render(); }
+    if (b.dataset.act === 'read') setRead(s.arts.map(a => a.aid), !storyRead(s));
+    if (b.dataset.act === 'upload') {
+      const mins = new Set(); extractTargets(s).forEach(a => (X[a.aid] ? X[a.aid].minutes : []).forEach(m => mins.add(minLabel(m).replace("'", ''))));
+      PREFILL = { article_key: s.rep.aid, article_url: s.rep.link, storyTitle: s.rep.title, title: '', match: storyMatch(s),
+        match_date: ymd(new Date(s.first)), minutes: [...mins].join(', '), division: s.divs.find(d => d !== 'unk') || '' };
+      go('videos');
+    }
+  });
+
+  $('#videoList').addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (b) deleteVideo(b.dataset.del); });
+  $('#uploadBox').addEventListener('submit', e => { if (e.target.id === 'upForm') { e.preventDefault(); submitUpload(e.target); } });
+  $('#uploadBox').addEventListener('click', e => { if (e.target.closest('[data-act="clearPrefill"]')) { PREFILL = null; renderVideos(); } });
+  $('#accountBox').addEventListener('submit', e => { e.preventDefault(); onAccountSubmit(e.target); });
+  $('#accountBox').addEventListener('click', async e => {
+    const tab = e.target.closest('[data-tab]'); if (tab) { ACC_TAB = tab.dataset.tab; renderAccount(); return; }
+    if (e.target.id === 'btnLogout') { await SB.auth.signOut(); return; }
+    if (e.target.id === 'btnForgot') {
+      const email = $('#accountBox input[name=email]').value.trim();
+      if (!email) return accSay('Type your email first, then tap "Forgot password?".', 'err');
+      const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: redirectTo() });
+      accSay(error ? error.message : 'Check your email for a link to set a new password.', error ? 'err' : 'ok');
+    }
+  });
+  $('#adminBox').addEventListener('click', e => {
+    const b = e.target.closest('[data-approve]'); if (b) setApproved(b.dataset.approve, b.dataset.val === '1');
+    if (e.target.id === 'btnUsers') loadUsers();
+  });
+
   $('#btnRefresh').addEventListener('click', () => runScan(false));
   $('#btnFull').addEventListener('click', () => runScan(true));
   $('#btnStop').addEventListener('click', () => abortCtrl && abortCtrl.abort());
-
   $('#setSeason').value = S.settings.seasonStart;
   $('#setDepth').value = String(S.settings.windowDays);
   $('#setProxy').value = S.settings.proxy;
@@ -681,26 +1307,23 @@ function initUI(){
     S.settings.windowDays = Number($('#setDepth').value) || 14;
     S.settings.proxy = $('#setProxy').value.trim();
     S.settings.extra = $('#setExtra').value;
-    save(); render(); log('Settings saved');
+    VER++; save(); renderAll(); log('Settings saved');
   });
   $('#btnClear').addEventListener('click', () => {
     if (running || !confirm('Delete all saved stories? The next search will scan the whole season again.')) return;
-    S.items = {}; S.newIds = []; S.lastRunAt = 0; save(); render();
+    S.articles = {}; S.newIds = []; S.lastRunAt = 0; VER++; FEAT.clear(); save(); renderAll();
   });
 }
-
-function autoCheck(){
-  if (!running && Date.now() - S.lastRunAt > AUTO_REFRESH_HOURS * 3600e3) runScan(false);
-}
+function autoCheck(){ if (!running && Date.now() - S.lastRunAt > AUTO_REFRESH_HOURS * 3600e3) runScan(false); }
 
 initUI();
-render();
-setTimeout(autoCheck, 500);                         // first open, or data older than 24 h
-setInterval(autoCheck, 10 * 60e3);                  // daily while the page stays open
+applyView();
+initSupabase();
+setTimeout(autoCheck, 500);
+setInterval(autoCheck, 10 * 60e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
 
-// exposed for testing / console use
-window.BGRW = { analyze, runScan, state: S };
+window.BGRW = { analyze, runScan, buildStories, toEmbed, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS }) };
 })();
 </script>
 </body>
