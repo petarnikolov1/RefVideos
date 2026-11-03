@@ -95,31 +95,42 @@ async function handleSelftest(url, ctx) {
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const cacheKey = new Request(url.origin + '/selftest?v=' + EXTRACT_VERSION, { method: 'GET' });
   if (cache && !url.searchParams.has('fresh')) { const hit = await cache.match(cacheKey); if (hit) return hit; }
-  const out = { time: new Date().toISOString(), version: EXTRACT_VERSION };
-  let items = [];
-  try {
-    const r = await fetch('https://news.google.com/rss/search?q=' + encodeURIComponent('съдия efbet Лига') + '&hl=bg&gl=BG&ceid=BG:bg',
-      { headers: { ...BROWSER_HEADERS, Cookie: GOOGLE_COOKIES }, signal: AbortSignal.timeout(10000) });
-    const xml = await r.text();
-    items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 2).map(m => ({
-      title: decodeEntities((m[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1] || ''), link: ((m[1].match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '').trim() }));
-    out.googleFeed = { status: r.status, items: (xml.match(/<item>/g) || []).length };
-  } catch (e) { out.googleFeed = { error: e.message }; }
-  out.googleLinks = await Promise.all(items.map(async it => {
-    const diag = [], cut = it.title.lastIndexOf(' - ');
-    const title = cut > 15 ? it.title.slice(0, cut) : it.title, src = cut > 15 ? it.title.slice(cut + 3) : '';
-    let resolved = null;
-    try { resolved = await resolveGoogleNews(new URL(it.link), { title, src }, diag); } catch (e) { diag.push(e.message); }
-    return { title: title.slice(0, 90), source: src, resolved, diag };
-  }));
-  const urls = [...out.googleLinks.map(g => g.resolved).filter(Boolean), ...SELFTEST_ARTICLES];
-  out.articles = await Promise.all(urls.map(async u => {
-    const diag = [], page = await fetchArticle(u, diag);
-    return { url: u.slice(0, 110), opened: !!page, diag, kb: page ? Math.round(page.html.length / 1024) : 0,
-      iframes: page ? (page.html.match(/<iframe\b/gi) || []).length : 0,
-      youtube: page ? (page.html.match(/youtube(?:-nocookie)?\.com\/(?:embed|watch)|youtu\.be\/|videoid=/gi) || []).length : 0 };
-  }));
-  const response = json(out, 200, 600);
+  const started = Date.now();
+  const out = { time: new Date().toISOString(), version: EXTRACT_VERSION, finished: false, seconds: 0,
+    googleFeed: 'running', googleLinks: [], googleArticles: [],
+    blockedSites: SELFTEST_ARTICLES.map(u => ({ url: u.slice(0, 90), opened: 'running', diag: [] })) };
+  const open = async (u, slot) => {
+    const page = await fetchArticle(u, slot.diag);
+    slot.opened = !!page;
+    if (page) {
+      const r = extractFromHtml(page.html, page.finalUrl);
+      slot.kb = Math.round(page.html.length / 1024); slot.videos = r.videos.map(v => v.kind + ' ' + v.url.slice(0, 80)); slot.minutes = r.minutes.map(m => m.m + (m.plus ? '+' + m.plus : ''));
+    }
+  };
+  const googlePart = (async () => {
+    let items = [];
+    try {
+      const r = await fetch('https://news.google.com/rss/search?q=' + encodeURIComponent('съдия efbet Лига') + '&hl=bg&gl=BG&ceid=BG:bg',
+        { headers: { ...BROWSER_HEADERS, Cookie: GOOGLE_COOKIES }, signal: AbortSignal.timeout(8000) });
+      const xml = await r.text();
+      items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 2).map(m => ({
+        title: decodeEntities((m[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1] || ''), link: ((m[1].match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '').trim() }));
+      out.googleFeed = { status: r.status, items: (xml.match(/<item>/g) || []).length };
+    } catch (e) { out.googleFeed = { error: e.message }; return; }
+    await Promise.all(items.map(async it => {
+      const cut = it.title.lastIndexOf(' - ');
+      const g = { title: (cut > 15 ? it.title.slice(0, cut) : it.title).slice(0, 90), source: cut > 15 ? it.title.slice(cut + 3) : '', resolved: 'running', diag: [] };
+      out.googleLinks.push(g);
+      try { g.resolved = await resolveGoogleNews(new URL(it.link), { title: g.title, src: g.source }, g.diag); } catch (e) { g.resolved = null; g.diag.push(e.message); }
+      if (g.resolved) { const slot = { url: g.resolved.slice(0, 90), opened: 'running', diag: [] }; out.googleArticles.push(slot); await open(g.resolved, slot); }
+    }));
+  })();
+  const sitesPart = Promise.all(SELFTEST_ARTICLES.map((u, i) => open(u, out.blockedSites[i])));
+  let timer;
+  await Promise.race([Promise.all([googlePart, sitesPart]).then(() => { out.finished = true; }), new Promise(r => { timer = setTimeout(r, 20000); })]);
+  clearTimeout(timer);
+  out.seconds = Math.round((Date.now() - started) / 100) / 10;
+  const response = json(out, 200, out.finished ? 600 : 60);
   if (cache) ctx.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
 }
@@ -171,57 +182,82 @@ function similarity(a, b) { const A = words(a), B = words(b); let n = 0; for (co
 async function findByTitle(title, src, diag) {
   const site = /^[\w-]+(\.[\w-]+)*\.[a-z]{2,}$/i.test(src) ? src.toLowerCase().replace(/^www\./, '') : '';
   const queries = [site ? `${title} site:${site}` : null, `"${title}"`].filter(Boolean);
-  for (const q of queries) {
-    for (const base of ['https://www.bing.com/news/search?format=rss&q=', 'https://www.bing.com/search?format=rss&q=']) {
-      try {
-        const r = await fetch(base + encodeURIComponent(q) + '&setlang=bg&cc=BG', { headers: BROWSER_HEADERS, signal: AbortSignal.timeout(8000) });
-        const xml = await r.text();
-        for (const it of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
-          const t = decodeEntities((it[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '');
-          let link = decodeEntities((it[1].match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '').trim();
-          try { const lu = new URL(link); link = lu.searchParams.get('url') || link; } catch { continue; }
-          let host = ''; try { host = new URL(link).hostname; } catch { continue; }
-          if (/(^|\.)(bing|google|microsoft|msn)\.com$/.test(host)) continue;
-          if (site && !host.endsWith(site)) continue;
-          if (similarity(t, title) >= 0.6) { diag.push('found on Bing: ' + host); return link; }
-        }
-      } catch (e) { diag.push('bing error: ' + e.message); }
+  const bases = ['https://www.bing.com/news/search?format=rss&q=', 'https://www.bing.com/search?format=rss&q='];
+  const lookups = queries.flatMap(q => bases.map(base => (async () => {
+    const r = await fetch(base + encodeURIComponent(q) + '&setlang=bg&cc=BG', { headers: BROWSER_HEADERS, signal: AbortSignal.timeout(7000) });
+    const xml = await r.text();
+    for (const it of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+      const t = decodeEntities((it[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '');
+      let link = decodeEntities((it[1].match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '').trim(), host = '';
+      try { const lu = new URL(link); link = lu.searchParams.get('url') || link; host = new URL(link).hostname; } catch { continue; }
+      if (/(^|\.)(bing|google|microsoft|msn)\.com$/.test(host) || (site && !host.endsWith(site))) continue;
+      if (similarity(t, title) >= 0.6) return { link, host };
     }
-  }
+    throw new Error('no match');
+  })()));
+  const hit = await Promise.any(lookups).catch(() => null);   // all four lookups at once; first match wins
+  if (hit) { diag.push('found on Bing: ' + hit.host); return hit.link; }
   diag.push('headline not found on Bing');
   return null;
 }
 
 // Some news sites block cloud servers; then the article is read through public relays and a reader
 // service (which opens the page like a browser, so videos added by scripts are included). The relays are
-// tried at the same time and the first good answer wins, so a blocked site costs seconds, not a minute.
-const isBotWall = h => h.length < 80000 && /cf-chl|challenge-platform|Just a moment\.\.\.|Attention Required|captcha|DDoS-Guard|Access denied|enable JavaScript and cookies/i.test(h.slice(0, 30000));
+// tried at the same time; the first good answer wins and the others are stopped.
+// Cloudflare's free plan allows only ~10 ms of computing per request, so pages are read only up to
+// MAX_BYTES and a failed answer is never fully decoded.
+const MAX_BYTES = 700000;
+const BOT_RE = /cf-chl|challenge-platform|Just a moment\.\.\.|Attention Required|captcha|DDoS-Guard|Access denied|enable JavaScript and cookies/i;
 const RELAYS = [
   ['allorigins', u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u), { 'User-Agent': UA }],
   ['codetabs', u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u), { 'User-Agent': UA }],
   ['reader', u => 'https://r.jina.ai/' + u, { 'X-Return-Format': 'html', 'X-Timeout': '15' }],
 ];
-async function tryRoute(name, href, headers, ms, diag) {
+async function tryRoute(name, href, headers, ms, diag, ctrl) {
+  ctrl = ctrl || new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    const r = await fetch(href, { redirect: 'follow', signal: AbortSignal.timeout(ms), headers });
-    const html = await decodeBody(r);
-    if (r.ok && html.length > 1500 && !isBotWall(html)) return { html, finalUrl: r.url, name };
-    diag.push(`article ${name}: HTTP ${r.status}${isBotWall(html) ? ' bot check' : html.length <= 1500 ? ' empty' : ''}`);
-  } catch (e) { diag.push(`article ${name}: ${e.name === 'TimeoutError' ? 'timeout' : e.message}`); }
+    const r = await fetch(href, { redirect: 'follow', signal: ctrl.signal, headers });
+    const bytes = await readBytes(r, MAX_BYTES);
+    const head = new TextDecoder('utf-8').decode(bytes.subarray(0, 30000));
+    const wall = bytes.length < 80000 && BOT_RE.test(head);
+    if (r.ok && bytes.length > 1500 && !wall) return { bytes, contentType: r.headers.get('content-type') || '', finalUrl: r.url, name };
+    diag.push(`article ${name}: HTTP ${r.status}${wall ? ' bot check' : bytes.length <= 1500 ? ' empty' : ''}`);
+  } catch (e) {
+    if (ctrl.signal.reason !== 'lost') diag.push(`article ${name}: ${ctrl.signal.aborted ? 'timeout' : e.message}`);
+  } finally { clearTimeout(timer); }
   return null;
+}
+async function readBytes(r, max) {
+  if (!r.body) return new Uint8Array(0);
+  const reader = r.body.getReader(), parts = [];
+  let n = 0;
+  while (n < max) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); n += value.length;
+  }
+  if (n >= max) reader.cancel().catch(() => {});
+  const out = new Uint8Array(Math.min(n, max));
+  let o = 0;
+  for (const p of parts) { if (o >= out.length) break; const take = p.subarray(0, out.length - o); out.set(take, o); o += take.length; }
+  return out;
 }
 async function fetchArticle(articleUrl, diag) {
-  const direct = await tryRoute('direct', articleUrl, { ...BROWSER_HEADERS, Accept: 'text/html,application/xhtml+xml' }, 8000, diag);
-  if (direct) { diag.push('article opened (direct)'); return { html: direct.html, finalUrl: direct.finalUrl || articleUrl }; }
-  const hit = await Promise.any(RELAYS.map(([name, make, headers]) =>
-    tryRoute(name, make(articleUrl), headers, 16000, diag).then(r => r || Promise.reject()))).catch(() => null);
-  if (hit) { diag.push('article opened (' + hit.name + ')'); return { html: hit.html, finalUrl: articleUrl }; }
-  return null;
+  let hit = await tryRoute('direct', articleUrl, { ...BROWSER_HEADERS, Accept: 'text/html,application/xhtml+xml' }, 8000, diag);
+  if (!hit) {
+    const ctrls = RELAYS.map(() => new AbortController());
+    hit = await Promise.any(RELAYS.map(([name, make, headers], i) =>
+      tryRoute(name, make(articleUrl), headers, 16000, diag, ctrls[i]).then(r => r || Promise.reject()))).catch(() => null);
+    ctrls.forEach(c => { try { c.abort('lost'); } catch {} });   // stop the slower relays
+  }
+  if (!hit) return null;
+  diag.push('article opened (' + hit.name + ')');
+  return { html: decodeBytes(hit.bytes, hit.contentType), finalUrl: hit.name === 'direct' ? (hit.finalUrl || articleUrl) : articleUrl };
 }
 
-async function decodeBody(resp) {
-  const bytes = new Uint8Array((await resp.arrayBuffer()).slice(0, 2000000));
-  let charset = ((resp.headers.get('content-type') || '').match(/charset=["']?([\w-]+)/i) || [])[1];
+function decodeBytes(bytes, contentType) {
+  let charset = ((contentType || '').match(/charset=["']?([\w-]+)/i) || [])[1];
   if (!charset) {
     let head = '';
     for (let i = 0; i < Math.min(bytes.length, 4096); i++) head += String.fromCharCode(bytes[i]);
@@ -238,7 +274,7 @@ const PLAYER_HINT = /player|embed|video|vod|stream|media|tv|clip/i;
 const baseDomain = h => h.toLowerCase().replace(/^www\./, '').split('.').slice(-2).join('.');
 
 function extractFromHtml(html, pageUrl) {
-  html = String(html).slice(0, 2000000);
+  html = String(html).slice(0, MAX_BYTES);
   let pageHost = ''; try { pageHost = new URL(pageUrl).hostname; } catch {}
   const meta = prop => {
     const tag = (html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop.replace(/[.:]/g, '\\$&')}["'][^>]*>`, 'i')) || [])[0];
@@ -290,13 +326,13 @@ function extractFromHtml(html, pageUrl) {
   // 2. players and links inside the article body
   scanEmbeds(region, 'article');
   // 3. nothing in the body: look at the rest of the page (minus sidebars and footers) for players
-  if (!cands.length) scanEmbeds(stripBlocks(html, ['aside', 'footer', 'nav']), 'page');
+  if (!cands.length) scanEmbeds(stripBlocks(html.slice(0, 400000), ['aside', 'footer', 'nav']), 'page');
   // 4. video files referenced by the page's own player script
   if (!cands.some(c => c.kind !== 'player')) {
-    for (const m of html.matchAll(/https?:\\?\/\\?\/[^"'\s<>()]+?\.(?:mp4|m3u8)(?:\?[^"'\s<>()]*)?/gi)) { add(m[0].replace(/\\\//g, '/'), 'script'); if (cands.length >= 6) break; }
+    for (const m of html.slice(0, 400000).matchAll(/https?:\\?\/\\?\/[^"'\s<>()]+?\.(?:mp4|m3u8)(?:\?[^"'\s<>()]*)?/gi)) { add(m[0].replace(/\\\//g, '/'), 'script'); if (cands.length >= 6) break; }
   }
 
-  const text = htmlToText(region).slice(0, 200000);
+  const text = htmlToText(region.slice(0, 150000)).slice(0, 100000);
   return { title: title.slice(0, 300), videos: cands.slice(0, 10), minutes: findMinutes(text) };
 }
 
