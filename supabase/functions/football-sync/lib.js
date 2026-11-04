@@ -37,14 +37,14 @@ export function jsonAfter(text, key, from = 0) {
   let j = i + key.length + 3;
   while (text[j] === ' ') j++;
   const open = text[j], close = open === '[' ? ']' : open === '{' ? '}' : null;
-  if (!close) return null;
+  if (!close) return { value: undefined, end: j };          // not a list/object here: the caller can look further
   let depth = 0, inStr = false;
   for (let k = j; k < text.length; k++) {
     const c = text[k];
     if (inStr) { if (c === '\\') k++; else if (c === '"') inStr = false; continue; }
     if (c === '"') inStr = true;
     else if (c === open) depth++;
-    else if (c === close && --depth === 0) { try { return { value: JSON.parse(text.slice(j, k + 1)), end: k + 1 }; } catch { return null; } }
+    else if (c === close && --depth === 0) { try { return { value: JSON.parse(text.slice(j, k + 1)), end: k + 1 }; } catch { return { value: undefined, end: k + 1 }; } }
   }
   return null;
 }
@@ -84,8 +84,13 @@ export function parseEfbetMatches(html) {
 
 export function parseEfbetStandings(html) {
   const rsc = decodeRsc(html);
-  const hit = jsonAfter(rsc, 'allStageStandings');
-  const stages = hit && Array.isArray(hit.value) ? hit.value : [];
+  let stages = [], from = 0;
+  for (let tries = 0; tries < 10 && !stages.length; tries++) {
+    const hit = jsonAfter(rsc, 'allStageStandings', from);
+    if (!hit) break;
+    if (Array.isArray(hit.value)) stages = hit.value;
+    from = hit.end;
+  }
   const st = stages.find(s => s && s.standings && Array.isArray(s.standings.entries) && s.standings.entries.length);
   if (!st) return [];
   return st.standings.entries.map(e => {

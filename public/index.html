@@ -111,6 +111,45 @@
   .cm .m{font-size:12px;color:var(--muted);white-space:normal}
   .cform{display:grid;gap:6px;margin-top:8px}
   button.link{border:none;background:none;padding:0 4px;color:var(--muted);text-decoration:underline;font-size:12px}
+
+  /* results & table (card style after the BFU e-championship) */
+  .lgbar{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px}
+  .roundnav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0}
+  .roundnav .mid{text-align:center;flex:1;min-width:0}
+  .roundnav h2{font-size:18px;margin:0}
+  .roundnav select{margin-top:4px}
+  .roundnav button{width:42px;height:42px;padding:0;font-size:20px;line-height:1}
+  .mcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .mtop{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
+  .mrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:12px 0 8px}
+  .mteam{display:flex;align-items:center;gap:8px;min-width:0}
+  .mteam.home{justify-content:flex-end;text-align:right}
+  .mteam .tname{font-weight:600;font-size:16px;line-height:1.2;overflow-wrap:anywhere}
+  .tlogo{width:36px;height:36px;object-fit:contain;flex:0 0 36px}
+  .tinit{width:36px;height:36px;flex:0 0 36px;border-radius:50%;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted)}
+  .mscore{min-width:64px;text-align:center;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .mscore.time{font-size:15px;font-weight:600;color:var(--muted)}
+  .mscore.live{color:var(--hot)}
+  .mbottom{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .vbtns{display:flex;gap:8px;margin-left:auto}
+  .vbtn{display:flex;align-items:center;gap:6px;background:var(--chip);border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600}
+  .vbtn .ic{color:#2563eb;font-size:15px}
+  .vbtn .len{font-weight:400;color:var(--muted)}
+  .vbtn.on{background:var(--accent);color:var(--accent-ink)} .vbtn.on .ic,.vbtn.on .len{color:var(--accent-ink)}
+  .mplayer .player{margin:10px 0 2px}
+  .mnote{font-size:12px;color:var(--muted);margin-top:4px}
+  .standwrap{overflow-x:auto;margin:10px 0;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+  table.stand{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+  table.stand th{font-size:12px;color:var(--muted);font-weight:600;text-align:center;padding:8px 6px;border-bottom:1px solid var(--line)}
+  table.stand td{text-align:center;padding:7px 6px;border-bottom:1px solid var(--line)}
+  table.stand tr:last-child td{border-bottom:none}
+  table.stand td.t{text-align:left} table.stand th.t{text-align:left}
+  table.stand td.t span{display:inline-flex;align-items:center;gap:8px}
+  table.stand .tlogo,table.stand .tinit{width:24px;height:24px;flex-basis:24px;font-size:10px}
+  table.stand td.p{font-weight:700}
+  .fdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 1px;background:var(--muted)}
+  .fdot.W{background:#16a34a} .fdot.L{background:#dc2626} .fdot.D{background:#9ca3af}
+  @media (max-width:560px){ .hide-s{display:none} .mteam .tname{font-size:14px} .tlogo,.tinit{width:30px;height:30px;flex-basis:30px} .mscore{font-size:20px;min-width:52px} }
   table.users{width:100%;border-collapse:collapse;font-size:14px}
   table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   footer{padding:10px 0 40px;font-size:12px;color:var(--muted)}
@@ -197,6 +236,8 @@
     </footer>
   </section>
 
+  <section id="view-results" hidden><div id="resultsBox"></div></section>
+  <section id="view-table" hidden><div id="tableBox"></div></section>
   <section id="view-videos" hidden>
     <p class="intro">Match clips uploaded by approved members, newest first.</p>
     <div id="uploadBox"></div>
@@ -1017,7 +1058,7 @@ function uploadedPlayer(v){
 
 /* ======================= UI: NAVIGATION ======================= */
 let VIEW = 'bg';
-const VIEWS = ['bg', 'world', 'videos', 'account', 'admin'];
+const VIEWS = ['bg', 'world', 'results', 'table', 'videos', 'account', 'admin'];
 function go(v){ if (location.hash !== '#' + v) location.hash = v; else applyView(); }
 let SCROLL_TO = null;
 function applyView(){
@@ -1030,6 +1071,8 @@ function applyView(){
   $('#view-videos').hidden = VIEW !== 'videos';
   $('#view-account').hidden = VIEW !== 'account';
   $('#view-admin').hidden = VIEW !== 'admin';
+  $('#view-results').hidden = VIEW !== 'results';
+  $('#view-table').hidden = VIEW !== 'table';
   shown = PAGE_SIZE;
   renderAll();
   if (VIEW === 'admin') loadUsers();
@@ -1039,7 +1082,7 @@ function renderNav(){
   const stories = buildStories();
   const nb = stories.filter(s => s.scope === 'bg').length, nw = stories.filter(s => s.scope === 'world' && s.important).length;
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
-  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['videos', 'Videos', VIDEOS.length],
+  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['table', 'Table', null], ['videos', 'Videos', VIDEOS.length],
     ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
   if (isAdmin()) items.push(['admin', 'Admin', pending || null]);
   $('#nav').innerHTML = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
@@ -1047,6 +1090,8 @@ function renderNav(){
 function renderAll(){
   renderNav();
   if (VIEW === 'bg' || VIEW === 'world') render();
+  else if (VIEW === 'results') renderResults();
+  else if (VIEW === 'table') renderTable();
   else if (VIEW === 'videos') renderVideos();
   else if (VIEW === 'account') renderAccount();
   else if (VIEW === 'admin') renderAdmin();
@@ -1463,6 +1508,163 @@ async function setApproved(id, val){
   loadUsers();
 }
 
+/* ======================= RESULTS & TABLE (efbet Лига, Mr Bit Втора лига) ======================= */
+// Filled by the football-sync job in Supabase every 30 minutes: results from efbetleague.com and mr-bit.bg,
+// short report and extended report from YouTube (Gong.bg first, then the league's and the clubs' channels).
+const FB_SEASON = '2026/27';
+const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига' };
+const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set() };
+if (!LEAGUES[FB.league]) FB.league = 'efbet';
+const BG_DAYS = ['Нед', 'Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб'], BG_MONTHS = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
+function sofiaParts(iso){
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Sofia', weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(new Date(iso)).map(x => [x.type, x.value]));
+  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday);
+  return { day: BG_DAYS[wd] || '', d: Number(p.day), m: BG_MONTHS[Number(p.month) - 1] || '', time: `${p.hour}:${p.minute}` };
+}
+const bgDate = iso => { if (!iso) return 'дата неизвестна'; const p = sofiaParts(iso); return `${p.day} ${p.d}, ${p.m} в ${p.time}`; };
+const initials = n => String(n || '').replace(/^(ПФК|ФК)\s+/, '').split(/\s+/).filter(w => !/^\d+$/.test(w)).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const logoHtml = (src, name) => src && /^https:\/\//.test(src)
+  ? `<img class="tlogo" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-init="${esc(initials(name))}">`
+  : `<span class="tinit">${esc(initials(name))}</span>`;
+
+async function loadFootball(league, force){
+  if (!SB || FB.loading[league]) return;
+  const fresh = FB.data[league] && Date.now() - FB.data[league].at < 5 * 60e3;
+  if (fresh && !force) return;
+  FB.loading[league] = true; FB.err = '';
+  try {
+    const [m, t] = await Promise.all([
+      SB.from('football_matches').select('id,league,round,kickoff,status,home_name,away_name,home_logo,away_logo,home_score,away_score,ht_home,ht_away,short_video,long_video,updated_at')
+        .eq('league', league).eq('season', FB_SEASON).order('kickoff', { ascending: true }).limit(500),
+      SB.from('football_standings').select('*').eq('league', league).eq('season', FB_SEASON).order('rank', { ascending: true }),
+    ]);
+    if (m.error) throw m.error;
+    if (t.error) throw t.error;
+    FB.data[league] = { at: Date.now(), matches: m.data || [] };
+    const rows = t.data || [], newest = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
+    // a team that dropped out of the source table keeps its old row: show only the latest update
+    FB.table[league] = rows.filter(r => !newest || Date.parse(newest) - Date.parse(r.updated_at) < 3600e3);
+  } catch (e) { FB.err = e.message || String(e); log('Results could not be loaded: ' + FB.err); }
+  FB.loading[league] = false;
+  if (VIEW === 'results') renderResults(); else if (VIEW === 'table') renderTable();
+}
+function leagueBar(){
+  return `<div class="lgbar">${Object.entries(LEAGUES).map(([k, l]) => `<button class="chip${FB.league === k ? ' on' : ''}" data-lg="${k}">${esc(l)}</button>`).join('')}</div>`;
+}
+function defaultRound(ms){
+  const played = ms.filter(m => m.status === 'finished' || m.status === 'live');
+  if (!played.length) return Math.min(...ms.map(m => m.round));
+  const last = Math.max(...played.map(m => m.round));
+  // move on to the next round once it has started (or starts within a day)
+  const next = ms.filter(m => m.round === last + 1);
+  if (next.length && next.some(m => m.status === 'live' || (m.kickoff && Date.parse(m.kickoff) < Date.now() + 864e5))) return last + 1;
+  return last;
+}
+function matchCard(m){
+  const L = LEAGUES[m.league];
+  const played = m.status === 'finished' || m.status === 'live';
+  const past = m.kickoff && Date.parse(m.kickoff) < Date.now() - 3 * 3600e3;
+  const score = played ? `<div class="mscore${m.status === 'live' ? ' live' : ''}">${m.home_score ?? ''}-${m.away_score ?? ''}</div>`
+    : `<div class="mscore time">${m.status === 'postponed' || past ? 'отложен' : m.kickoff ? esc(sofiaParts(m.kickoff).time) : '—'}</div>`;
+  const vb = (kind, v, label) => v && v.id ? `<button class="vbtn${FB.open.has(m.id + ':' + kind) ? ' on' : ''}" data-mid="${esc(m.id)}" data-kind="${kind}" title="${esc(v.title || '')} · ${esc(v.channel || '')}">
+      <span class="ic">▶</span>${label}<span class="len">${esc(v.length || '')}</span></button>` : '';
+  const btns = vb('short', m.short_video, 'Репортаж') + vb('long', m.long_video, 'Разширен');
+  const left = m.ht_home != null && m.status === 'finished' ? `Полувреме ${m.ht_home}-${m.ht_away}` : m.status === 'live' ? 'На живо' : '';
+  const openKind = ['short', 'long'].find(k => FB.open.has(m.id + ':' + k));
+  const ov = openKind && (openKind === 'short' ? m.short_video : m.long_video);
+  const player = ov ? `<div class="mplayer">${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ov.id)}?autoplay=1&rel=0` })}
+      <div class="mnote">${esc(ov.title)} · ${esc(ov.channel)} · <a href="https://www.youtube.com/watch?v=${encodeURIComponent(ov.id)}" target="_blank" rel="noopener noreferrer">YouTube</a></div></div>` : '';
+  const none = played && m.status === 'finished' && !btns ? '<span class="mnote">Видеото още не е намерено</span>' : '';
+  return `<article class="mcard" data-mid="${esc(m.id)}">
+    <div class="mtop"><span>${esc(L)} - ${m.round} Кръг</span><span>${esc(bgDate(m.kickoff))}</span></div>
+    <div class="mrow">
+      <div class="mteam home"><span class="tname">${esc(m.home_name)}</span>${logoHtml(m.home_logo, m.home_name)}</div>
+      ${score}
+      <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(m.away_name)}</span></div>
+    </div>
+    <div class="mbottom"><span class="muted">${esc(left)}</span>${btns ? `<div class="vbtns">${btns}</div>` : none}</div>
+    ${player}
+  </article>`;
+}
+let RES_KEY = '';
+function renderResults(force){
+  const box = $('#resultsBox');
+  if (AUTH === 'off' || AUTH === 'error') { box.innerHTML = '<div class="warn">Results need the database connection, which is not available right now.</div>'; return; }
+  const lg = FB.league, d = FB.data[lg];
+  if (!d) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Could not load: ' + FB.err) : 'Loading results…'}</p>`; loadFootball(lg); return; }
+  loadFootball(lg);   // refresh quietly when older than 5 minutes
+  const ms = d.matches;
+  if (!ms.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>'; return; }
+  const rounds = [...new Set(ms.map(m => m.round))].sort((a, b) => a - b);
+  const total = Math.max(...rounds);
+  if (!FB.round[lg] || !rounds.includes(FB.round[lg])) FB.round[lg] = defaultRound(ms);
+  const r = FB.round[lg];
+  const list = ms.filter(m => m.round === r).sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)) || a.home_name.localeCompare(b.home_name));
+  const days = list.map(m => m.kickoff).filter(Boolean).sort();
+  const span = days.length ? (() => { const a = sofiaParts(days[0]), b = sofiaParts(days[days.length - 1]); return a.d === b.d && a.m === b.m ? `${a.d} ${a.m}` : `${a.d} ${a.m} – ${b.d} ${b.m}`; })() : '';
+  const withVid = list.filter(m => m.short_video || m.long_video).length, finished = list.filter(m => m.status === 'finished').length;
+  const key = [lg, r, d.at, [...FB.open].join(',')].join('|');
+  if (!force && key === RES_KEY && box.firstChild) return;   // keep playing videos alive across background refreshes
+  RES_KEY = key;
+  box.innerHTML = leagueBar() + `<div class="roundnav">
+      <button data-rnd="${r - 1}" ${r <= rounds[0] ? 'disabled' : ''} aria-label="Previous round">‹</button>
+      <div class="mid"><h2>Кръг ${r} от ${total}</h2><div class="muted">${esc(span)}${finished ? ` · видео за ${withVid} от ${finished} мача` : ''}</div>
+        <select id="rndSel" aria-label="Round">${rounds.map(x => `<option value="${x}"${x === r ? ' selected' : ''}>Кръг ${x}</option>`).join('')}</select></div>
+      <button data-rnd="${r + 1}" ${r >= total ? 'disabled' : ''} aria-label="Next round">›</button></div>
+    ${list.map(matchCard).join('')}
+    <p class="muted">Results: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Videos: YouTube (Gong.bg and others) · updated every 30 minutes</p>`;
+}
+let TABLE_KEY = '';
+function renderTable(){
+  const box = $('#tableBox');
+  if (AUTH === 'off' || AUTH === 'error') { box.innerHTML = '<div class="warn">The table needs the database connection, which is not available right now.</div>'; return; }
+  const lg = FB.league, rows = FB.table[lg];
+  if (!rows) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Could not load: ' + FB.err) : 'Loading table…'}</p>`; loadFootball(lg); return; }
+  loadFootball(lg);
+  const upd = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
+  const key = lg + '|' + upd + '|' + rows.length;
+  if (key === TABLE_KEY && box.firstChild) return;
+  TABLE_KEY = key;
+  box.innerHTML = leagueBar() + `<h2 style="font-size:18px;margin:12px 0 0">Класиране ${esc(LEAGUES[lg])} ${FB_SEASON}</h2>
+    <div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
+    ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0); return `<tr><td>${r.rank ?? ''}</td>
+      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(r.team_name)}</span></td><td>${r.played ?? ''}</td>
+      <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
+      <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
+      <td class="hide-s">${String(r.form || '').split('').map(c => `<span class="fdot ${esc(c)}" title="${({ W: 'победа', D: 'равен', L: 'загуба' })[c] || ''}"></span>`).join('')}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${upd ? ' · обновено ' + esc(fmtDate(Date.parse(upd))) : ''}${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : ''}</p>`;
+}
+function initFootballUI(){
+  const pick = e => {
+    const lg = e.target.closest('[data-lg]');
+    if (lg) { FB.league = lg.dataset.lg; saveJSON('bgRefWatch.fbLeague', FB.league); FB.open.clear(); TABLE_KEY = ''; VIEW === 'table' ? renderTable() : renderResults(true); return true; }
+    return false;
+  };
+  $('#tableBox').addEventListener('click', pick);
+  $('#resultsBox').addEventListener('click', e => {
+    if (pick(e)) return;
+    const nav = e.target.closest('[data-rnd]');
+    if (nav && !nav.disabled) { FB.round[FB.league] = Number(nav.dataset.rnd); FB.open.clear(); renderResults(true); return; }
+    const vb = e.target.closest('.vbtn');
+    if (vb) {
+      const k = vb.dataset.mid + ':' + vb.dataset.kind, other = vb.dataset.mid + ':' + (vb.dataset.kind === 'short' ? 'long' : 'short');
+      const was = FB.open.has(k);
+      FB.open.clear();   // one video plays at a time
+      if (!was) FB.open.add(k);
+      FB.open.delete(other);
+      renderResults(true);
+    }
+  });
+  $('#resultsBox').addEventListener('change', e => { if (e.target.id === 'rndSel') { FB.round[FB.league] = Number(e.target.value); FB.open.clear(); renderResults(true); } });
+  // a logo that fails to load becomes the team's initials
+  ['#resultsBox', '#tableBox'].forEach(id => $(id).addEventListener('error', e => {
+    const img = e.target;
+    if (img.tagName === 'IMG' && img.classList.contains('tlogo')) { const sp = document.createElement('span'); sp.className = 'tinit'; sp.textContent = img.dataset.init || ''; img.replaceWith(sp); }
+  }, true));
+}
+
 /* ======================= EVENTS & INIT ======================= */
 function initUI(){
   window.addEventListener('hashchange', applyView);
@@ -1546,6 +1748,7 @@ function initUI(){
 function autoCheck(){ if (!running && Date.now() - S.lastRunAt > AUTO_REFRESH_HOURS * 3600e3) runScan(false); }
 
 initUI();
+initFootballUI();
 applyView();
 initSupabase();
 setTimeout(autoCheck, 500);

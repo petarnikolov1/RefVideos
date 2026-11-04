@@ -13,6 +13,8 @@ A news site for refereeing in Bulgarian football — efbet Liga (1st League), 2n
 - **Read marks.** Stories you've opened show **✓ READ**, and you can hide them. They're stored in the browser and, when logged in, saved to your account.
 - **Accounts (optional).** Anyone can read everything. Registered members approved by the admin can upload match clips (file up to 50 MB or a video link) on the **Videos** page or straight from a story. Clips show on the Videos page and inside their story. The admin approves members on the **Admin** page.
 - **Comments.** Approved members can comment on uploaded videos. Everyone can read the comments. The author or the admin can delete a comment.
+- **Results.** Every round of the 2026/27 season of efbet Лига and Mr Bit Втора лига: both team logos, the score and half-time, and for each played match the short report (**▶ Репортаж**) and the extended report (**▶ Разширен**) from YouTube, played right in the match card. Most come from Gong.bg; when there is none, the league's or a club's own channel is used. Many 2nd-league matches have only a short highlights clip or none at all. The page opens on the latest round; ‹ › and the round picker move between rounds.
+- **Table.** The current table of either league with games, wins, draws, losses, goals, goal difference, points and the last five results.
 - **Searching.** About 50 Bulgarian-language searches on Google News and Bing News for every 2-week window of the season. The site updates itself when opened (if older than 24 h) and every 24 h while open; **Refresh** searches since the last update.
 
 ## Files
@@ -22,6 +24,18 @@ A news site for refereeing in Bulgarian football — efbet Liga (1st League), 2n
 | `public/index.html` | The whole site: page, styles and logic. |
 | `public/_worker.js` | Runs on Cloudflare: feed relay (`/feed`), article video/minute finder (`/extract`), Supabase settings (`/config.json`). |
 | `supabase-setup.sql` | Creates the database tables (members, videos, comments, read marks), security rules and the video storage bucket in Supabase. |
+| `supabase/football-setup.sql` | Results and tables: the match and table tables, helper functions and the two scheduled sync jobs. |
+| `supabase/functions/football-sync/` | Supabase Edge Function that reads results, fixtures, logos and tables from efbetleague.com and mr-bit.bg, and finds each match's reports on YouTube. |
+
+## Results and Table — how they stay current
+
+The Edge Function **football-sync** runs on Supabase on a schedule. The site only reads the saved data, so the pages open instantly.
+
+- **Results, fixtures, tables:** at :02 and :32 every hour, from efbetleague.com (1st league) and mr-bit.bg (2nd league).
+- **Videos:** every 5 minutes, up to 8 played matches still missing a report are searched on YouTube. A match is retried after 3 hours, 12 hours, a day, then every 3 days. The search stops after 8 tries in the 1st league and 4 in the 2nd. A video is only accepted when its title names both teams with the home team first, any score, round or season in it agrees with the match, and it isn't older than the match. Analysis shows and interviews are skipped.
+- If a result is corrected, its videos are cleared and found again.
+
+To redeploy the function: `supabase functions deploy football-sync --no-verify-jwt`.
 
 ## Cloudflare Pages
 
