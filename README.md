@@ -15,16 +15,20 @@ A news site for refereeing in Bulgarian football — efbet Liga (1st League), 2n
 - **Comments.** Approved members can comment on uploaded videos. Everyone can read the comments. The author or the admin can delete a comment.
 - **Results.** Every round of the 2026/27 season of efbet Лига and Mr Bit Втора лига: both team logos, the score and half-time, and for each played match Gong.bg's short report (**▶ Репортаж**) and extended report (**▶ Разширен**), played right in the match card, plus reports from other channels under **▶ Други**. Many 2nd-league matches have no Gong report, only a club's clip or nothing at all. The page opens on the latest round; ‹ › and the round picker move between rounds.
 - **Table.** The current table of either league with games, wins, draws, losses, goals, goal difference, points and the last five results.
-- **Searching.** About 50 Bulgarian-language searches on Google News and Bing News for every 2-week window of the season. The site updates itself when opened (if older than 24 h) and every 24 h while open; **Refresh** searches since the last update.
+- **Searching (on the server, kept).** The news is searched on Supabase, not in your browser, and every story found is saved. Every 30 minutes the last few days are searched again (about 50 Google News and Bing News searches). In the background the whole season is gone through once a day, 2 weeks at a time, so stories published or indexed late are added too. Nothing found is searched again from scratch. The page opens instantly from the saved stories; **Refresh** reloads them.
+- **NEW.** Stories found since your last visit are marked **NEW**, including older-dated stories that were only found now. Stories are sorted by date, newest first (or by importance).
+- **Refereeing only.** A story is kept only when its headline is about refereeing: referees and their appointments, decisions (penalties, red and yellow cards, offsides, disallowed goals, VAR, fouls and handballs), the Referee Committee, disciplinary sanctions and fines, attacks on referees, fights and incidents, match fixing, and complaints about refereeing. Transfers, contracts, injuries, coaching changes, interviews, live match blogs and penalties that were only taken or saved are left out unless the headline itself is about a refereeing decision.
 
 ## Files
 
 | File | What it does |
 |---|---|
 | `public/index.html` | The whole site: page, styles and logic. |
-| `public/_worker.js` | Runs on Cloudflare: feed relay (`/feed`), article video/minute finder (`/extract`), Supabase settings (`/config.json`). |
+| `public/_worker.js` | Runs on Cloudflare: article video/minute finder (`/extract`), feed relay (`/feed`, a fallback for the news search), Supabase settings (`/config.json`). |
 | `supabase-setup.sql` | Creates the database tables (members, videos, comments, read marks), security rules and the video storage bucket in Supabase. |
 | `supabase/football-setup.sql` | Results and tables: the match and table tables, helper functions and the two scheduled sync jobs. |
+| `supabase/news-setup.sql` | Saved news: the news table, merge function and the two scheduled search jobs. |
+| `supabase/functions/news-sync/` | Supabase Edge Function that searches Google News and Bing News and saves the refereeing stories (the filter is in `news.js`). |
 | `supabase/functions/football-sync/` | Supabase Edge Function that reads results, fixtures, logos and tables from efbetleague.com and mr-bit.bg, and finds each match's reports on YouTube. |
 
 ## Results and Table — how they stay current
@@ -60,4 +64,4 @@ To use a different Supabase project, run `supabase-setup.sql` there and change t
 
 ## Running it locally
 
-Open `public/index.html` in a browser. News works through public CORS proxies. Video finding needs the Cloudflare worker, and accounts need Supabase.
+Open `public/index.html` in a browser. News, results and accounts come from Supabase; video finding needs the Cloudflare worker.

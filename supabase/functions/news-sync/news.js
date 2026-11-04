@@ -1,0 +1,264 @@
+// News search for BG Referee Watch: the searches, feed parsing and the refereeing filter.
+// Plain JS so it runs in the Supabase Edge Function and can be tested with Node.
+
+export const SEASON_START = '2026-07-01';               // 2026/27 season
+export const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+// Google shows a cookie-consent page to EU servers unless consent cookies are present
+export const GOOGLE_COOKIES = 'CONSENT=YES+cb.20240101-00-p0.bg+FX+000; SOCS=CAESHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmJnIAEaBgiA_LyuBg';
+
+export const REFEREES = ['Георги Кабаков', 'Волен Чинков', 'Никола Попов', 'Мартин Марков', 'Драгомир Драганов',
+  'Радослав Гидженов', 'Ивайло Стоянов', 'Венцислав Митрев', 'Станимир Тренчев'];
+const REF_SURNAMES = ['Кабаков', 'Чинков', 'Гидженов', 'Тренчев', 'Митрев'];
+const SITES = ['sportal.bg', 'gong.bg', 'blitz.bg', 'topsport.bg', 'dsport.bg', 'bulgarian-football.com',
+  'bfunion.bg', 'novsport.com', 'btvnovinite.bg', '24chasa.bg'];
+
+/* ───────────── searches ───────────── */
+const OR = a => '(' + a.join(' OR ') + ')';
+const REF = OR(['съдия', 'съдии', 'съдията', 'съдийство', 'рефер', 'арбитър', 'ВАР', 'VAR']);
+const INC = OR(['съдия', 'съдийство', 'ВАР', 'дузпа', '"червен картон"', 'засада', '"отменен гол"']);
+const LG = OR(['"efbet Лига"', '"Първа лига"', '"Втора лига"', '"Трета лига"']);
+const BGX = OR(['"efbet Лига"', '"Втора лига"', '"Трета лига"', 'БФС', 'Левски', 'ЦСКА', 'Лудогорец', 'Локомотив',
+  'Ботев', '"Черно море"', 'Славия', 'Арда', 'Септември', 'Спартак', 'Дунав']);
+const WREF = OR(['съдия', 'съдията', 'рефер', 'арбитър', 'ВАР', 'VAR', 'дузпа', '"червен картон"', 'засада']);
+const Q = (q, ctx = 'bg', div = null) => ({ q, ctx, div });
+
+// ctx 'bg' = Bulgarian domestic searches, 'loose' = general searches, 'world' = top-5 leagues / Champions League
+export const GOOGLE_QUERIES = [
+  Q(`${REF} "efbet Лига"`, 'bg', 'd1'),
+  Q(`${REF} "Първа лига" футбол`, 'bg', 'd1'),
+  Q(`${REF} "Втора лига"`, 'bg', 'd2'),
+  Q(`${REF} ("Трета лига" OR "Трета аматьорска")`, 'bg', 'd3'),
+  Q(`${REF} (Югозапад OR Югоизток OR Северозапад OR Североизток) футбол`, 'bg', 'd3'),
+  Q(`("Съдийската комисия" OR "Съдийска комисия") (БФС OR футбол)`),
+  Q(`("Дисциплинарната комисия" OR "Дисциплинарна комисия") БФС`),
+  Q(`(ВАР OR VAR OR "Hawk-Eye") ("efbet Лига" OR БФС OR "Втора лига")`),
+  Q(`дузпа ${LG}`),
+  Q(`("червен картон" OR "жълт картон" OR изгонен) ${LG}`),
+  Q(`(засада OR офсайд) ${LG}`),
+  Q(`("отменен гол" OR "отмени гол" OR "отмененият гол" OR "неправилно отменен") ${BGX}`),
+  Q(`("съдийски грешки" OR "съдийска грешка" OR "съдийски скандал" OR "съдийски гаф") футбол`, 'loose'),
+  Q(`скандал (съдия OR съдийство OR ВАР) ${BGX}`),
+  Q(`(сбиване OR меле OR побой OR инциденти) мач ${LG}`),
+  Q(`(нападнаха OR нападнат OR пребиха OR заплашиха OR удари) (съдия OR съдията OR рефера) футбол`, 'loose'),
+  Q(`("прекратен мач" OR "прекрати мача" OR "прекратена среща" OR "изоставен мач") футбол`, 'loose'),
+  Q(`(наказан OR наказаха OR отстранен OR "извън наряд" OR спрян) (съдия OR рефер OR съдията) футбол`, 'loose'),
+  Q(`(наряд OR "ще ръководи" OR "ще свири" OR "главен съдия") ${LG}`),
+  Q(`(протест OR "отворено писмо" OR "официална позиция") (съдийство OR съдия) ${BGX}`),
+  Q(`(ЦСКА OR Левски OR Лудогорец OR "ЦСКА 1948") (съдия OR съдийство OR дузпа OR "червен картон" OR ВАР)`, 'bg', 'd1'),
+  Q(`(Локомотив OR Ботев OR "Черно море" OR Славия OR Арда OR Септември OR "Спартак Варна" OR Дунав) (съдия OR дузпа OR "червен картон" OR ВАР)`, 'bg', 'd1'),
+  Q(`(Берое OR Добруджа OR Монтана OR Етър OR Хебър OR Фратрия OR Янтра OR Вихрен OR Марица OR Пирин OR Литекс OR Спортист) (съдия OR дузпа OR "червен картон")`, 'bg', 'd2'),
+  Q(OR(REFEREES.map(n => `"${n}"`)) + ' футбол'),
+  Q(`"Купа на България" (съдия OR дузпа OR "червен картон" OR ВАР)`, 'bg', 'cup'),
+  Q(`(фенове OR хулигани OR пиротехника) (глоба OR наказание OR инциденти) ${LG}`),
+  Q(`БФС (глоба OR глоби OR наказание OR санкции) (клуб OR футболист OR треньор)`),
+  Q(`("служебна загуба" OR "служебно 3:0" OR "без публика") футбол БФС`),
+  Q(`("уреден мач" OR "уредени мачове" OR "черно тото" OR манипулиране) футбол България`, 'loose'),
+  ...SITES.map(s => Q(`site:${s} ${INC} ${BGX}`)),
+  // World: top-5 leagues + Champions League
+  Q(`${WREF} ("Висшата лига" OR "Премиър лийг" OR "английското първенство")`, 'world'),
+  Q(`${WREF} ("Ла Лига" OR "испанското първенство" OR "Реал Мадрид" OR Барселона)`, 'world'),
+  Q(`${WREF} ("Серия А" OR "италианското първенство" OR Ювентус OR Интер OR Милан)`, 'world'),
+  Q(`${WREF} (Бундеслигата OR Бундеслига OR Байерн OR Дортмунд)`, 'world'),
+  Q(`${WREF} ("Лига 1" OR "френското първенство" OR ПСЖ)`, 'world'),
+  Q(`${WREF} ("Шампионска лига" OR "Шампионската лига")`, 'world'),
+  Q(`(Ливърпул OR "Манчестър Юнайтед" OR "Манчестър Сити" OR Арсенал OR Челси) (съдия OR ВАР OR дузпа OR "червен картон")`, 'world'),
+  Q(`("съдийски скандал" OR "скандално съдийство" OR "ВАР скандал" OR "VAR скандал") (Висшата OR "Ла Лига" OR "Серия А" OR Бундеслигата OR "Лига 1" OR "Шампионска лига")`, 'world'),
+];
+export const BING_QUERIES = [
+  ...['съдия efbet Лига', 'съдийство Левски ЦСКА Лудогорец', 'ВАР efbet Лига', 'дузпа efbet Лига', 'червен картон efbet Лига',
+    'съдия Втора лига футбол', 'съдия Трета лига футбол', 'Съдийска комисия БФС', 'Дисциплинарна комисия БФС наказания',
+    'скандал съдия мач футбол', 'нападнаха съдия футбол', 'отменен гол засада ВАР'].map(q => Q(q, 'loose')),
+  Q('ВАР скандал Висшата лига', 'world'), Q('съдия скандал Шампионска лига', 'world'),
+];
+const ymd = d => new Date(d).toISOString().slice(0, 10);
+export const googleUrl = (q, from, to) => 'https://news.google.com/rss/search?q=' +
+  encodeURIComponent(`${q} after:${ymd(from)} before:${ymd(to)}`) + '&hl=bg&gl=BG&ceid=BG:bg';
+export const bingUrl = q => 'https://www.bing.com/news/search?q=' + encodeURIComponent(q) +
+  '&format=rss&setlang=bg&cc=BG&qft=' + encodeURIComponent('sortbydate="1"');
+
+/* ───────────── feeds ───────────── */
+const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', bdquo: '„', ldquo: '“', rdquo: '”', ndash: '–', mdash: '—', hellip: '…' };
+export const decode = s => String(s || '').replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) =>
+  e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : (ENT[e.toLowerCase()] ?? m));
+const cdata = s => String(s || '').replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/, '$1');
+export const htmlToText = html => decode(String(html || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+export function parseRss(xml) {
+  if (!/<(rss|channel|feed)[\s>]/i.test(xml)) throw new Error('response is not a feed');
+  const out = [];
+  for (const m of String(xml).matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
+    const it = m[1];
+    const get = tag => { const r = it.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')); return r ? cdata(r[1]).trim() : ''; };
+    out.push({ title: htmlToText(get('title')), link: decode(get('link')), date: new Date(get('pubDate')),
+      desc: htmlToText(decode(get('description'))), source: htmlToText(get('source') || get('News:Source')) });
+  }
+  return out;
+}
+const unBing = link => { try { return new URL(link).searchParams.get('url') || link; } catch { return link; } };
+export const norm = s => (s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/* ───────────── refereeing filter ───────────── */
+const B = '(?<![\\p{L}\\p{N}])', E = '(?![\\p{L}\\p{N}])', W = '\\p{L}*';
+const rx = s => new RegExp(B + '(?:' + s + ')', 'iu');
+const CS = list => new RegExp('(?<![\\p{L}\\p{N}])(?:' + list.join('|') + ')(?![\\p{L}])', 'u');   // case-sensitive names
+export const RX = {
+  referee:   rx(`съди(?:я|ята|и|ите|йск${W}|йств${W})${E}|съдийск${W}|съдийств${W}|рефер${W}|арбит${W}|отсъ(?:ди|жда|дено|дена)${W}|страничн${W} съди${W}|четвърт${W} съди${W}`),
+  var:       rx(`(?:вар|var)(?:-?(?:а|ът|ове))?${E}|hawk-?eye|хоук-?ай|видеоарбит${W}|видеоповтор${W}|видеосъди${W}`),
+  red:       rx(`червен${W} картон${W}|жълт${W} картон${W}|картон${W} (?:за|на) |изгон${W}|втори жълт${W}|с човек по-малко|с играч по-малко|в десет души|остана${W} с десет|наказан${W} (?:за|с) \\d+ мач${W}`),
+  penalty:   rx(`дузп${W}|наказател${W} удар${W}|11-метров${W}|единадесетметров${W}|бял(?:а|ата) точка`),
+  offside:   rx(`засад${W}|офсайд${W}|отмен${W} (?:гол${W}|попадени${W})|гол${W} (?:беше |бе |е )?отмен${W}|неправилно отменен${W}|признат${W} гол${W}|непризнат${W}`),
+  foul:      rx(`фаул${W}|фал${E}|фалове${W}|груб${W} нарушени${W}|нарушени${W} (?:срещу|над)|симулаци${W}|симулира${W}|игра с ръка|ръка в наказателното|влизане отзад`),
+  committee: rx(`съдийск${W} комиси${W}|наряд${W}|делегира${W}|ще ръководи|ще свири|главен съдия на|назнач${W} (?:за )?(?:главен )?съди${W}|съдийск${W} назначени${W}|чуждестран${W} съди${W}|чужд${W} съди${W}|съдийск${W} анализ${W}|анализ${W} на съдийств${W}|наблюдател${W}|свир${W} (?:на|дербито|мача|вечното)|избра${W} (?:рефер${W}|съди${W})`),
+  discipline:rx(`дисциплинарн${W} комиси${W}|дк${E}|наказан${W}|наказаха${E}|наказани${W}|глоб${W}|санкци${W}|без публика|при закрити врати|служебн${W} загуб${W}|служебно 3:0|отнет${W} точк${W}|изтегля${W} точк${W}|дисквалифи${W}`),
+  fights:    rx(`сбиван${W}|сбиха|сбил${W}|меле${E}|мелето|побо${W}|пребит${W}|пребиха|нападна${W}|нападнат${W}|бой (?:на|между|в|във)${E}|удари${W} (?:съди${W}|рефер${W})|ритна${W} (?:съди${W}|рефер${W})|инцидент${W}|хулиган${W}|пиротехник${W}|бомбичк${W}|факл${W}|нахлу${W}|жандармер${W}|арест${W}|юмру${W}|шамар${W}`),
+  // disputes that are about refereeing on their own: match fixing, abandoned matches, "robbed"
+  dispRef:   rx(`ограб${W}|ощет${W}|слугинаж${W}|призна${W} (?:\\d+ |две |три |една |сериозн${W} |груб${W} )?(?:съдийск${W} )?грешк${W}|черно тото|уреден${W} мач${W}|уговорен${W}|манипул${W}|корупц${W}|прекрат${W} (?:мач${W}|среща${W}|двубо${W})|прекратен${W} мач${W}|мач${W} (?:беше |бе |е )?прекратен${W}|изоставен${W} мач|напусна${W} терена|отказа${W} да (?:излез|продълж)${W}`),
+  // disputes that count only together with a referee/VAR word
+  dispStrong:rx(`скандал${W}|протест${W}|открадн${W}|открадна${W}|кражб${W}|обир${W}|грабеж${W}|отворено писмо|бойкот${W}|официална позиция`),
+  dispWeak:  rx(`грешк${W}|сгреш${W}|спорн${W}|възмут${W}|гняв${W}|ярост${W}|недовол${W}|обвин${W}|жалб${W}|абсурд${W}|позор${W}|безобраз${W}|освирк${W}|подсвирк${W}|натиск${W}|бесен${W}|бесни${W}|критик${W}|критикува${W}|гаф${W}|оплак${W}|изригна${W}|избухна${W}`),
+  // player / manager / club stories: kept only with a direct refereeing word
+  // a penalty taken, scored, saved or missed is a player's action, not a refereeing decision
+  penExec:   rx(`спаси${W}|спасен${W}|изпусна${W}|изпуснат${W}|пропусна${W}|пропуснат${W}|вкара${W}|реализира${W}|превърна${W}|бележи${W}|удови${W}|от бялата точка|(?:от|с) дузпа`),
+  live:      rx(`на живо|live${E}|минута по минута|текстово предаване`),
+  personal:  rx(`смен${W} (?:на )?треньор${W}|треньор${W} (?:е |беше )?сменен${W}|трансфер${W}|договор${W}|подписа${W}|привлече${W}|привлича${W}|напуска${W}|напусна${E}|раздел${W} се|освобод${W}|нов${W} треньор${W}|треньорск${W} пост${W}|наставник${W} на|назначен${W} за треньор${W}|уволн${W}|оставк${W}|контузи${W}|травм${W}|операци${W}|възстановява${W}|лекар${W}|интервю${W}|рожден${W} ден|сватб${W}|семейств${W}|съпруг${W}|бебе${E}|заплат${W}|собственик${W}|акционер${W}|бюджет${W}|спонсор${W}|лиценз${W}|стадион${W} (?:ще|се строи|ремонт)|национал${W}|повикан${W}|лагер${W}|подготовк${W}|контрол${W}|приятелск${W}|юноша${E}|юноши${E}|академия${W}|отдаде почит|почина|скърб${W}|наследник${W}|капитан${W} на`),
+  foot:      rx(`футбол${W}|мач${W}|efbet|ефбет|лига${W}|гол${E}|гола${E}|голът|голове${W}|голов${W}|отбор${W}|кръг${W}|стадион${W}|треньор${W}|наставник${W}|футболист${W}|играч${W}|пфк|фк${E}|бфс|първенств${W}|шампионат${W}|полувреме${W}|двубо${W}|дерби${W}|терен${W}`),
+  league1:   rx(`efbet\\s*(?:лига|league|liga)|ефбет\\s*лига|първа(?:та)? (?:професионална )?(?:футболна )?лига|първ${W} ниво|елита${E}|а група|а-група`),
+  league2:   rx(`втора(?:та)? (?:професионална )?(?:футболна )?лига|втор${W} ешелон|втор${W} дивизи${W}|mrbit|мр\\.?\\s?бит|б група|б-група`),
+  league3:   rx(`трета(?:та)? (?:аматьорска )?(?:футболна )?лига|трет${W} ешелон|трет${W} дивизи${W}|аматьорск${W} (?:футболн${W} )?лига|(?:група |зона )?[„"«]?(?:югозапад|югоизток|северозапад|североизток)${W}`),
+  cup:       rx(`купа(?:та)? на българия|суперкупа(?:та)?(?: на българия)?`),
+  bgOrg:     rx(`бфс${E}|български(?:я)? футболен съюз|бпфл${E}|професионалн${W} футболн${W} лига`),
+  euro:      rx(`лига(?:та)? европа|лига(?:та)? на конференциите|конферентна${W} лига|световн${W} първенство|световно${E}|евро 20\\d\\d|национал${W} отбор|националн${W} тим|квалификаци${W}`),
+  foreign:   rx(`англи${W}|англичан${W}|испан${W}|итали${W}|герман${W}|франц${W}|френск${W}|португал${W}|холанд${W}|нидерланд${W}|турск${W}|турци${W}|гърц${W}|гръцк${W}|румън${W}|сръбск${W}|сърби${W}|хърват${W}|руск${W}|русия|украин${W}|украйн${W}|шотланд${W}|белги${W}|саудит${W}|млс${E}|mls${E}|бразил${W}|аржентин${W}|мексик${W}|фифа${E}|fifa${E}|уефа${E}|uefa${E}|москва|истанбул|атина|солун|букурещ|белград|загреб|кипър${W}|кипърск${W}|израел${W}|полск${W}|полша|чехи${W}|чешк${W}|австри${W}|швейцар${W}|унгар${W}|европейск${W}`),
+  otherSport:rx(`баскетбол${W}|волейбол${W}|хандбал${W}|футзал${W}|плаж${W} футбол${W}|мини-?футбол${W}|хокей${W}|тенис${W}|бокс${W}|mma${E}|формула 1|ръгби|водна топка`),
+  court:     rx(`прокурат${W}|съд${E}|съда${E}|съдът|подсъдим${W}|обвиняем${W}|присъд${W}|осъд${W}|дело${E}|делото|адвокат${W}|районн${W} съд|градск${W} съд|апелатив${W}|мярка за неотклонение`),
+  video:     rx(`видео${W}|video${E}|клип${W}|кадри${E}|вижте${E}|гледайте`),
+};
+
+// Bulgarian clubs: [key, division, display name, pattern]
+export const CLUBS = [
+  ['levski', 'd1', 'Левски'], ['cska', 'd1', 'ЦСКА', 'ЦСКА(?!\\s*(?:1948|II|2|Москва))'], ['cska48', 'd1', 'ЦСКА 1948'],
+  ['ludo', 'd1', 'Лудогорец', 'Лудогорец(?!\\s*(?:II|2|III|3))'], ['chm', 'd1', 'Черно море', 'Черно море(?!\\s*(?:II|2))'],
+  ['lokpd', 'd1', 'Локомотив Пловдив', 'Локомотив\\s*\\(?(?:Пловдив|Пд)\\)?|Локо\\s*\\(?Пд\\)?'],
+  ['loksf', 'd1', 'Локомотив София', 'Локомотив\\s*\\(?(?:София|Сф)\\)?|Локо\\s*\\(?Сф\\)?'],
+  ['botpd', 'd1', 'Ботев Пловдив', 'Ботев\\s*\\(?(?:Пловдив|Пд)\\)?(?!\\s*(?:II|2))'], ['botvr', 'd1', 'Ботев Враца', 'Ботев\\s*\\(?(?:Враца|Вр)\\)?'],
+  ['slavia', 'd1', 'Славия'], ['arda', 'd1', 'Арда'], ['septemvri', 'd1', 'Септември'],
+  ['spartakvn', 'd1', 'Спартак Варна', 'Спартак\\s*\\(?(?:Варна|Вн)\\)?'], ['dunav', 'd1', 'Дунав'],
+  ['beroe', 'd2', 'Берое'], ['dobrudzha', 'd2', 'Добруджа'], ['montana', 'd2', 'Монтана'], ['fratria', 'd2', 'Фратрия'],
+  ['yantra', 'd2', 'Янтра'], ['vihren', 'd2', 'Вихрен'], ['etar', 'd2', 'Етър'], ['hebar', 'd2', 'Хебър'], ['maritsa', 'd2', 'Марица'],
+  ['pirin', 'd2', 'Пирин'], ['litex', 'd2', 'Литекс'], ['sportist', 'd2', 'Спортист'], ['chernomorets', 'd2', 'Черноморец'],
+  ['neftochimic', 'd2', 'Нефтохимик'], ['belasitsa', 'd2', 'Беласица'], ['minyor', 'd2', 'Миньор'], ['sevlievo', 'd2', 'Севлиево'],
+  ['marek', 'd2', 'Марек'], ['strumska', 'd2', 'Струмска слава'], ['vitosha', 'd2', 'Витоша'], ['slivnishki', 'd2', 'Сливнишки герой'],
+  ['spartakpl', 'd2', 'Спартак Плевен', 'Спартак\\s*\\(?Плевен\\)?'],
+  ['lokgo', 'd2', 'Локомотив ГО', 'Локомотив\\s*\\(?(?:Горна Оряховица|ГО|Г\\. Оряховица)\\)?'],
+  ['cska2', 'd2', 'ЦСКА II', 'ЦСКА\\s*(?:II|2)'], ['ludo2', 'd2', 'Лудогорец II', 'Лудогорец\\s*(?:II|2)'],
+  ['botev2', 'd2', 'Ботев II', 'Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2)'],
+].map(([k, div, label, pat]) => ({ k, div, label, re: CS([pat || label]) }));
+const clubsIn = t => CLUBS.filter(c => c.re.test(t)).map(c => c.k);
+const REFNAMES = CS(REFEREES.concat(REF_SURNAMES).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+
+// World section: only these competitions (league names are case-insensitive, club names case-sensitive)
+export const WORLD = [
+  { k: 'eng', lg: rx(`висш${W} лига${W}|премиър лийг${W}|английск${W} (?:първенство|елит|висша)${W}|премиършип`),
+    cl: CS(['Ливърпул', 'Манчестър(?: Юнайтед| Сити)?', 'Арсенал', 'Челси', 'Тотнъм', 'Нюкасъл', 'Астън Вила', 'Уест Хям', 'Евертън']) },
+  { k: 'esp', lg: rx(`ла лига${W}|примера дивисион|испанск${W} първенство${W}`),
+    cl: CS(['Реал Мадрид', 'Реал', 'Барселона', 'Барса', 'Атлетико(?: Мадрид)?', 'Севиля', 'Виляреал', 'Бетис', 'Валенсия', 'Атлетик Билбао']) },
+  { k: 'ita', lg: rx(`серия а${E}|серие а${E}|калчо|италианск${W} първенство${W}`),
+    cl: CS(['Ювентус', 'Милан', 'Интер', 'Наполи', 'Рома', 'Лацио', 'Аталанта', 'Фиорентина']) },
+  { k: 'ger', lg: rx(`бундеслига${W}|германск${W} първенство${W}`),
+    cl: CS(['Байерн(?: Мюнхен)?', 'Борусия(?: Дортмунд)?', 'Дортмунд', 'Лайпциг', 'Байер Леверкузен', 'Леверкузен', 'Айнтрахт', 'Щутгарт']) },
+  { k: 'fra', lg: rx(`лига 1${E}|френск${W} първенство${W}|лига едно`), cl: CS(['ПСЖ', 'Пари Сен Жермен', 'Марсилия', 'Лион', 'Монако']) },
+  { k: 'ucl', lg: rx(`шампионска${W} лига${W}|лига${W} на шампионите|champions league`), cl: null },
+];
+const WGT = { red: 3, penalty: 3, offside: 2, var: 3, foul: 2, committee: 2, discipline: 2, fights: 3, dispute: 3 };
+const DIRECT = ['red', 'penalty', 'offside', 'var', 'foul'];       // decisions a referee makes on the pitch
+
+// Is this headline (and description) about refereeing? Returns the classification, or null to leave it out.
+export function analyze(title, desc, q) {
+  const t = title + ' \n ' + (desc || '');
+  const L1 = RX.league1.test(t), L2 = RX.league2.test(t), L3 = RX.league3.test(t), CUP = RX.cup.test(t);
+  const anyLeague = L1 || L2 || L3 || CUP;
+  if (RX.otherSport.test(t) && !anyLeague) return null;                       // basketball, volleyball…
+  const clubs = clubsIn(t), refName = REFNAMES.test(t);
+  const bgSignal = anyLeague || clubs.length > 0 || refName || RX.bgOrg.test(t);
+  const comps = WORLD.filter(w => w.lg.test(t) || (w.cl && w.cl.test(t))).map(w => w.k);
+
+  let scope;
+  if (anyLeague) scope = 'bg';
+  else if (comps.length) scope = (clubs.length && !comps.includes('ucl')) ? 'bg' : 'world';
+  else if (RX.euro.test(t)) return null;                                     // Europa/Conference League, national teams, World Cup
+  else if (RX.foreign.test(t) && !clubs.length && !refName) return null;      // other foreign football
+  else if (bgSignal || (q && q.ctx === 'bg')) scope = 'bg';
+  else return null;
+
+  // what kind of refereeing it is about
+  const cats = [];
+  for (const k of ['red', 'penalty', 'offside', 'var', 'foul', 'committee', 'discipline', 'fights']) if (RX[k].test(t)) cats.push(k);
+  const refHit = RX.referee.test(t) || refName;
+  if (RX.dispRef.test(t) || ((RX.dispStrong.test(t) || RX.dispWeak.test(t)) && (refHit || cats.includes('var')))) cats.push('dispute');
+
+  // 1. it must be about refereeing: a referee, a decision, a card, a sanction, an incident
+  if (!refHit && !cats.length) return null;
+  // 2. it must be football: "съдия" is also a court judge
+  const foot = anyLeague || clubs.length > 0 || refName || RX.bgOrg.test(t) || RX.foot.test(t) || comps.length > 0 || cats.some(c => ['penalty', 'var', 'red'].includes(c));
+  if (!foot) return null;
+  if (RX.court.test(t) && !(refName || cats.some(c => DIRECT.includes(c)) || RX.foot.test(title))) return null;
+  // 3. player / manager / club stories (transfers, injuries, contracts, coaching changes, interviews…)
+  //    only stay when the headline itself is about a referee or a decision on the pitch
+  if (RX.personal.test(title) && !(RX.referee.test(title) || REFNAMES.test(title) || DIRECT.some(c => RX[c].test(title)) || RX.dispRef.test(title))) return null;
+  // 4. the headline itself must be about refereeing (the description only adds detail)
+  const refInTitle = RX.referee.test(title) || REFNAMES.test(title);
+  const titleSignal = refInTitle || ['red', 'penalty', 'offside', 'var', 'foul', 'committee', 'discipline', 'fights', 'dispRef'].some(k => RX[k].test(title));
+  if (!titleSignal) return null;
+  // 5. a penalty that was only taken / saved / missed, and live match blogs, are not refereeing stories
+  const disputed = refInTitle || RX.var.test(title) || RX.dispRef.test(title) || RX.dispStrong.test(title) || RX.dispWeak.test(title);
+  const onlyPenalty = cats.every(c => c === 'penalty' || c === 'dispute') && RX.penalty.test(title);
+  if (onlyPenalty && RX.penExec.test(title) && !disputed) return null;
+  if (RX.live.test(title) && !refInTitle) return null;
+  if (scope === 'world' && !(refHit || cats.some(c => DIRECT.includes(c)))) return null;
+
+  const divs = [];
+  let hinted = false;
+  if (scope === 'bg') {
+    if (L1) divs.push('d1'); if (L2) divs.push('d2'); if (L3) divs.push('d3'); if (CUP) divs.push('cup');
+    if (!divs.length) for (const d of new Set(clubs.map(k => CLUBS.find(c => c.k === k).div))) divs.push(d);
+    if (!divs.length && q && q.div && q.ctx === 'bg') { divs.push(q.div); hinted = true; }
+    if (!divs.length) divs.push('unk');
+  }
+  let score = 1;
+  for (const c of cats) score += WGT[c] * ((c === 'dispute' ? (RX.dispRef.test(title) || RX.dispStrong.test(title)) : RX[c].test(title)) ? 2 : 1);
+  if (RX.referee.test(title) || REFNAMES.test(title)) score += 2;
+  if (!cats.length) cats.push('other');
+  return { scope, divs, comps, cats, score, hinted, clubs, vh: RX.video.test(title) };
+}
+
+// one feed item → an article row (or null when it isn't about refereeing / is before the season)
+export function toArticle(raw, kind, q, now = Date.now()) {
+  let title = String(raw.title || '').replace(/\s+/g, ' ').trim();
+  if (!title) return null;
+  let src = String(raw.source || '').trim(), link = raw.link || '';
+  if (kind === 'google') {
+    const i = title.lastIndexOf(' - ');
+    if (i > 15) { if (!src) src = title.slice(i + 3).trim(); title = title.slice(0, i).trim(); }
+  } else link = unBing(link);
+  if (!src) { try { src = new URL(link).hostname.replace(/^www\./, ''); } catch { /* keep empty */ } }
+  let desc = String(raw.desc || '').trim();
+  // Google's description only repeats the headline and the outlet's name
+  const bare = src && desc.endsWith(src) ? desc.slice(0, -src.length).trim() : desc;
+  if (desc && (norm(bare).startsWith(norm(title).slice(0, 40)) || norm(title).startsWith(norm(bare)))) desc = '';
+  if (desc.length > 300) desc = desc.slice(0, 297) + '…';
+  const a = analyze(title, desc, q);
+  if (!a) return null;
+  let d = raw.date instanceof Date ? raw.date.getTime() : NaN;
+  if (!isFinite(d) || d > now + 864e5) d = now;
+  if (d < Date.parse(SEASON_START + 'T00:00:00Z')) return null;
+  const base = norm(title).slice(0, 90);
+  if (base.length < 8) return null;
+  return { aid: base + '|' + norm(src || 'unknown').slice(0, 30), title, link, descr: desc, src, published_at: new Date(d).toISOString(),
+    scope: a.scope, divs: a.divs, comps: a.comps, cats: a.cats, score: a.score, hinted: a.hinted, clubs: a.clubs, vh: a.vh };
+}
+
+// 2-week search windows from the season start up to now, newest first
+export function windows(now = Date.now(), days = 14) {
+  const out = [], step = days * 864e5, from = Date.parse(SEASON_START + 'T00:00:00Z');
+  for (let s = from; s <= now; s += step) out.push([s - 864e5, Math.min(s + step, now) + 2 * 864e5]);
+  return out.reverse();
+}
