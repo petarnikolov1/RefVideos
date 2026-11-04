@@ -253,6 +253,8 @@ function seasonIn(title) {
 }
 const scoresIn = title => [...String(title).matchAll(/(?<![\d\/])(\d{1,2})\s*(?::|\s[-–]\s)\s*(\d{1,2})(?![\d\/])/g)].map(m => [Number(m[1]), Number(m[2])]);
 const NOT_A_REPORT = /анализ|студио|пресконференц|интервю|изявлен|коментар|подкаст|предаване|преди мача|преди кръга|обзор на кръга|прогноз|гол за |голът|головете|спасяван|треньор|след мача|загрявк|тренировк|пълен мач|full match|live|на живо|дерби на седмицата/i;
+// whole-word signs of a talk show, interview or a youth/women's match rather than a match report
+const NOT_A_REPORT_W = /(?<![\p{L}])(?:след|преди|коментирайте|гласът на фена|реакция|юноши|юношеска|жени|девойки|момчета|деца)(?![\p{L}])|(?<![\p{L}\p{N}])u ?1\d(?![\p{N}])/iu;
 const translit = s => s.replace(/[а-я]/g, c => ({ а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sht', ъ: 'a', ь: 'y', ю: 'yu', я: 'ya' })[c] || c).replace(/tssk/g, 'csk');
 export function channelRank(channel, match) {
   const c = String(channel || '').toLowerCase();
@@ -273,7 +275,7 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
   const days = (now - Date.parse(match.kickoff)) / 864e5;
   const cands = [], seen = new Set();
   for (const v of vids) {
-    if (!v.seconds || seen.has(v.id) || NOT_A_REPORT.test(v.title)) continue;
+    if (!v.seconds || seen.has(v.id) || NOT_A_REPORT.test(v.title) || NOT_A_REPORT_W.test(v.title)) continue;
     if (ageDays(v.published) > days + 1.5) continue;                              // older than the match
     const ms = mentions(v.title, aliasList);
     const h = ms.find(x => x.name === match.home_name), a = ms.find(x => x.name === match.away_name);
@@ -284,10 +286,10 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
     const scores = scoresIn(v.title);
     const scoreOk = scores.some(([x, y]) => x === match.home_score && y === match.away_score);
     const roundOk = rd === match.round;
-    // a wrong score rules a video out, unless its round is this match's (Gong sometimes mistypes the score)
-    if (scores.length && !scoreOk && !roundOk) continue;
-    const ident = scoreOk || roundOk;                                              // surely this match
     const ch = channelRank(v.channel, match);
+    // a wrong score rules a video out, unless it is Gong's and names this match's round (Gong sometimes mistypes the score)
+    if (scores.length && !scoreOk && !(roundOk && ch === 3)) continue;
+    const ident = scoreOk || roundOk;                                              // surely this match
     if (!ch && !ident) continue;                                                   // unknown channels: only with score or round
     seen.add(v.id);
     cands.push({ v, scoreOk, ident, ch, ext: /разширен|пълен репортаж|extended/i.test(v.title), rep: /репортаж|highlights|обзор/i.test(v.title) });
@@ -303,7 +305,7 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
   const headline = c => c.ch >= 2 && c.v.seconds >= 900 && c.v.seconds <= 1500;
   const longs = cands.filter(c => c.ch && isLong(c) && c.v.seconds <= 3600 && (c.ident || c.ext || headline(c)))
     .sort((a, b) => (b.ext - a.ext) || b.ch - a.ch || (b.scoreOk - a.scoreOk));
-  const all = cands.filter(c => c.v.seconds >= 30 && c.v.seconds <= 3600 && (c.ident || headline(c)))
+  const all = cands.filter(c => c.v.seconds >= 30 && c.v.seconds <= 2100 && (c.ident || headline(c)))   // no hour-long streams
     .sort((a, b) => b.ch - a.ch || (b.ident - a.ident));
   return { short: pack(shorts[0]), long: pack(longs[0]), shorts: shorts.slice(0, 6).map(pack), longs: longs.slice(0, 6).map(pack), all: all.slice(0, 15).map(pack) };
 }
