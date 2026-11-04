@@ -1512,6 +1512,7 @@ async function setApproved(id, val){
 // Filled by the football-sync job in Supabase every 30 minutes: results from efbetleague.com and mr-bit.bg,
 // short report and extended report from YouTube (Gong.bg first, then the league's and the clubs' channels).
 const FB_SEASON = '2026/27';
+const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\s+/, '');   // "ПФК Локомотив София 1929" → "Локомотив София 1929"
 const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига' };
 const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set() };
 if (!LEAGUES[FB.league]) FB.league = 'efbet';
@@ -1579,9 +1580,9 @@ function matchCard(m){
   return `<article class="mcard" data-mid="${esc(m.id)}">
     <div class="mtop"><span>${esc(L)} - ${m.round} Кръг</span><span>${esc(bgDate(m.kickoff))}</span></div>
     <div class="mrow">
-      <div class="mteam home"><span class="tname">${esc(m.home_name)}</span>${logoHtml(m.home_logo, m.home_name)}</div>
+      <div class="mteam home"><span class="tname">${esc(teamName(m.home_name))}</span>${logoHtml(m.home_logo, m.home_name)}</div>
       ${score}
-      <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(m.away_name)}</span></div>
+      <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(teamName(m.away_name))}</span></div>
     </div>
     <div class="mbottom"><span class="muted">${esc(left)}</span>${btns ? `<div class="vbtns">${btns}</div>` : none}</div>
     ${player}
@@ -1629,12 +1630,12 @@ function renderTable(){
   box.innerHTML = leagueBar() + `<h2 style="font-size:18px;margin:12px 0 0">Класиране ${esc(LEAGUES[lg])} ${FB_SEASON}</h2>
     <div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
     ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0); return `<tr><td>${r.rank ?? ''}</td>
-      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(r.team_name)}</span></td><td>${r.played ?? ''}</td>
+      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}</span></td><td>${r.played ?? ''}</td>
       <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
       <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
       <td class="hide-s">${String(r.form || '').split('').map(c => `<span class="fdot ${esc(c)}" title="${({ W: 'победа', D: 'равен', L: 'загуба' })[c] || ''}"></span>`).join('')}</td></tr>`; }).join('')}
     </tbody></table></div>
-    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${upd ? ' · обновено ' + esc(fmtDate(Date.parse(upd))) : ''}${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : ''}</p>`;
+    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${upd ? ' · обновено ' + esc(bgDate(upd)) : ''}${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : ''}</p>`;
 }
 function initFootballUI(){
   const pick = e => {

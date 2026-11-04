@@ -288,7 +288,10 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
   const pack = c => c && { id: c.v.id, title: c.v.title.slice(0, 200), channel: c.v.channel.slice(0, 80), length: c.v.length, seconds: c.v.seconds };
   const short = cands.filter(c => c.scoreOk && c.v.seconds >= 100 && c.v.seconds < 540)
     .sort((a, b) => b.ch - a.ch || (b.rep - a.rep) || a.v.seconds - b.v.seconds)[0];
-  const long = cands.filter(c => c.v.seconds >= 540 && c.v.seconds <= 3600 && (c.scoreOk || c.ext || c.ch >= 2) && (!short || c.v.id !== short.v.id))
+  // a long video without the score or "разширен" in its title is only taken from Gong/the league, and only
+  // at the usual extended-report length (Gong sometimes gives its ~20-minute reports a headline instead)
+  const headline = c => c.ch >= 2 && c.v.seconds >= 900 && c.v.seconds <= 1500;
+  const long = cands.filter(c => c.v.seconds >= 540 && c.v.seconds <= 3600 && (c.scoreOk || c.ext || headline(c)) && (!short || c.v.id !== short.v.id))
     .sort((a, b) => (b.ext - a.ext) || b.ch - a.ch || (b.scoreOk - a.scoreOk))[0];
   return { short: pack(short), long: pack(long) };
 }
