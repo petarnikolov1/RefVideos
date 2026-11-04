@@ -8,7 +8,7 @@
 --   private.football_sync_log   what each sync run did
 --   two scheduled jobs that call the Edge Function "football-sync" (supabase/functions/football-sync):
 --     football-results  at :02 and :32 every hour — results, fixtures, tables
---     football-videos   every 5 minutes — looks for the reports of up to 8 played matches
+--     football-videos   every 5 minutes — looks for the reports of up to 10 played matches
 --
 -- Deploy the Edge Function with JWT verification OFF; it checks its own key instead
 -- (the vault secret "football_sync_key", created below and sent by the jobs as x-sync-key).
@@ -34,7 +34,7 @@ create table if not exists public.football_matches (
   ht_away           int,
   short_video       jsonb,          -- {id, title, length, seconds, channel, embed}
   long_video        jsonb,          -- short_video / long_video are always Gong.bg's reports
-  other_videos      jsonb,          -- up to 3 reports from other channels (null = not looked for yet)
+  other_videos      jsonb,          -- every report from other channels, up to 12 (null = not looked for yet)
   video_tries       int not null default 0,
   videos_checked_at timestamptz,
   source_url        text,
@@ -99,8 +99,9 @@ language sql stable security definer set search_path = '' as $$
 $$;
 
 -- played matches to look at: a saved video not checked yet ("playable on other sites?") or not from Gong,
--- other channels' reports not collected yet (one search), or a Gong report still missing — retried after
--- 3 h, 12 h, 1 day, then every 3 days (up to 8 tries in efbet Лига, 4 in the 2nd league)
+-- other channels' reports not collected yet (one search), or a Gong report (short or extended, both leagues)
+-- still missing — retried after 3 h, 12 h, 1 day, then every 3 days while the match is under 10 days old
+-- (up to 8 tries); an older match is searched once
 create or replace function public.football_video_queue(n int) returns setof public.football_matches
 language sql stable security definer set search_path = '' as $$
   select * from public.football_matches m
@@ -109,8 +110,8 @@ language sql stable security definer set search_path = '' as $$
       (m.short_video is not null and (not (m.short_video ? 'embed') or coalesce(m.short_video->>'channel', '') !~* 'gong'))
       or (m.long_video is not null and (not (m.long_video ? 'embed') or coalesce(m.long_video->>'channel', '') !~* 'gong'))
       or m.other_videos is null
-      or ((m.short_video is null or (m.league = 'efbet' and m.long_video is null))
-          and m.video_tries < case when m.league = 'efbet' then 8 else 4 end
+      or ((m.short_video is null or m.long_video is null)
+          and m.video_tries < case when m.kickoff < now() - interval '10 days' then 1 else 8 end
           and (m.videos_checked_at is null or m.videos_checked_at < now() - case least(m.video_tries, 4)
                 when 0 then interval '0' when 1 then interval '3 hours' when 2 then interval '12 hours' when 3 then interval '1 day' else interval '3 days' end))
     )
@@ -163,6 +164,6 @@ select cron.schedule('football-videos', '*/5 * * * *', $job$
   select net.http_post(
     url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/football-sync',
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
-    body := '{"results": false, "videos": 8}'::jsonb,
+    body := '{"results": false, "videos": 10}'::jsonb,
     timeout_milliseconds := 150000);
 $job$);

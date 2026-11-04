@@ -267,8 +267,8 @@ export function channelRank(channel, match) {
 }
 
 // choose the short and the long report for a match from search results.
-// short/long are the best picks; shorts/longs are all acceptable ones, best first (the caller may skip
-// videos whose owner doesn't allow playing them on other sites)
+// short/long are the best picks; shorts/longs are all acceptable ones, best first (the caller keeps Gong's);
+// all = every video of this match from any channel (for "other reports"), best channels first
 export function pickVideos(match, vids, aliasList, now = Date.now()) {
   const days = (now - Date.parse(match.kickoff)) / 864e5;
   const cands = [], seen = new Set();
@@ -279,24 +279,56 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
     const h = ms.find(x => x.name === match.home_name), a = ms.find(x => x.name === match.away_name);
     if (!h || !a || h.pos > a.pos) continue;                                       // both teams, home first
     if (ms.some(x => x.name !== match.home_name && x.name !== match.away_name)) continue;
-    const scores = scoresIn(v.title);
-    const scoreOk = scores.some(([x, y]) => x === match.home_score && y === match.away_score);
-    if (scores.length && !scoreOk) continue;
     const rd = roundIn(v.title); if (rd && rd !== match.round) continue;
     const sn = seasonIn(v.title); if (sn && sn !== SEASON) continue;
-    const ch = channelRank(v.channel, match); if (!ch) continue;
+    const scores = scoresIn(v.title);
+    const scoreOk = scores.some(([x, y]) => x === match.home_score && y === match.away_score);
+    const roundOk = rd === match.round;
+    // a wrong score rules a video out, unless its round is this match's (Gong sometimes mistypes the score)
+    if (scores.length && !scoreOk && !roundOk) continue;
+    const ident = scoreOk || roundOk;                                              // surely this match
+    const ch = channelRank(v.channel, match);
+    if (!ch && !ident) continue;                                                   // unknown channels: only with score or round
     seen.add(v.id);
-    cands.push({ v, scoreOk, ch, ext: /разширен|пълен репортаж|extended/i.test(v.title), rep: /репортаж|highlights|обзор/i.test(v.title) });
+    cands.push({ v, scoreOk, ident, ch, ext: /разширен|пълен репортаж|extended/i.test(v.title), rep: /репортаж|highlights|обзор/i.test(v.title) });
   }
   const pack = c => c && { id: c.v.id, title: c.v.title.slice(0, 200), channel: c.v.channel.slice(0, 80), length: c.v.length, seconds: c.v.seconds };
-  const shorts = cands.filter(c => c.scoreOk && c.v.seconds >= 100 && c.v.seconds < 540)
-    .sort((a, b) => b.ch - a.ch || (b.rep - a.rep) || a.v.seconds - b.v.seconds);
-  // a long video without the score or "разширен" in its title is only taken from Gong/the league, and only
+  const shorts = cands.filter(c => c.ch && c.ident && c.v.seconds >= 100 && c.v.seconds < 540)
+    .sort((a, b) => b.ch - a.ch || (b.rep - a.rep) || (b.scoreOk - a.scoreOk) || a.v.seconds - b.v.seconds);
+  // a long video without the score/round or "разширен" in its title is only taken from Gong/the league, and only
   // at the usual extended-report length (Gong sometimes gives its ~20-minute reports a headline instead)
   const headline = c => c.ch >= 2 && c.v.seconds >= 900 && c.v.seconds <= 1500;
-  const longs = cands.filter(c => c.v.seconds >= 540 && c.v.seconds <= 3600 && (c.scoreOk || c.ext || headline(c)))
+  const longs = cands.filter(c => c.ch && c.v.seconds >= 540 && c.v.seconds <= 3600 && (c.ident || c.ext || headline(c)))
     .sort((a, b) => (b.ext - a.ext) || b.ch - a.ch || (b.scoreOk - a.scoreOk));
-  return { short: pack(shorts[0]), long: pack(longs[0]), shorts: shorts.slice(0, 6).map(pack), longs: longs.slice(0, 6).map(pack) };
+  const all = cands.filter(c => c.v.seconds >= 30 && c.v.seconds <= 3600 && (c.ident || headline(c)))
+    .sort((a, b) => b.ch - a.ch || (b.ident - a.ident));
+  return { short: pack(shorts[0]), long: pack(longs[0]), shorts: shorts.slice(0, 6).map(pack), longs: longs.slice(0, 6).map(pack), all: all.slice(0, 15).map(pack) };
+}
+
+// the short way a team is written in report titles, for searching: "Левски София" → "Левски",
+// "ЦСКА 1948" stays, "ПФК Локомотив София 1929" → "Локомотив София" (another Локомотив is in the league)
+export function queryNames(teams) {
+  const info = teams.map(name => {
+    const words = String(name).replace(/^(?:ПФК|ФК)\s+/u, '').split(/\s+/).filter(Boolean);
+    const reserve = words.some(w => /^(?:II|2|U21)$/i.test(w));
+    const ws = words.filter(w => !/^(?:II|2|U21)$/i.test(w));
+    const nb = TWO_WORD.has((ws[0] || '').toLowerCase()) && ws[1] ? 2 : 1;
+    return { name, base: ws.slice(0, nb).join(' '), rest: ws.slice(nb), reserve };
+  });
+  const out = new Map();
+  for (const t of info) {
+    const sharing = info.filter(o => o !== t && o.base.toLowerCase() === t.base.toLowerCase() && o.reserve === t.reserve);
+    const year = t.rest.find(w => /^\d{4}$/.test(w)), place = t.rest.filter(w => !/^\d{4}$/.test(w) && !/^г\.?$/i.test(w));
+    let q = t.base;
+    if (sharing.length) {
+      const othersHaveYear = sharing.every(o => o.rest.some(w => /^\d{4}$/.test(w)));
+      if (!year && place.every(w => /^софия$/i.test(w)) && othersHaveYear) q = t.base;   // ЦСКА (vs ЦСКА 1948)
+      else if (place.length) q = [t.base, ...place].join(' ');                              // Локомотив София, Ботев Пловдив
+      else if (year) q = `${t.base} ${year}`;                                               // ЦСКА 1948
+    }
+    out.set(t.name, q + (t.reserve ? ' II' : ''));
+  }
+  return out;
 }
 
 // search words for a team: no ПФК/ФК, no founding years (except where they tell two clubs apart)

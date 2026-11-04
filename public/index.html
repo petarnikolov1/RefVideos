@@ -140,10 +140,14 @@
   a.vbtn{color:inherit;text-decoration:none}
   .vbtn.yt:hover{background:var(--line)}
   .mplayer .player{margin:10px 0 2px}
-  .ochips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-  .ochip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);color:inherit;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;text-decoration:none}
-  .ochip .len{font-weight:400;color:var(--muted)}
-  .ochip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)} .ochip.on .len{color:var(--accent-ink)}
+  .olist{display:flex;flex-direction:column;gap:4px;margin-top:10px;max-height:320px;overflow-y:auto}
+  .orow{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:var(--chip);color:inherit;border:1px solid transparent;border-radius:10px;padding:8px 10px;font:inherit;text-decoration:none;cursor:pointer}
+  .orow:hover{border-color:var(--line)}
+  .orow .ic{color:#2563eb;font-size:13px;line-height:20px}
+  .orow .ot{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .orow b{font-size:13px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+  .orow .muted{font-size:12px}
+  .orow.on{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
   .mfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;flex-wrap:wrap}
   .mfoot .mnote{margin:0;flex:1 1 240px}
   .ytbtn{display:inline-flex;align-items:center;gap:8px;background:#e00;color:#fff;font-weight:700;font-size:14px;padding:10px 16px;border-radius:10px;text-decoration:none;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.15)}
@@ -1539,12 +1543,12 @@ function sofiaParts(iso){
 const bgDate = iso => { if (!iso) return 'дата неизвестна'; const p = sofiaParts(iso); return `${p.day} ${p.d}, ${p.m} в ${p.time}`; };
 const initials = n => String(n || '').replace(/^(ПФК|ФК)\s+/, '').split(/\s+/).filter(w => !/^\d+$/.test(w)).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const isGongVid = v => !!(v && v.id && /gong/i.test(v.channel || ''));
-// reports from channels other than Gong (also any non-Gong video still saved as Репортаж/Разширен), at most 3
+// every report from channels other than Gong (also any non-Gong video still saved as Репортаж/Разширен)
 function otherVids(m){
   const seen = new Set(), out = [];
   for (const v of [...(Array.isArray(m.other_videos) ? m.other_videos : []), m.short_video, m.long_video])
     if (v && v.id && !isGongVid(v) && !seen.has(v.id)) { seen.add(v.id); out.push(v); }
-  return out.slice(0, 3);
+  return out;
 }
 const chanName = c => /професионална футболна лига/i.test(c || '') ? 'БПФЛ' : String(c || 'YouTube').trim();
 const ytWatch = id => 'https://www.youtube.com/watch?v=' + encodeURIComponent(id);
@@ -1610,9 +1614,13 @@ function matchCard(m){
     let sel = FB.oth[m.id];
     if (!others[sel] || others[sel].embed === false) sel = others.findIndex(v => v.embed !== false);
     ov = others[sel] || null;
-    if (others.length > 1) chips = `<div class="ochips">${others.map((v, i) => v.embed === false
-      ? `<a class="ochip" href="${ytWatch(v.id)}" target="_blank" rel="noopener noreferrer" title="${esc(v.title)}">${esc(chanName(v.channel))}<span class="len">${esc(v.length || '')}</span></a>`
-      : `<button class="ochip${i === sel ? ' on' : ''}" data-mid="${esc(m.id)}" data-oth="${i}" title="${esc(v.title)}">${esc(chanName(v.channel))}<span class="len">${esc(v.length || '')}</span></button>`).join('')}</div>`;
+    // the full list of other reports; a playable one plays here, the rest open on YouTube
+    if (others.length > 1) chips = `<div class="olist">${others.map((v, i) => {
+      const inner = `<span class="ic">▶</span><span class="ot"><b>${esc(v.title || '')}</b><span class="muted">${esc(chanName(v.channel))} · ${esc(v.length || '')}</span></span>`;
+      return v.embed === false
+        ? `<a class="orow" href="${ytWatch(v.id)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+        : `<button class="orow${i === sel ? ' on' : ''}" data-mid="${esc(m.id)}" data-oth="${i}">${inner}</button>`;
+    }).join('')}</div>`;
   }
   const player = ov || chips ? `<div class="mplayer">${chips}${ov ? `${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ov.id)}?autoplay=1&rel=0` })}
       <div class="mfoot"><span class="mnote">${esc(ov.title)} · ${esc(ov.channel)}<br>Ако клипът не тръгва тук, гледай го в YouTube.</span>
@@ -1689,7 +1697,7 @@ function initFootballUI(){
     if (pick(e)) return;
     const nav = e.target.closest('[data-rnd]');
     if (nav && !nav.disabled) { FB.round[FB.league] = Number(nav.dataset.rnd); FB.open.clear(); renderResults(true); return; }
-    const oc = e.target.closest('button.ochip[data-oth]');
+    const oc = e.target.closest('button.orow[data-oth]');
     if (oc) { FB.oth[oc.dataset.mid] = Number(oc.dataset.oth); renderResults(true); return; }
     const vb = e.target.closest('button.vbtn');
     if (vb) {

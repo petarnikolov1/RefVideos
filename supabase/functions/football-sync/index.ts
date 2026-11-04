@@ -1,7 +1,7 @@
 // football-sync: keeps public.football_matches / public.football_standings up to date for efbet Лига and
 // Mr Bit Втора лига, and finds each finished match's short report and extended report on YouTube.
 // Called by pg_cron: results every 30 minutes, videos every 5 minutes (with the key stored in the vault as football_sync_key).
-// Репортаж (short) and Разширен (long) are always Gong.bg's; up to 3 reports from other channels go to other_videos.
+// Репортаж (short) and Разширен (long) are always Gong.bg's; every other channel's report of the match goes to other_videos.
 // Each video is checked with YouTube's oEmbed: embed:false means its owner only allows playing it on YouTube.
 // Body (JSON, all optional): { results: true, videos: 10, dry: false, ytTest: "search words" }
 import * as L from './lib.js';
@@ -67,19 +67,22 @@ async function choose(list: any[]) {
 }
 // Репортаж and Разширен are always Gong.bg's; every other channel's report goes to "other_videos"
 const isGong = (v: any) => /gong/i.test(String(v?.channel ?? ''));
-// other channels' reports, best first: playable ones, then the league's channel, then media and clubs (at most 3)
+// every other channel's report of the match (up to 12), best first: playable ones, the league's channel, then the rest
+const MAX_OTHERS = 12;
 async function rankOthers(list: any[], keep: any[] = []) {
   const out: any[] = [...keep], seen = new Set(keep.map(v => v.id));
   for (const c of list) {
-    if (out.length >= 3 + keep.length || seen.has(c.id) || isGong(c)) continue;
+    if (out.length >= MAX_OTHERS || seen.has(c.id) || isGong(c)) continue;
     seen.add(c.id);
     const e = await embeddable(c.id);
     if (e !== 'gone') out.push({ ...c, embed: e });
   }
   const rank = (v: any) => (v.embed ? 10 : 0) + (/професионална футболна лига|bpfl|efbet/i.test(v.channel) ? 2 : 0);
-  return out.sort((a, b) => rank(b) - rank(a)).slice(0, 3);
+  return out.map((v, i) => [v, i] as const).sort((a, b) => rank(b[0]) - rank(a[0]) || a[1] - b[1]).map(x => x[0]);
 }
-const MAX_TRIES: Record<string, number> = { efbet: 8, mrbit: 4 };
+// Gong posts its reports within a day or two: recent matches are retried on the back-off schedule (up to 8 times),
+// a match older than 10 days gets one search
+const maxTries = (m: any) => Date.now() - Date.parse(m.kickoff) > 10 * 864e5 ? 1 : 8;
 const BACKOFF_H = [0, 3, 12, 24, 72];
 
 async function upsertMatches(rows: any[]) {
@@ -145,6 +148,7 @@ Deno.serve(async (req) => {
       for (const t of teamRows) teams[t.league]?.add(t.team_name);
       for (const m of queue) { teams[m.league]?.add(m.home_name); teams[m.league]?.add(m.away_name); }
       const aliases = { efbet: L.teamAliases([...teams.efbet]), mrbit: L.teamAliases([...teams.mrbit]) } as Record<string, any>;
+      const qnames = { efbet: L.queryNames([...teams.efbet]), mrbit: L.queryNames([...teams.mrbit]) } as Record<string, Map<string, string>>;
       for (const m of queue) {
         if (Date.now() - started > 100000) break;                       // stay well inside the time limit
         const cur: Record<string, any> = { short: m.short_video, long: m.long_video };
@@ -165,12 +169,12 @@ Deno.serve(async (req) => {
         }
         // 2. search when a Gong report is missing (on the back-off schedule), or once to collect the other reports
         const wantShort = !cur.short, wantLong = !cur.long;
-        const gongWanted = (wantShort || (m.league === 'efbet' && wantLong)) && m.video_tries < (MAX_TRIES[m.league] ?? 4);
+        const gongWanted = (wantShort || wantLong) && m.video_tries < maxTries(m);
         const due = !m.videos_checked_at || Date.now() - Date.parse(m.videos_checked_at) >= BACKOFF_H[Math.min(m.video_tries, 4)] * 3600e3;
         const searchGong = gongWanted && due, wantOthers = others === null;
         let failed = false;
         if (searchGong || wantOthers) {
-          const home = L.searchName(m.home_name), away = L.searchName(m.away_name);
+          const home = qnames[m.league]?.get(m.home_name) ?? L.searchName(m.home_name), away = qnames[m.league]?.get(m.away_name) ?? L.searchName(m.away_name);
           let vids: any[] = [];
           // YouTube slows down rapid searches: pause between them, and stop the whole run on the first refusal
           const search = async (q: string) => {
@@ -179,7 +183,7 @@ Deno.serve(async (req) => {
             v.searches++;
             try { vids = vids.concat(await youtube(q)); } catch (e) { failed = true; v.errors.push(String((e as Error).message)); }
           };
-          let p: any = { shorts: [], longs: [] };
+          let p: any = { shorts: [], longs: [], all: [] };
           const best: Record<string, any> = {};
           const pickAll = async () => {
             p = L.pickVideos(m, vids, aliases[m.league]);
@@ -189,11 +193,12 @@ Deno.serve(async (req) => {
           await search(`${home} ${away} ${m.home_score}:${m.away_score}`);
           await pickAll();
           if (searchGong && wantShort && !best.short) { await search(`${home} ${away} репортаж`); await pickAll(); }
-          if (searchGong && m.league === 'efbet' && wantLong && !best.long) { await search(`${home} ${away} разширен репортаж`); await pickAll(); }
+          // the 2nd league: Gong covers only some matches, so its extended report is looked for when it has the short one
+          if (searchGong && wantLong && !best.long && (m.league === 'efbet' || cur.short || best.short)) { await search(`${home} ${away} разширен репортаж`); await pickAll(); }
           for (const k of ['short', 'long']) if (best[k] && !cur[k]) { cur[k] = best[k]; patch[k + '_video'] = best[k]; v[k as 'short' | 'long']++; }
           if (!failed || vids.length) {
             const before = JSON.stringify(others ?? null);
-            others = await rankOthers([...moved, ...p.shorts, ...p.longs], others ?? []);
+            others = await rankOthers([...moved, ...p.all], others ?? []);
             if (JSON.stringify(others) !== before) { patch.other_videos = others; if (others.length) v.others++; }
           }
           // a refused search is not counted as a try (the match comes back next run); anything already found is kept
