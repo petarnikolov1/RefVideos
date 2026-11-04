@@ -422,6 +422,7 @@ function findMinutes(text) {
 const SB_URL = 'https://zinuspouctowujhocevy.supabase.co';
 const SB_KEY = 'sb_publishable_sElFdQnVmyqIZMRqBV5dAg_VrstG7T8';
 const EBFU_BASE = 'https://ebfu.net/';
+const EBFU_ARCHIVE = 'https://ebfu.net/interfaceReferees/videoShowChampWeek.php';   // Видеоархив
 const EBFU_SKIP = /календар|история|calendar|history|събити|event|изход|logout|log-out|signout|exit|настройки|settings|profile|профил|gdpr/i;
 
 async function handleEbfu(request, url, env) {
@@ -467,6 +468,7 @@ function absorbCookies(jar, resp) {
 async function ebfuFetch(href, jar, opts, diag) {
   opts = opts || {};
   let u = href, method = opts.method || 'GET', body = opts.body, ct = opts.contentType;
+  const notices = [];
   for (let hop = 0; hop < 8; hop++) {
     const target = new URL(u);
     if (!/(^|\.)ebfu\.net$/i.test(target.hostname)) throw new Error('left ebfu.net (' + target.hostname + ')');
@@ -480,9 +482,30 @@ async function ebfuFetch(href, jar, opts, diag) {
     const loc = r.headers.get('location');
     if (r.status >= 300 && r.status < 400 && loc) { u = new URL(loc, u).toString(); method = 'GET'; body = undefined; ct = undefined; continue; }
     const bytes = await readBytes(r, 1500000);
-    return { status: r.status, url: u, text: decodeBytes(bytes, r.headers.get('content-type') || ''), type: r.headers.get('content-type') || '' };
+    const text = decodeBytes(bytes, r.headers.get('content-type') || '');
+    // ebfu.net sends visitors on with a tiny page that only runs  self.location.href = "…"  (sometimes after an alert)
+    const js = scriptRedirect(text);
+    if (js) {
+      if (js.alert) notices.push(js.alert);
+      u = new URL(js.to, u).toString(); method = 'GET'; body = undefined; ct = undefined;
+      diag.push('script redirect → ' + maskUrl(u));
+      continue;
+    }
+    return { status: r.status, url: u, text, type: r.headers.get('content-type') || '', notices };
   }
   throw new Error('too many redirects');
+}
+
+// a page that is only a script sending the browser elsewhere (no real content) → { to, alert }
+function scriptRedirect(html) {
+  if (html.length > 6000) return null;
+  const visible = stripTags(html.replace(/<(script|style|noscript|head)\b[\s\S]*?<\/\1>/gi, ' '));
+  if (visible.length > 120 || /<form\b|<input\b/i.test(html)) return null;
+  const m = html.match(/(?:self|window|top|document)?\.?location(?:\.href)?\s*=\s*["']([^"']+)["']/) || html.match(/location\.(?:replace|assign)\(\s*["']([^"']+)["']/)
+    || html.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]*url=([^"'>\s]+)/i);
+  if (!m) return null;
+  const a = html.match(/alert\(\s*["']([^"']{1,200})["']/);
+  return { to: decodeEntities(m[1]), alert: a ? a[1] : '' };
 }
 
 // --- reading pages ---
@@ -617,9 +640,9 @@ async function ebfuLogin(username, password, diag) {
   const target = isGet ? form.action + (form.action.includes('?') ? '&' : '?') + fields : form.action;
   const res = await ebfuFetch(target, jar, { method: isGet ? 'GET' : 'POST', body: isGet ? undefined : fields.toString(),
     contentType: isGet ? undefined : 'application/x-www-form-urlencoded', referer: first.url }, diag);
-  const text = stripTags(res.text.replace(/<head\b[\s\S]*?<\/head>/i, ' '));
+  const text = stripTags(res.text.replace(/<head\b[\s\S]*?<\/head>/i, ' ')) + ' ' + (res.notices || []).join(' ');
   if (findLoginForm(res.text, res.url) || res.status >= 400) {
-    const msg = (text.match(/[^.!?]{0,80}(?:грешн|невалид|неправил|заключ|блокир|опит)[^.!?]{0,80}/i) || [])[0];
+    const msg = (res.notices || [])[0] || (text.match(/[^.!?]{0,80}(?:грешн|невалид|неправил|заключ|блокир|опит)[^.!?]{0,80}/i) || [])[0];
     return { ok: false, error: msg ? 'ebfu.net says: ' + msg.trim() : 'ebfu.net did not accept the login.', inspect: summarizePage(res.text, res.url) };
   }
   const name = (res.text.match(/<(?:h[1-6]|span|div|b|strong)[^>]*>\s*([А-Я][а-я]+ [А-Я][а-я]+)\s*</) || [])[1] || '';
@@ -637,10 +660,11 @@ async function ebfuExplore(session, diag) {
 
   // 1. "Видеоархив" (in the burger menu on phones, straight in the menu on computers — same page underneath)
   const toArchive = clickables(start.text, start.url).find(c => c.how && /видео\s*архив|видеоархив|video\s*archive/i.test(c.text))
-    || clickables(start.text, start.url).find(c => c.how && /video|archive|arhiv/i.test((c.url || '') + c.target));
-  if (!toArchive) { report.notes.push('No "Видеоархив" item found on the start page.'); return done(); }
+    || clickables(start.text, start.url).find(c => c.how && /videoShow|video|archive|arhiv/i.test((c.url || '') + c.target))
+    || { how: 'get', url: EBFU_ARCHIVE, text: 'Видеоархив (direct address)' };
   const archive = await follow(toArchive, start, jar, diag);
-  report.pages.push({ step: 'archive', via: toArchive.how, ...summarizePage(archive.text, archive.url) });
+  if (findLoginForm(archive.text, archive.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
+  report.pages.push({ step: 'archive', via: toArchive.how + (toArchive.text.includes('direct') ? ' (direct address)' : ''), ...summarizePage(archive.text, archive.url) });
   scripts.push({ where: 'archive page', text: archive.text });
 
   // 2. league round tiles ("efbet Лига КРЪГ 12", "ВПФЛ КРЪГ 3", "В ЮЗ …", "U17 …"): take the newest efbet Лига round

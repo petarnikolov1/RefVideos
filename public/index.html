@@ -1383,7 +1383,13 @@ async function ebfuConnect(form){
     EBFU_BUSY = false;
     if (!j.ok) {
       if (/ebfu\.net says|did not accept/.test(j.error || '')) saveJSON(EBFU_FAILS, recentFails().concat(Date.now()));
-      return ebfuSay(j.error || 'Could not connect.', 'err');
+      // the site couldn't make sense of ebfu.net's login page: send how that page is built (never the password)
+      let sent = '';
+      if (j.inspect && !/ebfu\.net says/.test(j.error || '')) {
+        const { error } = await SB.from('ebfu_reports').insert({ report: { stage: 'login', error: j.error, page: j.inspect, steps: j.diag || [] } });
+        sent = error ? '' : " The site sent the developer how ebfu.net's login page is built (no password), so this can be fixed.";
+      }
+      return ebfuSay((j.error || 'Could not connect.') + sent, 'err');
     }
     EBFU = { session: j.session, name: j.name || '', at: Date.now() };
     saveJSON(EBFU_KEY, EBFU); saveJSON(EBFU_FAILS, []);
