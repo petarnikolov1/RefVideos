@@ -476,6 +476,7 @@ async function ebfuFetch(href, jar, opts, diag) {
     if (jar.size) h.Cookie = jarStr(jar);
     if (ct) h['Content-Type'] = ct;
     if (opts.referer) h.Referer = opts.referer;
+    if (opts.headers && hop === 0) Object.assign(h, opts.headers);
     const r = await fetch(u, { method, headers: h, body, redirect: 'manual', signal: AbortSignal.timeout(10000) });
     absorbCookies(jar, r);
     diag.push(`${method} ${maskUrl(u)} → ${r.status}`);
@@ -622,12 +623,16 @@ function findFunction(name, sources) {
   return null;
 }
 
+// a login page is either a classic form or ebfu.net's script login (loginUser() → loginUser.php)
+const isLoginPage = (html, url) => !!findLoginForm(html, url) || /loginUser\s*\(|loginUser\.php/i.test(html);
+const NAME_RE = /<(?:h[1-6]|span|div|b|strong|p|td|a)[^>]*>\s*([А-Я][а-я]+ [А-Я][а-я]+)\s*</;
+
 async function ebfuLogin(username, password, diag) {
   if (!username || !password) return { ok: false, error: 'Enter your ebfu.net username and password.' };
   const jar = new Map();
   const first = await ebfuFetch(EBFU_BASE, jar, {}, diag);
   const form = findLoginForm(first.text, first.url);
-  if (!form) return { ok: false, error: "Couldn't find the ebfu.net login form.", inspect: summarizePage(first.text, first.url) };
+  if (!form) return scriptLogin(first, jar, username, password, diag);
   const fields = new URLSearchParams();
   for (const f of form.inputs) {
     if (f.type === 'password') fields.set(f.name, password);
@@ -645,15 +650,142 @@ async function ebfuLogin(username, password, diag) {
     const msg = (res.notices || [])[0] || (text.match(/[^.!?]{0,80}(?:грешн|невалид|неправил|заключ|блокир|опит)[^.!?]{0,80}/i) || [])[0];
     return { ok: false, error: msg ? 'ebfu.net says: ' + msg.trim() : 'ebfu.net did not accept the login.', inspect: summarizePage(res.text, res.url) };
   }
-  const name = (res.text.match(/<(?:h[1-6]|span|div|b|strong)[^>]*>\s*([А-Я][а-я]+ [А-Я][а-я]+)\s*</) || [])[1] || '';
+  const name = (res.text.match(NAME_RE) || [])[1] || '';
   return { ok: true, session: jarStr(jar), name, landing: maskUrl(res.url) };
+}
+
+// ---- ebfu.net's script login ----
+// The "Вход" button runs loginUser(), which posts the fields to loginUser.php in the background (jQuery.ajax).
+// Before sending anything, the site reads that function: the password is sent only if the function passes the
+// typed password on unchanged. Anything unexpected → stop, send nothing, report the function instead
+// (every wrong try counts toward ebfu.net's 5-try lock).
+const inlineScripts = html => [...html.matchAll(/<script\b(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n;\n');
+function blockFrom(code, open) {           // text from an opening "{" to its matching "}", skipping strings and comments
+  let depth = 0;
+  for (let i = open; i < code.length && i < open + 20000; i++) {
+    const c = code[i];
+    if (c === '"' || c === "'" || c === '`') { const q = c; for (i++; i < code.length && code[i] !== q; i++) if (code[i] === '\\') i++; continue; }
+    if (c === '/' && code[i + 1] === '/') { const n = code.indexOf('\n', i); i = n < 0 ? code.length : n; continue; }
+    if (c === '/' && code[i + 1] === '*') { const n = code.indexOf('*/', i + 2); i = n < 0 ? code.length : n + 1; continue; }
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return code.slice(open, i + 1);
+  }
+  return null;
+}
+function splitTop(s) {                       // split "a: b, c: d(e, f)" at top-level commas
+  const out = []; let depth = 0, cur = '', q = null;
+  for (const c of s) {
+    if (q) { cur += c; if (c === q) q = null; continue; }
+    if (c === '"' || c === "'" || c === '`') { q = c; cur += c; continue; }
+    if ('([{'.includes(c)) depth++; if (')]}'.includes(c)) depth--;
+    if (c === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += c;
+  }
+  if (cur.trim()) out.push(cur);
+  return out.map(x => x.trim()).filter(Boolean);
+}
+function loginPlan(html) {
+  const js = inlineScripts(html);
+  const call = js.match(/(?:jQuery|\$)\.(?:ajax|post)\(\s*\{\s*url\s*:\s*['"]([^'"]*login[^'"]*)['"]/i);
+  if (!call) return { ok: false, why: 'no background login call found' };
+  // the function that contains the call
+  let fnStart = -1, fnName = '';
+  for (const m of js.slice(0, call.index).matchAll(/function\s*([\w$]*)\s*\([^)]*\)\s*\{/g)) { fnStart = m.index + m[0].length - 1; fnName = m[1]; }
+  const body = fnStart >= 0 ? blockFrom(js, fnStart) : null;
+  if (!body || !body.includes(call[0])) return { ok: false, why: 'login function not readable', code: js.slice(Math.max(0, call.index - 1500), call.index + 800) };
+  const code = 'function ' + fnName + '() ' + body;
+  const dataM = body.slice(body.indexOf(call[0])).match(/data\s*:\s*\{/);
+  const dataObj = dataM ? blockFrom(body, body.indexOf(call[0]) + dataM.index + dataM[0].length - 1) : null;
+  if (!dataObj) return { ok: false, why: 'login fields not readable', code };
+  const vars = {};
+  for (const m of body.matchAll(/(?:let|var|const)\s+([\w$]+)\s*=\s*([^;\n]+)/g)) if (!(m[1] in vars)) vars[m[1]] = m[2].trim();
+  const inputType = id => { const t = html.match(new RegExp(`<input\\b[^>]*\\bid=["']${id}["'][^>]*>`, 'i')); return t ? (attrOf(t[0], 'type') || 'text').toLowerCase() : ''; };
+  const before = body.slice(0, body.indexOf(call[0]));
+  const fields = [];
+  for (const entry of splitTop(dataObj.slice(1, -1))) {
+    const m = entry.match(/^["']?([\w$-]+)["']?\s*:\s*([\s\S]+)$/);
+    if (!m) return { ok: false, why: 'unexpected field: ' + entry.slice(0, 40), code };
+    const key = m[1], raw = m[2].trim();
+    const ident = /^[\w$]+$/.test(raw) ? raw : null;
+    const expr = ident && vars[ident] ? vars[ident] : raw;
+    const el = expr.match(/^(?:\$|jQuery)\(\s*['"]#([\w-]+)['"]\s*\)\.val\(\)(\.trim\(\))?$/);
+    if (el) {
+      // the variable must not be changed again before it is sent (e.g. pass = md5(pass))
+      if (ident && new RegExp(`(?<![\\w$.])${ident.replace(/\$/g, '\\$')}\\s*(?:[+\\-*/]?=(?!=)|\\+\\+|--)`).test(before.replace(new RegExp(`(?:let|var|const)\\s+${ident.replace(/\$/g, '\\$')}\\s*=`), ''))) return { ok: false, why: `"${key}" is changed before sending`, code };
+      fields.push({ key, kind: inputType(el[1]) === 'password' ? 'password' : 'username', trim: !!el[2] });
+    } else if (/\.width\(\)/.test(expr) || /^width$/i.test(key)) fields.push({ key, kind: 'width' });
+    else if (/^attempt/i.test(key) || /^attempt/i.test(ident || '')) fields.push({ key, kind: 'attempt', ident });
+    else if (/^-?\d+(\.\d+)?$/.test(raw) || /^(['"])[^'"]*\1$/.test(raw)) fields.push({ key, kind: 'literal', value: raw.replace(/^['"]|['"]$/g, '') });
+    else return { ok: false, why: `unknown value for "${key}": ${raw.slice(0, 40)}`, code };
+  }
+  if (fields.filter(f => f.kind === 'password').length !== 1 || fields.filter(f => f.kind === 'username').length !== 1) return { ok: false, why: 'username/password fields not recognised', code };
+  // attempt counter: its starting value, +1 if the function counts up before sending
+  const att = fields.find(f => f.kind === 'attempt');
+  if (att) {
+    const id = att.ident || att.key;
+    let n = Number((js.match(new RegExp(`(?:let|var|const)\\s+${id}\\s*=\\s*(\\d+)`)) || [])[1] || 0);
+    if (new RegExp(`${id}\\s*\\+\\+|\\+\\+\\s*${id}|${id}\\s*\\+=\\s*1|${id}\\s*=\\s*${id}\\s*\\+\\s*1`).test(before)) n++;
+    att.value = String(n);
+  }
+  const method = /type\s*:\s*['"]GET['"]/i.test(body.slice(body.indexOf(call[0]), body.indexOf(call[0]) + 600)) ? 'GET' : 'POST';
+  const jumps = [...body.matchAll(/location(?:\.href)?\s*=\s*([^;\n]+)/g)].map(m => m[1].trim());
+  return { ok: true, url: call[1], method, fields, jumps, code };
+}
+function evalJump(expr, answer) {             // "'interfaceReferees/' + result.page" → a URL, using the login answer
+  let out = '';
+  for (const part of splitTop(expr.replace(/\+/g, ','))) {
+    const lit = part.match(/^(['"])(.*)\1$/);
+    if (lit) { out += lit[2]; continue; }
+    const prop = part.match(/^[\w$]+(?:\.([\w$]+)|\[['"]([\w$]+)['"]\])$/);
+    const v = prop && answer && typeof answer === 'object' ? answer[prop[1] || prop[2]] : undefined;
+    if (typeof v === 'string' || typeof v === 'number') { out += v; continue; }
+    return null;
+  }
+  return out || null;
+}
+async function scriptLogin(first, jar, username, password, diag) {
+  const plan = loginPlan(first.text);
+  if (!plan.ok) return { ok: false, error: "Couldn't read ebfu.net's login script (" + plan.why + '). Nothing was sent to ebfu.net.',
+    inspect: { ...summarizePage(first.text, first.url), loginFunction: maskText(String(plan.code || '').slice(0, 6000)) } };
+  diag.push('login fields: ' + plan.fields.map(f => f.key + '=' + f.kind).join(', '));
+  const fields = new URLSearchParams();
+  for (const f of plan.fields) fields.set(f.key, f.kind === 'username' ? username.trim() : f.kind === 'password' ? (f.trim ? password.trim() : password) : f.kind === 'width' ? '1280' : f.value);
+  const target = new URL(plan.url, first.url).toString();
+  const xhr = { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01', Origin: 'https://ebfu.net' };
+  const res = await ebfuFetch(plan.method === 'GET' ? target + (target.includes('?') ? '&' : '?') + fields : target, jar,
+    { method: plan.method, body: plan.method === 'GET' ? undefined : fields.toString(), contentType: plan.method === 'GET' ? undefined : 'application/x-www-form-urlencoded; charset=UTF-8', referer: first.url, headers: xhr }, diag);
+  let answer = null;
+  try { answer = JSON.parse(res.text.replace(/^﻿/, '').trim()); } catch {}
+  diag.push('login answer: ' + (answer && typeof answer === 'object' ? 'JSON keys ' + Object.keys(answer).join(',') : 'HTTP ' + res.status + ' ' + (res.text.trim().length < 40 ? JSON.stringify(res.text.trim()) : res.text.length + ' chars')));
+  // follow where the login script would send the browser on success
+  const jumps = plan.jumps.map(j => evalJump(j, answer)).filter(Boolean);
+  if (answer && typeof answer === 'object') Object.values(answer).forEach(v => { if (typeof v === 'string' && /^(?:https?:\/\/(?:www\.)?ebfu\.net\/|[\w\/.-]+\.php)/i.test(v)) jumps.push(v); });
+  let landing = null;
+  for (const j of [...new Set(jumps)].slice(0, 2)) {
+    try { const u = new URL(j, first.url).toString(); if (!/(^|\.)ebfu\.net$/i.test(new URL(u).hostname)) continue; const pg = await ebfuFetch(u, jar, { referer: first.url }, diag); if (!isLoginPage(pg.text, pg.url)) { landing = pg; break; } } catch {}
+  }
+  // the real test: can the video archive be opened now?
+  const check = landing && /videoShow/i.test(landing.url) ? landing : await ebfuFetch(EBFU_ARCHIVE, jar, { referer: first.url }, diag);
+  if (!isLoginPage(check.text, check.url)) {
+    const name = ((landing || check).text.match(NAME_RE) || check.text.match(NAME_RE) || [])[1] || '';
+    return { ok: true, session: jarStr(jar), name, landing: maskUrl((landing || check).url) };
+  }
+  const says = [];
+  (function walk(o) { if (typeof o === 'string') { if (/[А-Яа-я]{3,}/.test(o) && o.length < 300) says.push(o); } else if (o && typeof o === 'object') Object.values(o).forEach(walk); })(answer);
+  const msg = says[0] || (res.notices || [])[0] || (stripTags(res.text).match(/[^.!?]{0,80}(?:грешн|невалид|неправил|заключ|блокир|опит)[^.!?]{0,80}/i) || [])[0];
+  const safe = t => maskText(String(t).split(password).join('•••'));
+  return { ok: false, error: msg ? 'ebfu.net says: ' + safe(msg).trim() : 'ebfu.net did not accept the login.',
+    inspect: { loginFields: plan.fields.map(f => f.key + '=' + f.kind), answer: answer ? safe(JSON.stringify(answer)).slice(0, 1500) : safe(res.text.slice(0, 800)), loginFunction: maskText(plan.code.slice(0, 4000)) } };
 }
 
 async function ebfuExplore(session, diag) {
   if (!session) return { ok: false, error: 'Connect ebfu.net first.' };
   const jar = jarFrom(session), report = { pages: [], notes: [] };
-  const start = await ebfuFetch(EBFU_BASE, jar, {}, diag);
-  if (findLoginForm(start.text, start.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
+  let start = await ebfuFetch(EBFU_BASE, jar, {}, diag);
+  if (isLoginPage(start.text, start.url)) {
+    start = await ebfuFetch(EBFU_ARCHIVE, jar, {}, diag);
+    if (isLoginPage(start.text, start.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
+    report.notes.push('The start address shows the login page, so Видеоархив was opened directly.');
+  }
   report.pages.push({ step: 'start', ...summarizePage(start.text, start.url) });
   const scripts = [{ where: 'start page', text: start.text }];
   const done = () => ({ ok: true, report, session: jarStr(jar) });
@@ -662,8 +794,8 @@ async function ebfuExplore(session, diag) {
   const toArchive = clickables(start.text, start.url).find(c => c.how && /видео\s*архив|видеоархив|video\s*archive/i.test(c.text))
     || clickables(start.text, start.url).find(c => c.how && /videoShow|video|archive|arhiv/i.test((c.url || '') + c.target))
     || { how: 'get', url: EBFU_ARCHIVE, text: 'Видеоархив (direct address)' };
-  const archive = await follow(toArchive, start, jar, diag);
-  if (findLoginForm(archive.text, archive.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
+  const archive = start.url.startsWith(EBFU_ARCHIVE) ? start : await follow(toArchive, start, jar, diag);
+  if (isLoginPage(archive.text, archive.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
   report.pages.push({ step: 'archive', via: toArchive.how + (toArchive.text.includes('direct') ? ' (direct address)' : ''), ...summarizePage(archive.text, archive.url) });
   scripts.push({ where: 'archive page', text: archive.text });
 
