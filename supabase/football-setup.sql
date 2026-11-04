@@ -33,12 +33,14 @@ create table if not exists public.football_matches (
   ht_home           int,
   ht_away           int,
   short_video       jsonb,          -- {id, title, length, seconds, channel, embed}
-  long_video        jsonb,
+  long_video        jsonb,          -- short_video / long_video are always Gong.bg's reports
+  other_videos      jsonb,          -- up to 3 reports from other channels (null = not looked for yet)
   video_tries       int not null default 0,
   videos_checked_at timestamptz,
   source_url        text,
   updated_at        timestamptz not null default now()
 );
+alter table public.football_matches add column if not exists other_videos jsonb;
 create index if not exists football_matches_round_idx on public.football_matches (league, season, round);
 create index if not exists football_matches_queue_idx on public.football_matches (status, videos_checked_at);
 alter table public.football_matches enable row level security;
@@ -74,7 +76,7 @@ create or replace function private.football_score_changed() returns trigger
 language plpgsql set search_path = '' as $$
 begin
   if (old.home_score is not null and (new.home_score is distinct from old.home_score or new.away_score is distinct from old.away_score)) then
-    new.short_video := null; new.long_video := null; new.video_tries := 0; new.videos_checked_at := null;
+    new.short_video := null; new.long_video := null; new.other_videos := null; new.video_tries := 0; new.videos_checked_at := null;
   end if;
   new.updated_at := now();
   return new;
@@ -96,23 +98,23 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from vault.decrypted_secrets where name = 'football_sync_key' and decrypted_secret = k);
 $$;
 
--- played matches still missing a report, or whose report only plays on YouTube (embed:false — the owner blocks
--- other sites); a match is retried after 3 h, 12 h, 1 day, then every 3 days (up to 8 tries in efbet Лига, 4 in the
--- 2nd league, where many matches never get a report). Videos saved before the playable check come first.
+-- played matches to look at: a saved video not checked yet ("playable on other sites?") or not from Gong,
+-- other channels' reports not collected yet (one search), or a Gong report still missing — retried after
+-- 3 h, 12 h, 1 day, then every 3 days (up to 8 tries in efbet Лига, 4 in the 2nd league)
 create or replace function public.football_video_queue(n int) returns setof public.football_matches
 language sql stable security definer set search_path = '' as $$
   select * from public.football_matches m
   where m.status = 'finished' and m.kickoff < now() - interval '2 hours'
     and (
-      (m.short_video is not null and not (m.short_video ? 'embed')) or (m.long_video is not null and not (m.long_video ? 'embed'))
-      or ((m.short_video is null or m.short_video->>'embed' = 'false'
-           or (m.league = 'efbet' and (m.long_video is null or m.long_video->>'embed' = 'false')))
+      (m.short_video is not null and (not (m.short_video ? 'embed') or coalesce(m.short_video->>'channel', '') !~* 'gong'))
+      or (m.long_video is not null and (not (m.long_video ? 'embed') or coalesce(m.long_video->>'channel', '') !~* 'gong'))
+      or m.other_videos is null
+      or ((m.short_video is null or (m.league = 'efbet' and m.long_video is null))
           and m.video_tries < case when m.league = 'efbet' then 8 else 4 end
           and (m.videos_checked_at is null or m.videos_checked_at < now() - case least(m.video_tries, 4)
                 when 0 then interval '0' when 1 then interval '3 hours' when 2 then interval '12 hours' when 3 then interval '1 day' else interval '3 days' end))
     )
-  order by ((m.short_video is not null and not (m.short_video ? 'embed')) or (m.long_video is not null and not (m.long_video ? 'embed'))) desc,
-           m.videos_checked_at nulls first, m.kickoff desc
+  order by m.videos_checked_at nulls first, m.kickoff desc
   limit greatest(0, least(n, 80));
 $$;
 
