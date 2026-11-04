@@ -164,6 +164,21 @@
   table.stand td.t span{display:inline-flex;align-items:center;gap:8px}
   table.stand .tlogo,table.stand .tinit{width:24px;height:24px;flex-basis:24px;font-size:10px}
   table.stand td.p{font-weight:700}
+  /* "Обзор на кръга": the round's review show, above the round's matches */
+  .rreview{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-left:4px solid #e00;border-radius:14px;padding:12px 14px;margin:10px 0 14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .rreview .rrbadge{width:46px;height:46px;border-radius:12px;background:#e00;display:flex;align-items:center;justify-content:center}
+  .rreview .rrbadge i{width:0;height:0;border-left:15px solid #fff;border-top:10px solid transparent;border-bottom:10px solid transparent;margin-left:4px}
+  .rreview .rrtext{min-width:0}
+  .rreview .rrlabel{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#e00}
+  .rreview .rrtitle{font-weight:650;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
+  .rreview .rrmeta{font-size:12px;color:var(--muted)}
+  .rreview .ytbtn,.rreview .rrplay{justify-self:end}
+  .rrplay{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-ink);border:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:10px;white-space:nowrap}
+  .rreview .mplayer{grid-column:1 / -1}
+  .rreview.none{grid-template-columns:1fr;border-left-color:var(--line);color:var(--muted);font-size:13px;padding:10px 14px}
+  @media (max-width:560px){ .rreview{grid-template-columns:auto 1fr} .rreview .ytbtn,.rreview .rrplay{grid-column:1 / -1;justify-self:stretch;justify-content:center} .rreview .rrbadge{width:38px;height:38px} }
+  .standhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:26px 0 0;scroll-margin-top:12px}
+  .standhead h2{font-size:18px;margin:0}
   .fdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 1px;background:var(--muted)}
   .fdot.W{background:#16a34a} .fdot.L{background:#dc2626} .fdot.D{background:#9ca3af}
   @media (max-width:560px){ .hide-s{display:none} .mteam .tname{font-size:14px} .tlogo,.tinit{width:30px;height:30px;flex-basis:30px} .mscore{font-size:20px;min-width:52px} }
@@ -223,7 +238,6 @@
   </section>
 
   <section id="view-results" hidden><div id="resultsBox"></div></section>
-  <section id="view-table" hidden><div id="tableBox"></div></section>
   <section id="view-videos" hidden>
     <p class="intro">Match clips uploaded by approved members, newest first.</p>
     <div id="uploadBox"></div>
@@ -742,13 +756,13 @@ function uploadedPlayer(v){
 
 /* ======================= UI: NAVIGATION ======================= */
 let VIEW = 'bg';
-const VIEWS = ['bg', 'world', 'results', 'table', 'videos', 'account', 'admin'];
+const VIEWS = ['bg', 'world', 'results', 'videos', 'account', 'admin'];
 function go(v){ if (location.hash !== '#' + v) location.hash = v; else applyView(); }
 let SCROLL_TO = null;
 function applyView(){
   const v = (location.hash || '#bg').slice(1);
-  SCROLL_TO = v.startsWith('video-') ? 'v-' + v.slice(6) : null;   // #video-12 opens Videos at that clip
-  VIEW = SCROLL_TO ? 'videos' : VIEWS.includes(v) ? v : 'bg';
+  SCROLL_TO = v.startsWith('video-') ? 'v-' + v.slice(6) : v === 'table' ? 'standings' : null;   // #video-12 opens Videos at that clip
+  VIEW = v.startsWith('video-') ? 'videos' : v === 'table' ? 'results' : VIEWS.includes(v) ? v : 'bg';   // the table now sits under the results
   if (VIEW === 'admin' && !isAdmin() && AUTH !== 'loading') VIEW = 'account';
   $('#view-news').hidden = !(VIEW === 'bg' || VIEW === 'world');
   $('#scanArea').hidden = !(VIEW === 'bg' || VIEW === 'world');
@@ -756,7 +770,6 @@ function applyView(){
   $('#view-account').hidden = VIEW !== 'account';
   $('#view-admin').hidden = VIEW !== 'admin';
   $('#view-results').hidden = VIEW !== 'results';
-  $('#view-table').hidden = VIEW !== 'table';
   shown = PAGE_SIZE;
   renderAll();
   if (VIEW === 'admin') loadUsers();
@@ -766,7 +779,7 @@ function renderNav(){
   const stories = buildStories();
   const nb = stories.filter(s => s.scope === 'bg').length, nw = stories.filter(s => s.scope === 'world' && s.important).length;
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
-  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['table', 'Table', null], ['videos', 'Videos', VIDEOS.length],
+  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', VIDEOS.length],
     ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
   if (isAdmin()) items.push(['admin', 'Admin', pending || null]);
   $('#nav').innerHTML = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
@@ -775,7 +788,6 @@ function renderAll(){
   renderNav();
   if (VIEW === 'bg' || VIEW === 'world') render();
   else if (VIEW === 'results') renderResults();
-  else if (VIEW === 'table') renderTable();
   else if (VIEW === 'videos') renderVideos();
   else if (VIEW === 'account') renderAccount();
   else if (VIEW === 'admin') renderAdmin();
@@ -1223,20 +1235,25 @@ async function loadFootball(league, force){
   if (fresh && !force) return;
   FB.loading[league] = true; FB.err = '';
   try {
-    const [m, t] = await Promise.all([
+    const [m, t, rv] = await Promise.all([
       SB.from('football_matches').select('id,league,round,kickoff,status,home_name,away_name,home_logo,away_logo,home_score,away_score,ht_home,ht_away,short_video,long_video,other_videos,updated_at')
         .eq('league', league).eq('season', FB_SEASON).order('kickoff', { ascending: true }).limit(500),
       SB.from('football_standings').select('*').eq('league', league).eq('season', FB_SEASON).order('rank', { ascending: true }),
+      SB.from('football_rounds').select('round,review').eq('league', league).eq('season', FB_SEASON).not('review', 'is', null),
     ]);
     if (m.error) throw m.error;
     if (t.error) throw t.error;
-    FB.data[league] = { at: Date.now(), matches: m.data || [] };
+    // the round reviews are an extra: the results still show if they can't be read
+    const reviews = {};
+    if (rv.error) log('Round reviews could not be loaded: ' + rv.error.message);
+    else for (const x of rv.data || []) if (x.review && x.review.id) reviews[x.round] = x.review;
+    FB.data[league] = { at: Date.now(), matches: m.data || [], reviews };
     const rows = t.data || [], newest = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
     // a team that dropped out of the source table keeps its old row: show only the latest update
     FB.table[league] = rows.filter(r => !newest || Date.parse(newest) - Date.parse(r.updated_at) < 3600e3);
   } catch (e) { FB.err = e.message || String(e); log('Results could not be loaded: ' + FB.err); }
   FB.loading[league] = false;
-  if (VIEW === 'results') renderResults(); else if (VIEW === 'table') renderTable();
+  if (VIEW === 'results') renderResults();
 }
 function leagueBar(){
   return `<div class="lgbar">${Object.entries(LEAGUES).map(([k, l]) => `<button class="chip${FB.league === k ? ' on' : ''}" data-lg="${k}">${esc(l)}</button>`).join('')}</div>`;
@@ -1298,6 +1315,41 @@ function matchCard(m){
     ${player}
   </article>`;
 }
+// "Обзор на кръга" — the round's review show (Diema, uploaded by Gong.bg), shown above the round's matches
+function roundReviewHtml(lg, r, list, d){
+  const v = d.reviews && d.reviews[r], k = `review:${lg}:${r}`;
+  if (!v) {
+    // a note only once most of the round has been played; the review is usually up a day or two later
+    const done = list.filter(m => m.status === 'finished').length;
+    if (!list.length || done < Math.ceil(list.length * 0.8)) return '';
+    return '<div class="rreview none">Обзорът на кръга още не е качен в YouTube. Gong.bg обикновено го публикува ден-два след кръга.</div>';
+  }
+  const ytBtn = `<a class="ytbtn" href="${ytWatch(v.id)}" target="_blank" rel="noopener noreferrer"><span class="yti" aria-hidden="true"></span>Гледай в YouTube</a>`;
+  const open = v.embed !== false && FB.open.has(k);
+  // some owners only allow playing on YouTube: then the button goes straight there
+  const action = v.embed === false ? ytBtn : `<button class="rrplay" data-review="${esc(k)}" aria-expanded="${open}">${open ? 'Затвори' : '▶ Гледай обзора'}</button>`;
+  const player = open ? `<div class="mplayer">${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?autoplay=1&rel=0` })}
+      <div class="mfoot"><span class="mnote">Ако клипът не тръгва тук, гледай го в YouTube.</span>${ytBtn}</div></div>` : '';
+  return `<section class="rreview" aria-label="Обзор на кръга"><span class="rrbadge" aria-hidden="true"><i></i></span>
+    <div class="rrtext"><div class="rrlabel">Обзор на кръга</div><div class="rrtitle">${esc(v.title || 'Обзор на кръга')}</div>
+      <div class="rrmeta">${esc([chanName(v.channel), v.length].filter(Boolean).join(' · '))}</div></div>
+    ${action}${player}</section>`;
+}
+// the league's table, shown under the round's results
+function standingsHtml(lg){
+  const rows = FB.table[lg];
+  if (!rows || !rows.length) return '';
+  const upd = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
+  return `<div class="standhead" id="standings"><h2>Класиране — ${esc(LEAGUES[lg])} ${FB_SEASON}</h2>${upd ? `<span class="muted">обновено ${esc(bgDate(upd))}</span>` : ''}</div>
+    <div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
+    ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0); return `<tr><td>${r.rank ?? ''}</td>
+      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}</span></td><td>${r.played ?? ''}</td>
+      <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
+      <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
+      <td class="hide-s">${String(r.form || '').split('').map(c => `<span class="fdot ${esc(c)}" title="${({ W: 'победа', D: 'равен', L: 'загуба' })[c] || ''}"></span>`).join('')}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : ''}</p>`;
+}
 let RES_KEY = '';
 function renderResults(force){
   const box = $('#resultsBox');
@@ -1306,7 +1358,7 @@ function renderResults(force){
   if (!d) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Could not load: ' + FB.err) : 'Loading results…'}</p>`; loadFootball(lg); return; }
   loadFootball(lg);   // refresh quietly when older than 5 minutes
   const ms = d.matches;
-  if (!ms.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>'; return; }
+  if (!ms.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>' + standingsHtml(lg); return; }
   const rounds = [...new Set(ms.map(m => m.round))].sort((a, b) => a - b);
   const total = Math.max(...rounds);
   if (!FB.round[lg] || !rounds.includes(FB.round[lg])) FB.round[lg] = defaultRound(ms);
@@ -1323,41 +1375,21 @@ function renderResults(force){
       <div class="mid"><h2>Кръг ${r} от ${total}</h2><div class="muted">${esc(span)}${finished ? ` · видео за ${withVid} от ${finished} мача` : ''}</div>
         <select id="rndSel" aria-label="Round">${rounds.map(x => `<option value="${x}"${x === r ? ' selected' : ''}>Кръг ${x}</option>`).join('')}</select></div>
       <button data-rnd="${r + 1}" ${r >= total ? 'disabled' : ''} aria-label="Next round">›</button></div>
+    ${roundReviewHtml(lg, r, list, d)}
     ${list.map(matchCard).join('')}
-    <p class="muted">Results: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Videos: YouTube (Gong.bg and others) · updated every 30 minutes</p>`;
-}
-let TABLE_KEY = '';
-function renderTable(){
-  const box = $('#tableBox');
-  if (AUTH === 'off' || AUTH === 'error') { box.innerHTML = '<div class="warn">The table needs the database connection, which is not available right now.</div>'; return; }
-  const lg = FB.league, rows = FB.table[lg];
-  if (!rows) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Could not load: ' + FB.err) : 'Loading table…'}</p>`; loadFootball(lg); return; }
-  loadFootball(lg);
-  const upd = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
-  const key = lg + '|' + upd + '|' + rows.length;
-  if (key === TABLE_KEY && box.firstChild) return;
-  TABLE_KEY = key;
-  box.innerHTML = leagueBar() + `<h2 style="font-size:18px;margin:12px 0 0">Класиране ${esc(LEAGUES[lg])} ${FB_SEASON}</h2>
-    <div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
-    ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0); return `<tr><td>${r.rank ?? ''}</td>
-      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}</span></td><td>${r.played ?? ''}</td>
-      <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
-      <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
-      <td class="hide-s">${String(r.form || '').split('').map(c => `<span class="fdot ${esc(c)}" title="${({ W: 'победа', D: 'равен', L: 'загуба' })[c] || ''}"></span>`).join('')}</td></tr>`; }).join('')}
-    </tbody></table></div>
-    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${upd ? ' · обновено ' + esc(bgDate(upd)) : ''}${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : ''}</p>`;
+    ${standingsHtml(lg)}
+    <p class="muted">Results and table: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Videos: YouTube (Gong.bg and others) · updated every 30 minutes</p>`;
+  // an old #table link opens Results at the table
+  if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
 }
 function initFootballUI(){
-  const pick = e => {
-    const lg = e.target.closest('[data-lg]');
-    if (lg) { FB.league = lg.dataset.lg; saveJSON('bgRefWatch.fbLeague', FB.league); FB.open.clear(); TABLE_KEY = ''; VIEW === 'table' ? renderTable() : renderResults(true); return true; }
-    return false;
-  };
-  $('#tableBox').addEventListener('click', pick);
   $('#resultsBox').addEventListener('click', e => {
-    if (pick(e)) return;
+    const lg = e.target.closest('[data-lg]');
+    if (lg) { FB.league = lg.dataset.lg; saveJSON('bgRefWatch.fbLeague', FB.league); FB.open.clear(); renderResults(true); return; }
     const nav = e.target.closest('[data-rnd]');
     if (nav && !nav.disabled) { FB.round[FB.league] = Number(nav.dataset.rnd); FB.open.clear(); renderResults(true); return; }
+    const rp = e.target.closest('button.rrplay[data-review]');
+    if (rp) { const k = rp.dataset.review, was = FB.open.has(k); FB.open.clear(); if (!was) FB.open.add(k); renderResults(true); return; }
     const oc = e.target.closest('button.orow[data-oth]');
     if (oc) { FB.oth[oc.dataset.mid] = Number(oc.dataset.oth); renderResults(true); return; }
     const vb = e.target.closest('button.vbtn');
@@ -1372,10 +1404,10 @@ function initFootballUI(){
   });
   $('#resultsBox').addEventListener('change', e => { if (e.target.id === 'rndSel') { FB.round[FB.league] = Number(e.target.value); FB.open.clear(); renderResults(true); } });
   // a logo that fails to load becomes the team's initials
-  ['#resultsBox', '#tableBox'].forEach(id => $(id).addEventListener('error', e => {
+  $('#resultsBox').addEventListener('error', e => {
     const img = e.target;
     if (img.tagName === 'IMG' && img.classList.contains('tlogo')) { const sp = document.createElement('span'); sp.className = 'tinit'; sp.textContent = img.dataset.init || ''; img.replaceWith(sp); }
-  }, true));
+  }, true);
 }
 
 /* ======================= EVENTS & INIT ======================= */

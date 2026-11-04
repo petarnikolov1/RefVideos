@@ -3,7 +3,8 @@
 // Called by pg_cron: results every 30 minutes, videos every 5 minutes (with the key stored in the vault as football_sync_key).
 // Репортаж (short) and Разширен (long) are always Gong.bg's; every other channel's report of the match goes to other_videos.
 // Each video is checked with YouTube's oEmbed: embed:false means its owner only allows playing it on YouTube.
-// Body (JSON, all optional): { results: true, videos: 10, dry: false, ytTest: "search words" }
+// It also finds each played round's "Обзор на кръга" (Diema's round review, uploaded by Gong.bg) for public.football_rounds.
+// Body (JSON, all optional): { results: true, rounds: 0, videos: 10, dry: false, ytTest: "search words" }
 import * as L from './lib.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -82,6 +83,7 @@ async function rankOthers(list: any[], keep: any[] = []) {
 }
 // Gong posts its reports within a day or two: recent matches are retried on the back-off schedule (up to 8 times),
 // a match older than 10 days gets one search
+const LEAGUE_NAME: Record<string, string> = { efbet: 'efbet Лига', mrbit: 'Втора лига' };
 const maxTries = (m: any) => Date.now() - Date.parse(m.kickoff) > 10 * 864e5 ? 1 : 8;
 const BACKOFF_H = [0, 3, 12, 24, 72];
 
@@ -137,7 +139,46 @@ Deno.serve(async (req) => {
     } catch (e) { out.mrbitError = String((e as Error).message ?? e); }
   }
 
-  // 2. videos for finished matches that don't have them yet (a few per run, newest first)
+  // 2. "Обзор на кръга" (Diema's round review show, uploaded by Gong.bg) for every played round.
+  //    A round is searched once most of it has been played, then after 3, 6, 12 and 24 hours (Gong posts the show a day
+  //    or two later, sometimes after an international break); a round older than two weeks gets two searches.
+  //    One search usually brings up the reviews of other rounds too, and those are saved as well.
+  const nr = Math.max(0, Math.min(Number(body.rounds ?? 0), 10));
+  if (nr && !dry) {
+    const rv: Record<string, any> = out.rounds = { searches: 0, found: [] as string[], errors: [] as string[] };
+    try {
+      const info: any[] = await rpc('football_round_info', { p_season: L.SEASON });
+      const now = Date.now(), have = new Set(info.filter(r => r.has_review).map(r => r.league + '|' + r.round));
+      const due = info.filter(r => r.played > 0 && !r.has_review && Date.parse(r.main_end) < now
+          && r.tries < (now - Date.parse(r.main_end) > 14 * 864e5 ? 2 : 12)
+          && (!r.checked_at || now - Date.parse(r.checked_at) >= [0, 3, 6, 12, 24][Math.min(r.tries, 4)] * 3600e3))
+        .sort((a, b) => Number(!!a.checked_at) - Number(!!b.checked_at) || Date.parse(b.main_end) - Date.parse(a.main_end));
+      const save = (row: Record<string, unknown>) => rest('football_rounds?on_conflict=league,season,round', { method: 'POST',
+        body: JSON.stringify([{ season: L.SEASON, updated_at: new Date().toISOString(), ...row }]), headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+      for (const r of due) {
+        if (rv.searches >= nr || Date.now() - started > 40000) break;
+        const k = r.league + '|' + r.round;
+        if (have.has(k)) continue;                                   // found by an earlier search in this run
+        if (rv.searches) await sleep(1800 + Math.random() * 1200);
+        rv.searches++;
+        let vids: any[];
+        try { vids = await youtube(`Обзор на кръга ${r.league === 'efbet' ? 'efbet Лига' : 'Втора лига'} ${r.round} кръг`); }
+        catch (e) { rv.errors.push(String((e as Error).message)); break; }   // YouTube refused: try again next run
+        for (const [key, video] of L.pickRoundReviews(vids, info)) {
+          if (have.has(key)) continue;
+          const e = await embeddable(video.id);
+          if (e === 'gone') continue;
+          const [league, round] = key.split('|');
+          await save({ league, round: Number(round), review: { ...video, embed: e } });
+          have.add(key);
+          rv.found.push(`${LEAGUE_NAME[league] ?? league} ${round}${e ? '' : ' (YouTube only)'}`);
+        }
+        if (!have.has(k)) await save({ league: r.league, round: r.round, tries: r.tries + 1, checked_at: new Date().toISOString() });
+      }
+    } catch (e) { out.roundsError = String((e as Error).message ?? e); }
+  }
+
+  // 3. videos for finished matches that don't have them yet (a few per run, newest first)
   const n = Math.max(0, Math.min(Number(body.videos ?? 6), 40));
   if (n && !dry) {
     const v: Record<string, any> = out.videos = { checked: 0, short: 0, long: 0, others: 0, flagged: 0, searches: 0, embedUnknown: 0, stoppedEarly: false, errors: [] as string[], found: [] as string[] };

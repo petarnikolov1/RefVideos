@@ -256,7 +256,7 @@ export function cityConflict(title, hit, teamName) {
 const ROMAN = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12, xiii: 13, xiv: 14, xv: 15, xvi: 16, xvii: 17, xviii: 18, xix: 19, xx: 20, xxi: 21, xxii: 22, xxiii: 23, xxiv: 24, xxv: 25, xxvi: 26, xxvii: 27, xxviii: 28, xxix: 29, xxx: 30 };
 function roundIn(title) {
   const t = String(title).toLowerCase();
-  const m = t.match(/(?<![\p{L}\p{N}])(\d{1,2})(?:-?(?:ви|ри|ти|ми|и))?\s*кръг/u) || t.match(/кръг\s*[-–]?\s*(\d{1,2})(?!\d)/);
+  const m = t.match(/(?<![\p{L}\p{N}])(\d{1,2})(?:-?(?:ви|ри|ти|ми|и))?\.?\s*кръг/u) || t.match(/кръг\s*[-–]?\s*(\d{1,2})(?!\d)/);
   if (m) return Number(m[1]);
   const r = t.match(/(?<![\p{L}])([ivx]{1,6})\s*кръг/u) || t.match(/кръг\s*[-–]?\s*([ivx]{1,6})(?![\p{L}])/u);
   return r && ROMAN[r[1]] ? ROMAN[r[1]] : null;
@@ -323,6 +323,59 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
   const all = cands.filter(c => c.v.seconds >= 30 && c.v.seconds <= 2100 && (c.ident || headline(c)))   // no hour-long streams
     .sort((a, b) => b.ch - a.ch || (b.ident - a.ident));
   return { short: pack(shorts[0]), long: pack(longs[0]), shorts: shorts.slice(0, 6).map(pack), longs: longs.slice(0, 6).map(pack), all: all.slice(0, 15).map(pack) };
+}
+
+/* ───────────── round reviews: Gong.bg's "Обзор на кръга" show ───────────── */
+// "Обзор на кръга в efbet Лига (14 кръг, 3.11.2026)", "Обзор на кръга в Mr Bit Втора лига (14 кръг, 04.11.2026)",
+// sometimes only a date ("Обзор на кръга в efbet Лига (3.11.2026)") or no league ("Обзор на кръга (7 кръг, 1.09.2026)")
+const REVIEW_RX = /обзор(?:а)? на (?:кръга|\d{1,2}(?:-?(?:ви|ри|ти|ми|и))?\.?\s*кръг|(?:efbet|ефбет|първа(?:та)? лига|втора(?:та)? лига|mr\.?\s?bit))/i;
+const NOT_REVIEW_RX = /героите|преди кръга|отбор(?:ът)? на кръга|гол(?:ът|овете)? на кръга|юнош|(?<![\p{L}\p{N}])u ?1\d|жени|смях/iu;
+export function reviewLeague(title) {
+  const t = String(title).toLowerCase();
+  const e = /efbet|ефбет|първа(?:та)? (?:професионална )?лига|елит/.test(t);
+  const m = /втора(?:та)? (?:професионална )?лига|mr\.?\s?bit|мр\.?\s?бит/.test(t);
+  return e && !m ? 'efbet' : m && !e ? 'mrbit' : null;
+}
+export function titleDate(title) {
+  const m = String(title).match(/(?<!\d)(\d{1,2})\.(\d{1,2})\.(20\d\d)(?!\d)/);
+  if (!m) return null;
+  const t = Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]), 12);
+  return Number.isNaN(t) ? null : t;
+}
+// vids: YouTube search results; rounds: [{ league, round, first_kickoff, main_end }] (main_end = when most of the round
+// has been played). Returns Map "league|round" → video, for every round whose review is among the results.
+export function pickRoundReviews(vids, rounds, now = Date.now()) {
+  const day = 864e5, best = new Map();
+  for (const v of vids) {
+    const title = String(v.title || '');
+    if (!REVIEW_RX.test(title) || NOT_REVIEW_RX.test(title)) continue;
+    if (!/gong|diema|диема/i.test(v.channel || '')) continue;               // the show is Diema's, uploaded by Gong.bg
+    if (!v.seconds || v.seconds < 900 || v.seconds > 3 * 3600) continue;
+    const sn = seasonIn(title); if (sn && sn !== SEASON) continue;
+    const lg = reviewLeague(title), rd = roundIn(title), dt = titleDate(title), age = ageDays(v.published);
+    if (!dt && !(rd && lg)) continue;                                        // nothing to tell the round by
+    let pick = null, gap = Infinity;
+    for (const r of rounds) {
+      if ((lg && r.league !== lg) || (rd && r.round !== rd)) continue;
+      const fk = Date.parse(r.first_kickoff), me = Date.parse(r.main_end);
+      if (!fk || !me || me > now) continue;
+      if (age > (now - fk) / day + 2) continue;                              // published before the round began
+      let g = 0;
+      if (dt) {
+        // the show airs a day or two after the round (up to two weeks around international breaks)
+        const lo = rd && lg ? fk - day : me - day / 2, hi = me + (rd ? 14 : 5) * day;
+        if (dt < lo || dt > hi) continue;
+        g = Math.abs(dt - me);
+      }
+      if (g < gap) { gap = g; pick = r; }
+    }
+    if (!pick) continue;
+    const key = pick.league + '|' + pick.round, sure = (rd ? 2 : 0) + (lg ? 1 : 0);
+    const prev = best.get(key);
+    if (prev && prev.sure >= sure) continue;
+    best.set(key, { sure, video: { id: v.id, title: title.slice(0, 200), channel: String(v.channel || '').slice(0, 80), length: v.length, seconds: v.seconds } });
+  }
+  return new Map([...best].map(([k, x]) => [k, x.video]));
 }
 
 // the short way a team is written in report titles, for searching: "Левски София" → "Левски",

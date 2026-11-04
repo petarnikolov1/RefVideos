@@ -5,9 +5,10 @@
 --   football_matches    every match of the season: round, kickoff, teams, logos, score, half-time,
 --                       and the short / extended YouTube report once found (readable by everyone)
 --   football_standings  the league tables (readable by everyone)
+--   football_rounds     each round's "Обзор на кръга" (Diema's round review, uploaded by Gong.bg to YouTube)
 --   private.football_sync_log   what each sync run did
 --   two scheduled jobs that call the Edge Function "football-sync" (supabase/functions/football-sync):
---     football-results  at :02 and :32 every hour — results, fixtures, tables
+--     football-results  at :02 and :32 every hour — results, fixtures, tables, and up to 3 round-review searches
 --     football-videos   every 5 minutes — looks for the reports of up to 10 played matches
 --
 -- Deploy the Edge Function with JWT verification OFF; it checks its own key instead
@@ -63,6 +64,20 @@ create table if not exists public.football_standings (
 alter table public.football_standings enable row level security;
 drop policy if exists "football standings: public read" on public.football_standings;
 create policy "football standings: public read" on public.football_standings for select using (true);
+
+create table if not exists public.football_rounds (
+  league     text not null,
+  season     text not null,
+  round      int  not null,
+  review     jsonb,                       -- Gong.bg's "Обзор на кръга" video for the round
+  tries      int  not null default 0,
+  checked_at timestamptz,
+  updated_at timestamptz not null default now(),
+  primary key (league, season, round)
+);
+alter table public.football_rounds enable row level security;
+drop policy if exists "football_rounds: public read" on public.football_rounds;
+create policy "football_rounds: public read" on public.football_rounds for select using (true);
 
 create schema if not exists private;
 create table if not exists private.football_sync_log (
@@ -136,6 +151,24 @@ begin
   return n;
 end; $$;
 
+-- every round of the season with its dates: first kickoff and when most of it (80%) has been played
+create or replace function public.football_round_info(p_season text)
+returns table(league text, round int, first_kickoff timestamptz, main_end timestamptz, played int, total int,
+              has_review boolean, tries int, checked_at timestamptz)
+language sql stable security definer set search_path = '' as $$
+  with r as (
+    select m.league, m.round, min(m.kickoff) first_kickoff,
+           percentile_disc(0.8) within group (order by m.kickoff) main_end,
+           count(*) filter (where m.home_score is not null)::int played, count(*)::int total
+    from public.football_matches m
+    where m.season = p_season and m.kickoff is not null and m.round is not null
+    group by m.league, m.round)
+  select r.league, r.round, r.first_kickoff, r.main_end, r.played, r.total,
+         (f.review is not null), coalesce(f.tries, 0), f.checked_at
+  from r left join public.football_rounds f on f.league = r.league and f.season = p_season and f.round = r.round
+  order by r.league, r.round;
+$$;
+
 create or replace function public.football_log(details jsonb) returns void
 language sql security definer set search_path = '' as $$
   insert into private.football_sync_log (details) values (details);
@@ -145,10 +178,12 @@ revoke execute on function public.football_sync_key_ok(text) from public, anon, 
 revoke execute on function public.football_video_queue(int) from public, anon, authenticated;
 revoke execute on function public.football_replace_standings(text, text, jsonb) from public, anon, authenticated;
 revoke execute on function public.football_log(jsonb) from public, anon, authenticated;
+revoke execute on function public.football_round_info(text) from public, anon, authenticated;
 grant execute on function public.football_sync_key_ok(text) to service_role;
 grant execute on function public.football_video_queue(int) to service_role;
 grant execute on function public.football_replace_standings(text, text, jsonb) to service_role;
 grant execute on function public.football_log(jsonb) to service_role;
+grant execute on function public.football_round_info(text) to service_role;
 
 -- ───────────────────────── schedule ─────────────────────────
 -- For another project, change the address to https://<project-ref>.supabase.co/functions/v1/football-sync
@@ -156,8 +191,8 @@ select cron.schedule('football-results', '2,32 * * * *', $job$
   select net.http_post(
     url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/football-sync',
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
-    body := '{"results": true, "videos": 0}'::jsonb,
-    timeout_milliseconds := 60000);
+    body := '{"results": true, "rounds": 3, "videos": 0}'::jsonb,
+    timeout_milliseconds := 90000);
 $job$);
 
 select cron.schedule('football-videos', '*/5 * * * *', $job$
