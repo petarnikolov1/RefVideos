@@ -239,6 +239,20 @@ export function mentions(title, aliasList) {
   for (const h of hits) if (!kept.some(k => h.pos < k.end && k.pos < h.end)) kept.push(h);
   return kept.sort((a, b) => a.pos - b.pos);
 }
+// a city written right after a team's name that is not that team's city: "„Спартак“ (Варна)" is not Спартак Плевен.
+// Checked only for teams whose name has a city in it (a club without one may be written with its town).
+const CITY_AFTER = new RegExp('^(?:' + ['горна оряховица', 'г оряховица', 'велико търново', 'стара загора', 'варна', 'пловдив', 'враца', 'софия', 'плевен',
+  'благоевград', 'бургас', 'русе', 'кърджали', 'своге', 'добрич', 'оряховица', 'търново', 'самоков', 'сандански', 'пазарджик', 'несебър', 'монтана',
+  'разград', 'ловеч', 'хасково', 'шумен', 'габрово', 'сливен', 'ямбол', 'перник', 'кюстендил', 'дупница', 'петрич', 'видин', 'бенковски', 'вн', 'пд', 'сф', 'вр', 'пл']
+  .join('|') + ')(?![\\p{L}\\p{N}])', 'u');
+export function cityConflict(title, hit, teamName) {
+  const own = new Set();
+  for (const w of normName(teamName).split(' ')) if (CITY[w]) for (const f of CITY[w]) own.add(f);
+  if (!own.size) return false;
+  const t = normName(title).replace(/[()]/g, ' ').replace(/\s+/g, ' ');
+  const m = t.slice(hit.end).trimStart().match(CITY_AFTER);
+  return !!m && !own.has(m[0]);
+}
 const ROMAN = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12, xiii: 13, xiv: 14, xv: 15, xvi: 16, xvii: 17, xviii: 18, xix: 19, xx: 20, xxi: 21, xxii: 22, xxiii: 23, xxiv: 24, xxv: 25, xxvi: 26, xxvii: 27, xxviii: 28, xxix: 29, xxx: 30 };
 function roundIn(title) {
   const t = String(title).toLowerCase();
@@ -252,7 +266,7 @@ function seasonIn(title) {
   return m ? `${m[1]}/${m[2].slice(-2)}` : null;
 }
 const scoresIn = title => [...String(title).matchAll(/(?<![\d\/])(\d{1,2})\s*(?::|\s[-–]\s)\s*(\d{1,2})(?![\d\/])/g)].map(m => [Number(m[1]), Number(m[2])]);
-const NOT_A_REPORT = /анализ|студио|пресконференц|интервю|изявлен|коментар|подкаст|предаване|преди мача|преди кръга|обзор на кръга|прогноз|гол за |голът|головете|спасяван|треньор|след мача|загрявк|тренировк|пълен мач|full match|live|на живо|дерби на седмицата/i;
+const NOT_A_REPORT = /анализ|студио|пресконференц|интервю|изявлен|коментар|подкаст|предаване|преди мача|преди кръга|обзор на кръга|прогноз|гол за |голът|головете|спасяван|треньор|след мача|загрявк|тренировк|пълен мач|full match|live|на живо|дерби на седмицата|влог|vlog/i;
 // whole-word signs of a talk show, interview or a youth/women's match rather than a match report
 const NOT_A_REPORT_W = /(?<![\p{L}])(?:след|преди|коментирайте|гласът на фена|реакция|юноши|юношеска|жени|девойки|момчета|деца)(?![\p{L}])|(?<![\p{L}\p{N}])u ?1\d(?![\p{N}])/iu;
 const translit = s => s.replace(/[а-я]/g, c => ({ а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sht', ъ: 'a', ь: 'y', ю: 'yu', я: 'ya' })[c] || c).replace(/tssk/g, 'csk');
@@ -280,6 +294,7 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
     const ms = mentions(v.title, aliasList);
     const h = ms.find(x => x.name === match.home_name), a = ms.find(x => x.name === match.away_name);
     if (!h || !a || h.pos > a.pos) continue;                                       // both teams, home first
+    if (cityConflict(v.title, h, match.home_name) || cityConflict(v.title, a, match.away_name)) continue;   // another club's town
     if (ms.some(x => x.name !== match.home_name && x.name !== match.away_name)) continue;
     const rd = roundIn(v.title); if (rd && rd !== match.round) continue;
     const sn = seasonIn(v.title); if (sn && sn !== SEASON) continue;
