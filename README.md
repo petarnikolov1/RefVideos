@@ -33,6 +33,7 @@ The Edge Function **football-sync** runs on Supabase on a schedule. The site onl
 
 - **Results, fixtures, tables:** at :02 and :32 every hour, from efbetleague.com (1st league) and mr-bit.bg (2nd league).
 - **Videos:** every 5 minutes, up to 8 played matches still missing a report are searched on YouTube. A match is retried after 3 hours, 12 hours, a day, then every 3 days. The search stops after 8 tries in the 1st league and 4 in the 2nd. A video is only accepted when its title names both teams with the home team first, any score, round or season in it agrees with the match, and it isn't older than the match. Analysis shows and interviews are skipped.
+- **Playable here or only on YouTube.** Some owners (Gong.bg among them) block their videos from playing on other sites. Every video is checked with YouTube. When a blocked one has a playable version (for example the league's own highlights), that one is used. Otherwise the button shows a red **YouTube ↗** badge and opens the video on YouTube. Under every video that plays on the page there is a **Гледай в YouTube** button too.
 - If a result is corrected, its videos are cleared and found again.
 
 To redeploy the function: `supabase functions deploy football-sync --no-verify-jwt`.

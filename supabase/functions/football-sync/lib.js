@@ -266,12 +266,14 @@ export function channelRank(channel, match) {
   return 0;
 }
 
-// choose the short and the long report for a match from search results
+// choose the short and the long report for a match from search results.
+// short/long are the best picks; shorts/longs are all acceptable ones, best first (the caller may skip
+// videos whose owner doesn't allow playing them on other sites)
 export function pickVideos(match, vids, aliasList, now = Date.now()) {
   const days = (now - Date.parse(match.kickoff)) / 864e5;
-  const cands = [];
+  const cands = [], seen = new Set();
   for (const v of vids) {
-    if (!v.seconds || NOT_A_REPORT.test(v.title)) continue;
+    if (!v.seconds || seen.has(v.id) || NOT_A_REPORT.test(v.title)) continue;
     if (ageDays(v.published) > days + 1.5) continue;                              // older than the match
     const ms = mentions(v.title, aliasList);
     const h = ms.find(x => x.name === match.home_name), a = ms.find(x => x.name === match.away_name);
@@ -283,17 +285,18 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
     const rd = roundIn(v.title); if (rd && rd !== match.round) continue;
     const sn = seasonIn(v.title); if (sn && sn !== SEASON) continue;
     const ch = channelRank(v.channel, match); if (!ch) continue;
+    seen.add(v.id);
     cands.push({ v, scoreOk, ch, ext: /разширен|пълен репортаж|extended/i.test(v.title), rep: /репортаж|highlights|обзор/i.test(v.title) });
   }
   const pack = c => c && { id: c.v.id, title: c.v.title.slice(0, 200), channel: c.v.channel.slice(0, 80), length: c.v.length, seconds: c.v.seconds };
-  const short = cands.filter(c => c.scoreOk && c.v.seconds >= 100 && c.v.seconds < 540)
-    .sort((a, b) => b.ch - a.ch || (b.rep - a.rep) || a.v.seconds - b.v.seconds)[0];
+  const shorts = cands.filter(c => c.scoreOk && c.v.seconds >= 100 && c.v.seconds < 540)
+    .sort((a, b) => b.ch - a.ch || (b.rep - a.rep) || a.v.seconds - b.v.seconds);
   // a long video without the score or "разширен" in its title is only taken from Gong/the league, and only
   // at the usual extended-report length (Gong sometimes gives its ~20-minute reports a headline instead)
   const headline = c => c.ch >= 2 && c.v.seconds >= 900 && c.v.seconds <= 1500;
-  const long = cands.filter(c => c.v.seconds >= 540 && c.v.seconds <= 3600 && (c.scoreOk || c.ext || headline(c)) && (!short || c.v.id !== short.v.id))
-    .sort((a, b) => (b.ext - a.ext) || b.ch - a.ch || (b.scoreOk - a.scoreOk))[0];
-  return { short: pack(short), long: pack(long) };
+  const longs = cands.filter(c => c.v.seconds >= 540 && c.v.seconds <= 3600 && (c.scoreOk || c.ext || headline(c)))
+    .sort((a, b) => (b.ext - a.ext) || b.ch - a.ch || (b.scoreOk - a.scoreOk));
+  return { short: pack(shorts[0]), long: pack(longs[0]), shorts: shorts.slice(0, 6).map(pack), longs: longs.slice(0, 6).map(pack) };
 }
 
 // search words for a team: no ПФК/ФК, no founding years (except where they tell two clubs apart)

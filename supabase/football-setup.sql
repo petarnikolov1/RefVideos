@@ -32,7 +32,7 @@ create table if not exists public.football_matches (
   away_score        int,
   ht_home           int,
   ht_away           int,
-  short_video       jsonb,          -- {id, title, length, seconds, channel}
+  short_video       jsonb,          -- {id, title, length, seconds, channel, embed}
   long_video        jsonb,
   video_tries       int not null default 0,
   videos_checked_at timestamptz,
@@ -96,17 +96,23 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from vault.decrypted_secrets where name = 'football_sync_key' and decrypted_secret = k);
 $$;
 
--- played matches still missing a report; a match is retried after 3 h, 12 h, 1 day, then every 3 days
--- (up to 8 tries in efbet Лига, 4 in the 2nd league, where many matches never get a report)
+-- played matches still missing a report, or whose report only plays on YouTube (embed:false — the owner blocks
+-- other sites); a match is retried after 3 h, 12 h, 1 day, then every 3 days (up to 8 tries in efbet Лига, 4 in the
+-- 2nd league, where many matches never get a report). Videos saved before the playable check come first.
 create or replace function public.football_video_queue(n int) returns setof public.football_matches
 language sql stable security definer set search_path = '' as $$
   select * from public.football_matches m
   where m.status = 'finished' and m.kickoff < now() - interval '2 hours'
-    and (m.short_video is null or (m.long_video is null and m.league = 'efbet'))
-    and m.video_tries < case when m.league = 'efbet' then 8 else 4 end
-    and (m.videos_checked_at is null or m.videos_checked_at < now() - case least(m.video_tries, 4)
-          when 0 then interval '0' when 1 then interval '3 hours' when 2 then interval '12 hours' when 3 then interval '1 day' else interval '3 days' end)
-  order by m.videos_checked_at nulls first, m.kickoff desc
+    and (
+      (m.short_video is not null and not (m.short_video ? 'embed')) or (m.long_video is not null and not (m.long_video ? 'embed'))
+      or ((m.short_video is null or m.short_video->>'embed' = 'false'
+           or (m.league = 'efbet' and (m.long_video is null or m.long_video->>'embed' = 'false')))
+          and m.video_tries < case when m.league = 'efbet' then 8 else 4 end
+          and (m.videos_checked_at is null or m.videos_checked_at < now() - case least(m.video_tries, 4)
+                when 0 then interval '0' when 1 then interval '3 hours' when 2 then interval '12 hours' when 3 then interval '1 day' else interval '3 days' end))
+    )
+  order by ((m.short_video is not null and not (m.short_video ? 'embed')) or (m.long_video is not null and not (m.long_video ? 'embed'))) desc,
+           m.videos_checked_at nulls first, m.kickoff desc
   limit greatest(0, least(n, 80));
 $$;
 

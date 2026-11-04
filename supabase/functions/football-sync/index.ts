@@ -1,6 +1,7 @@
 // football-sync: keeps public.football_matches / public.football_standings up to date for efbet Лига and
 // Mr Bit Втора лига, and finds each finished match's short report and extended report on YouTube.
-// Called every 30 minutes by pg_cron (with the key stored in the vault as football_sync_key).
+// Called by pg_cron: results every 30 minutes, videos every 5 minutes (with the key stored in the vault as football_sync_key).
+// Each video is checked with YouTube's oEmbed: embed:false means its owner only allows playing it on YouTube.
 // Body (JSON, all optional): { results: true, videos: 10, dry: false, ytTest: "search words" }
 import * as L from './lib.js';
 
@@ -32,6 +33,39 @@ async function youtube(q: string) {
   return L.parseYouTube(html);
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// Can the video be played on other sites? YouTube's oEmbed answers 401 when the owner has turned that off.
+// true = playable here, false = only on YouTube, 'gone' = deleted/private. Unknown answers count as playable
+// (the page still offers the YouTube button), so a YouTube hiccup never blocks the queue.
+const embedCache = new Map<string, boolean | 'gone'>();
+let embedUnknown = 0;
+async function embeddable(id: string): Promise<boolean | 'gone'> {
+  if (embedCache.has(id)) return embedCache.get(id)!;
+  let res: boolean | 'gone' = true;
+  try {
+    const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + id),
+      { headers: { 'User-Agent': L.UA }, signal: AbortSignal.timeout(8000) });
+    await r.body?.cancel();
+    if (r.status === 401) res = false;
+    else if (r.status === 400 || r.status === 403 || r.status === 404) res = 'gone';
+    else if (r.status !== 200) embedUnknown++;
+  } catch { embedUnknown++; }
+  embedCache.set(id, res);
+  return res;
+}
+// first playable video of a ranked list; if none is playable, the best one (to open on YouTube)
+async function choose(list: any[]) {
+  let fallback: any = null;
+  for (const c of (list ?? []).slice(0, 4)) {
+    const e = await embeddable(c.id);
+    if (e === 'gone') continue;
+    if (e) return { ...c, embed: true };
+    fallback ??= { ...c, embed: false };
+  }
+  return fallback;
+}
+const MAX_TRIES: Record<string, number> = { efbet: 8, mrbit: 4 };
+const BACKOFF_H = [0, 3, 12, 24, 72];
 
 async function upsertMatches(rows: any[]) {
   for (let i = 0; i < rows.length; i += 100)
@@ -88,7 +122,7 @@ Deno.serve(async (req) => {
   // 2. videos for finished matches that don't have them yet (a few per run, newest first)
   const n = Math.max(0, Math.min(Number(body.videos ?? 6), 40));
   if (n && !dry) {
-    const v = out.videos = { checked: 0, short: 0, long: 0, searches: 0, stoppedEarly: false, errors: [] as string[], found: [] as string[] };
+    const v: Record<string, any> = out.videos = { checked: 0, short: 0, long: 0, flagged: 0, searches: 0, embedUnknown: 0, stoppedEarly: false, errors: [] as string[], found: [] as string[] };
     try {
       const queue: any[] = await rpc('football_video_queue', { n });
       const teamRows: any[] = await rest(`football_standings?select=league,team_name&season=eq.${encodeURIComponent(L.SEASON)}`);
@@ -98,28 +132,58 @@ Deno.serve(async (req) => {
       const aliases = { efbet: L.teamAliases([...teams.efbet]), mrbit: L.teamAliases([...teams.mrbit]) } as Record<string, any>;
       for (const m of queue) {
         if (Date.now() - started > 100000) break;                       // stay well inside the time limit
-        const home = L.searchName(m.home_name), away = L.searchName(m.away_name);
-        let vids: any[] = [], failed = false;
-        // YouTube slows down rapid searches: pause between them, and stop the whole run on the first refusal
-        const search = async (q: string) => {
-          if (failed) return;
-          if (v.searches) await sleep(1800 + Math.random() * 1200);
-          v.searches++;
-          try { vids = vids.concat(await youtube(q)); } catch (e) { failed = true; v.errors.push(String((e as Error).message)); }
-        };
-        await search(`${home} ${away} ${m.home_score}:${m.away_score}`);
-        let pick = L.pickVideos(m, vids, aliases[m.league]);
-        if (!pick.short && !m.short_video) { await search(`${home} ${away} репортаж`); pick = L.pickVideos(m, vids, aliases[m.league]); }
-        if (m.league === 'efbet' && !pick.long && !m.long_video) { await search(`${home} ${away} разширен репортаж`); pick = L.pickVideos(m, vids, aliases[m.league]); }
-        // a refused search is not counted as a try (the match comes back next run); anything already found is kept
-        const patch: Record<string, any> = failed ? {} : { video_tries: m.video_tries + 1, videos_checked_at: new Date().toISOString() };
-        if (pick.short && !m.short_video) { patch.short_video = pick.short; v.short++; }
-        if (pick.long && !m.long_video) { patch.long_video = pick.long; v.long++; }
+        const cur: Record<string, any> = { short: m.short_video, long: m.long_video };
+        const patch: Record<string, any> = {};
+        // 1. videos saved before the "playable here?" check get checked now
+        let justBlocked = false;
+        for (const k of ['short', 'long']) {
+          const sv = cur[k];
+          if (!sv || sv.embed !== undefined) continue;
+          const e = await embeddable(sv.id);
+          cur[k] = e === 'gone' ? null : { ...sv, embed: e };
+          patch[k + '_video'] = cur[k];
+          v.flagged++;
+          if (e !== true) justBlocked = true;
+        }
+        // 2. look for a missing video, or a playable one instead of one that only plays on YouTube
+        const wantShort = !cur.short || cur.short.embed === false;
+        const wantLong = m.league === 'efbet' ? (!cur.long || cur.long.embed === false) : !cur.long;
+        const due = !m.videos_checked_at || Date.now() - Date.parse(m.videos_checked_at) >= BACKOFF_H[Math.min(m.video_tries, 4)] * 3600e3;
+        const searchNow = (wantShort || (m.league === 'efbet' && wantLong)) && m.video_tries < (MAX_TRIES[m.league] ?? 4) && (due || justBlocked);
+        let failed = false;
+        if (searchNow) {
+          const home = L.searchName(m.home_name), away = L.searchName(m.away_name);
+          let vids: any[] = [];
+          // YouTube slows down rapid searches: pause between them, and stop the whole run on the first refusal
+          const search = async (q: string) => {
+            if (failed) return;
+            if (v.searches) await sleep(1800 + Math.random() * 1200);
+            v.searches++;
+            try { vids = vids.concat(await youtube(q)); } catch (e) { failed = true; v.errors.push(String((e as Error).message)); }
+          };
+          const better = (k: string, c: any) => c && (!cur[k] || (cur[k].embed === false && c.embed && c.id !== cur[k].id));
+          let best: Record<string, any> = {};
+          const pickAll = async () => {
+            const p = L.pickVideos(m, vids, aliases[m.league]);
+            if (wantShort) best.short = await choose(p.shorts);
+            if (wantLong) best.long = await choose(p.longs);
+          };
+          await search(`${home} ${away} ${m.home_score}:${m.away_score}`);
+          await pickAll();
+          if (wantShort && !best.short?.embed) { await search(`${home} ${away} репортаж`); await pickAll(); }
+          if (m.league === 'efbet' && wantLong && !best.long?.embed) { await search(`${home} ${away} разширен репортаж`); await pickAll(); }
+          for (const k of ['short', 'long']) if (better(k, best[k])) { cur[k] = best[k]; patch[k + '_video'] = best[k]; v[k as 'short' | 'long']++; }
+          // a refused search is not counted as a try (the match comes back next run); anything already found is kept
+          if (!failed) { patch.video_tries = m.video_tries + 1; patch.videos_checked_at = new Date().toISOString(); }
+        }
         if (Object.keys(patch).length) await rest(`football_matches?id=eq.${encodeURIComponent(m.id)}`, { method: 'PATCH', body: JSON.stringify(patch), headers: { Prefer: 'return=minimal' } });
-        if (patch.short_video || patch.long_video) v.found.push(`${m.home_name} – ${m.away_name}: ${patch.short_video ? 'short' : ''}${patch.short_video && patch.long_video ? '+' : ''}${patch.long_video ? 'long' : ''}`);
+        const tag = (k: string) => patch[k + '_video'] && patch[k + '_video'].id !== (k === 'short' ? m.short_video : m.long_video)?.id ? `${k}${patch[k + '_video'].embed ? '' : ' (YouTube only)'}` : '';
+        const got = [tag('short'), tag('long')].filter(Boolean).join(' + ');
+        if (got) v.found.push(`${m.home_name} – ${m.away_name}: ${got}`);
         if (failed) { v.stoppedEarly = true; break; }
         v.checked++;
       }
+      v.embedUnknown = embedUnknown;
       v.errors = [...new Set(v.errors)].slice(0, 5);
       v.found = v.found.slice(0, 40);
     } catch (e) { out.videosError = String((e as Error).message ?? e); }

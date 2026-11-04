@@ -136,7 +136,17 @@
   .vbtn .ic{color:#2563eb;font-size:15px}
   .vbtn .len{font-weight:400;color:var(--muted)}
   .vbtn.on{background:var(--accent);color:var(--accent-ink)} .vbtn.on .ic,.vbtn.on .len{color:var(--accent-ink)}
+  .vbtns{flex-wrap:wrap;justify-content:flex-end}
+  a.vbtn{color:inherit;text-decoration:none}
+  .vbtn .ytbadge{background:#e00;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px;font-weight:700;letter-spacing:.2px}
+  .vbtn.yt:hover{background:var(--line)}
   .mplayer .player{margin:10px 0 2px}
+  .mfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;flex-wrap:wrap}
+  .mfoot .mnote{margin:0;flex:1 1 240px}
+  .ytbtn{display:inline-flex;align-items:center;gap:8px;background:#e00;color:#fff;font-weight:700;font-size:14px;padding:10px 16px;border-radius:10px;text-decoration:none;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+  .ytbtn:hover{background:#c00;color:#fff}
+  .ytbtn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .ytbtn .yti{width:0;height:0;border-left:11px solid #fff;border-top:7px solid transparent;border-bottom:7px solid transparent}
   .mnote{font-size:12px;color:var(--muted);margin-top:4px}
   .standwrap{overflow-x:auto;margin:10px 0;border:1px solid var(--line);border-radius:12px;background:var(--card)}
   table.stand{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
@@ -1525,6 +1535,7 @@ function sofiaParts(iso){
 }
 const bgDate = iso => { if (!iso) return 'дата неизвестна'; const p = sofiaParts(iso); return `${p.day} ${p.d}, ${p.m} в ${p.time}`; };
 const initials = n => String(n || '').replace(/^(ПФК|ФК)\s+/, '').split(/\s+/).filter(w => !/^\d+$/.test(w)).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const ytWatch = id => 'https://www.youtube.com/watch?v=' + encodeURIComponent(id);
 const logoHtml = (src, name) => src && /^https:\/\//.test(src)
   ? `<img class="tlogo" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-init="${esc(initials(name))}">`
   : `<span class="tinit">${esc(initials(name))}</span>`;
@@ -1568,14 +1579,18 @@ function matchCard(m){
   const past = m.kickoff && Date.parse(m.kickoff) < Date.now() - 3 * 3600e3;
   const score = played ? `<div class="mscore${m.status === 'live' ? ' live' : ''}">${m.home_score ?? ''}-${m.away_score ?? ''}</div>`
     : `<div class="mscore time">${m.status === 'postponed' || past ? 'отложен' : m.kickoff ? esc(sofiaParts(m.kickoff).time) : '—'}</div>`;
-  const vb = (kind, v, label) => v && v.id ? `<button class="vbtn${FB.open.has(m.id + ':' + kind) ? ' on' : ''}" data-mid="${esc(m.id)}" data-kind="${kind}" title="${esc(v.title || '')} · ${esc(v.channel || '')}">
-      <span class="ic">▶</span>${label}<span class="len">${esc(v.length || '')}</span></button>` : '';
+  const vb = (kind, v, label) => !v || !v.id ? '' : v.embed === false
+    ? `<a class="vbtn yt" href="${ytWatch(v.id)}" target="_blank" rel="noopener noreferrer" data-kind="${kind}" title="${esc(v.title || '')} · ${esc(v.channel || '')} — ${esc(v.channel || 'Собственикът')} не позволява пускане в други сайтове, отваря се в YouTube">
+      <span class="ic">▶</span>${label}<span class="len">${esc(v.length || '')}</span><span class="ytbadge">YouTube ↗</span></a>`
+    : `<button class="vbtn${FB.open.has(m.id + ':' + kind) ? ' on' : ''}" data-mid="${esc(m.id)}" data-kind="${kind}" title="${esc(v.title || '')} · ${esc(v.channel || '')}">
+      <span class="ic">▶</span>${label}<span class="len">${esc(v.length || '')}</span></button>`;
   const btns = vb('short', m.short_video, 'Репортаж') + vb('long', m.long_video, 'Разширен');
   const left = m.ht_home != null && m.status === 'finished' ? `Полувреме ${m.ht_home}-${m.ht_away}` : m.status === 'live' ? 'На живо' : '';
   const openKind = ['short', 'long'].find(k => FB.open.has(m.id + ':' + k));
   const ov = openKind && (openKind === 'short' ? m.short_video : m.long_video);
   const player = ov ? `<div class="mplayer">${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ov.id)}?autoplay=1&rel=0` })}
-      <div class="mnote">${esc(ov.title)} · ${esc(ov.channel)} · <a href="https://www.youtube.com/watch?v=${encodeURIComponent(ov.id)}" target="_blank" rel="noopener noreferrer">YouTube</a></div></div>` : '';
+      <div class="mfoot"><span class="mnote">${esc(ov.title)} · ${esc(ov.channel)}<br>Ако клипът не тръгва тук, гледай го в YouTube.</span>
+      <a class="ytbtn" href="${ytWatch(ov.id)}" target="_blank" rel="noopener noreferrer"><span class="yti" aria-hidden="true"></span>Гледай в YouTube</a></div></div>` : '';
   const none = played && m.status === 'finished' && !btns ? '<span class="mnote">Видеото още не е намерено</span>' : '';
   return `<article class="mcard" data-mid="${esc(m.id)}">
     <div class="mtop"><span>${esc(L)} - ${m.round} Кръг</span><span>${esc(bgDate(m.kickoff))}</span></div>
@@ -1648,7 +1663,7 @@ function initFootballUI(){
     if (pick(e)) return;
     const nav = e.target.closest('[data-rnd]');
     if (nav && !nav.disabled) { FB.round[FB.league] = Number(nav.dataset.rnd); FB.open.clear(); renderResults(true); return; }
-    const vb = e.target.closest('.vbtn');
+    const vb = e.target.closest('button.vbtn');
     if (vb) {
       const k = vb.dataset.mid + ':' + vb.dataset.kind, other = vb.dataset.mid + ':' + (vb.dataset.kind === 'short' ? 'long' : 'short');
       const was = FB.open.has(k);
