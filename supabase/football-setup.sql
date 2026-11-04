@@ -13,7 +13,7 @@
 -- Deploy the Edge Function with JWT verification OFF; it checks its own key instead
 -- (the vault secret "football_sync_key", created below and sent by the jobs as x-sync-key).
 
-create extension if not exists pg_net;
+create extension if not exists pg_net with schema extensions;   -- its functions live in the "net" schema
 create extension if not exists pg_cron;
 
 -- ───────────────────────── tables ─────────────────────────
