@@ -293,12 +293,15 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
     cands.push({ v, scoreOk, ident, ch, ext: /разширен|пълен репортаж|extended/i.test(v.title), rep: /репортаж|highlights|обзор/i.test(v.title) });
   }
   const pack = c => c && { id: c.v.id, title: c.v.title.slice(0, 200), channel: c.v.channel.slice(0, 80), length: c.v.length, seconds: c.v.seconds };
-  const shorts = cands.filter(c => c.ch && c.ident && c.v.seconds >= 100 && c.v.seconds < 540)
+  // short report: under 12 minutes and not called "разширен" (Gong's 2nd-league reports run ~9 minutes);
+  // extended: "разширен" in the title, or 12 minutes and longer
+  const isLong = c => (c.ext && c.v.seconds >= 300) || c.v.seconds >= 720;
+  const shorts = cands.filter(c => c.ch && c.ident && c.v.seconds >= 100 && !isLong(c))
     .sort((a, b) => b.ch - a.ch || (b.rep - a.rep) || (b.scoreOk - a.scoreOk) || a.v.seconds - b.v.seconds);
   // a long video without the score/round or "разширен" in its title is only taken from Gong/the league, and only
   // at the usual extended-report length (Gong sometimes gives its ~20-minute reports a headline instead)
   const headline = c => c.ch >= 2 && c.v.seconds >= 900 && c.v.seconds <= 1500;
-  const longs = cands.filter(c => c.ch && c.v.seconds >= 540 && c.v.seconds <= 3600 && (c.ident || c.ext || headline(c)))
+  const longs = cands.filter(c => c.ch && isLong(c) && c.v.seconds <= 3600 && (c.ident || c.ext || headline(c)))
     .sort((a, b) => (b.ext - a.ext) || b.ch - a.ch || (b.scoreOk - a.scoreOk));
   const all = cands.filter(c => c.v.seconds >= 30 && c.v.seconds <= 3600 && (c.ident || headline(c)))
     .sort((a, b) => b.ch - a.ch || (b.ident - a.ident));
