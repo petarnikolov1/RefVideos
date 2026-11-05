@@ -5,6 +5,8 @@
 //                                 the match minutes the text mentions, and what was tried (diag).
 //   /config.json                  Supabase URL + key from the Pages environment variables
 //                                 SUPABASE_URL and SUPABASE_ANON_KEY (public by design; data is protected by RLS).
+//   POST /drive/list {url}        the videos in a Google Drive folder shared "anyone with the link" (approved
+//                                 members only), including its subfolders, so a whole folder can be added at once.
 //   POST /ebfu/login, /ebfu/explore   ebfu.net with the member's OWN account (approved members only):
 //                                 log in once, then map the video archive. Passwords are never stored or logged;
 //                                 the ebfu.net session goes back to the member's browser only.
@@ -25,6 +27,7 @@ export default {
     if (url.pathname === '/extract') return handleExtract(request, url, ctx);
     if (url.pathname === '/selftest') return handleSelftest(url, ctx);
     if (url.pathname.startsWith('/ebfu/')) return handleEbfu(request, url, env);
+    if (url.pathname === '/drive/list') return handleDrive(request, env);
     if (url.pathname === '/config.json') {
       return json({ supabaseUrl: env.SUPABASE_URL || '', supabaseKey: env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY || '' }, 200, 300);
     }
@@ -853,6 +856,64 @@ async function ebfuExplore(session, diag) {
     } else report.notes.push('The camera button runs ' + cam.fn.name + '(); its video address is built inside that function (see cameraFunction).');
   }
   return done();
+}
+
+/* ---------------- /drive/list: the videos in a shared Google Drive folder ---------------- */
+// Google's own embeddable folder view lists a public folder's files and subfolders without any API key.
+const DRIVE_VIDEO = /\.(mp4|m4v|mov|webm|mkv|avi|wmv|mpe?g|3gp|flv|mts|m2ts|ts)$/i;
+const driveFolderId = u => { const m = String(u || '').match(/\/folders\/([\w-]{10,})/) || String(u || '').match(/[?&]id=([\w-]{10,})/); return m ? m[1] : (/^[\w-]{10,}$/.test(String(u || '')) ? String(u) : null); };
+const unhtml = t => String(t || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/\s+/g, ' ').trim();
+export function parseDriveFolder(html) {
+  const files = [], folders = [], seen = new Set();
+  const title = unhtml((String(html).match(/<title>([\s\S]*?)<\/title>/i) || [])[1]).replace(/\s*[-–]\s*Google Drive\s*$/i, '');
+  // one entry per file / subfolder: <div class="flip-entry" id="entry-ID"> … <a href=".../file/d/ID/..."> … <div class="flip-entry-title">NAME</div>
+  const chunks = String(html).split(/<div[^>]+class="flip-entry"/i).slice(1);
+  for (const c of chunks) {
+    const f = c.match(/\/file\/d\/([\w-]{10,})/), d = c.match(/\/drive\/(?:u\/\d+\/)?folders\/([\w-]{10,})/);
+    const name = unhtml((c.match(/class="flip-entry-title"[^>]*>([\s\S]*?)<\/div>/i) || [])[1]);
+    const id = f ? f[1] : d ? d[1] : null;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    (f ? files : folders).push({ id, name });
+  }
+  if (!chunks.length) {        // a changed page layout: fall back to the links alone
+    for (const m of String(html).matchAll(/\/file\/d\/([\w-]{10,})/g)) if (!seen.has(m[1])) { seen.add(m[1]); files.push({ id: m[1], name: '' }); }
+    for (const m of String(html).matchAll(/\/drive\/(?:u\/\d+\/)?folders\/([\w-]{10,})/g)) if (!seen.has(m[1])) { seen.add(m[1]); folders.push({ id: m[1], name: '' }); }
+  }
+  return { title, files, folders };
+}
+async function handleDrive(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'POST only' }, 405);
+  const member = await checkMember(request.headers.get('Authorization') || '', env);
+  if (!member.ok) return json({ ok: false, error: member.error }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: 'bad request' }, 400); }
+  const root = driveFolderId(body.url);
+  if (!root) return json({ ok: false, error: 'That is not a Google Drive folder link.' }, 400);
+  // the folder and its subfolders, breadth first: up to 40 folders and 500 videos
+  const out = [], queue = [{ id: root, path: '' }], done = new Set();
+  let rootTitle = '', skipped = 0, failed = 0;
+  while (queue.length && done.size < 40 && out.length < 500) {
+    const { id, path } = queue.shift();
+    if (done.has(id)) continue;
+    done.add(id);
+    let html;
+    try {
+      const r = await fetch('https://drive.google.com/embeddedfolderview?id=' + encodeURIComponent(id), { headers: BROWSER_HEADERS, signal: AbortSignal.timeout(12000) });
+      if (!r.ok) { failed++; if (id === root) return json({ ok: false, error: r.status === 404 ? 'Folder not found — is it shared as "Anyone with the link"?' : 'Google Drive answered ' + r.status }); continue; }
+      html = await r.text();
+    } catch (e) { failed++; if (id === root) return json({ ok: false, error: 'Google Drive did not answer: ' + e.message }); continue; }
+    const p = parseDriveFolder(html);
+    if (id === root) rootTitle = p.title;
+    if (id === root && !p.files.length && !p.folders.length && /accounts\.google\.com|ServiceLogin/i.test(html))
+      return json({ ok: false, error: 'The folder is private. In Google Drive choose Share → General access → "Anyone with the link", then try again.' });
+    for (const f of p.files) {
+      if (f.name && !DRIVE_VIDEO.test(f.name)) { skipped++; continue; }
+      out.push({ id: f.id, name: f.name, folder: path, url: 'https://drive.google.com/file/d/' + f.id + '/view' });
+    }
+    for (const d of p.folders) queue.push({ id: d.id, path: (path ? path + ' / ' : '') + (d.name || 'folder') });
+  }
+  return json({ ok: true, folder: rootTitle, files: out.slice(0, 500), skipped, folders: done.size, failed, more: queue.length > 0 || out.length >= 500 });
 }
 
 /* ---------------- helpers ---------------- */

@@ -101,6 +101,31 @@
   .warn{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:10px 12px;font-size:14px;margin:10px 0}
   .msg{font-size:14px;margin:8px 0}
   .msg.err{color:var(--err)} .msg.ok{color:var(--ok)}
+  /* members' videos: Referee Committee status, categories, admin tools */
+  .badge.rcok{background:var(--ok)} .badge.rcno{background:var(--chip);color:var(--muted)}
+  .rcnote{border-left:4px solid var(--line);background:var(--chip);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:14px}
+  .rcnote.ok{border-left-color:var(--ok)} .rcnote p{margin:4px 0 0;white-space:pre-wrap}
+  .vcard.picked{outline:2px solid var(--accent);outline-offset:-1px}
+  .pick{display:inline-flex;align-items:center;cursor:pointer} .pick input{width:18px;height:18px;margin:0}
+  .vadmin{border-top:1px solid var(--line);margin-top:10px;padding-top:8px} .vadmin summary{font-size:13px}
+  .catpick{display:flex;flex-wrap:wrap;gap:6px;border:0;padding:0;margin:6px 0 0;min-width:0}
+  .catpick legend{font-size:13px;color:var(--muted);padding:0;margin-bottom:6px}
+  .catpick>.muted{width:100%;font-size:13px}
+  .form label.ck,label.ck{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--chip);border-radius:999px;padding:4px 10px;cursor:pointer}
+  .ck input{margin:0}
+  .dpick{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .dlist{display:flex;flex-direction:column;gap:2px;max-height:260px;overflow:auto;margin-top:6px}
+  .dlist label.ck{background:none;border-radius:6px;padding:3px 2px}
+  .prog{height:8px;background:var(--chip);border-radius:999px;overflow:hidden;margin-top:8px} .prog>div{height:100%;width:0;background:var(--accent);transition:width .2s}
+  #vFilters .seg+.seg{margin-top:6px}
+  #vBulk{position:sticky;bottom:8px;z-index:5;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:10px 12px;margin:10px 0;box-shadow:0 4px 16px rgba(0,0,0,.15);font-size:13.5px}
+  #vBulk label{display:inline-flex;gap:6px;align-items:center} #vBulk select{max-width:190px}
+  .catrows{margin:8px 0}
+  .catrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0} .catrow input[type=text]{flex:1 1 220px;min-width:0}
+  button.tag{border:1px solid var(--line);cursor:pointer;font:inherit;font-size:11.5px;color:inherit}
+  p.small{font-size:12.5px;margin:0}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,40px);opacity:0;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;transition:.25s;z-index:50;pointer-events:none;max-width:calc(100% - 32px)}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
   details.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:14px 0}
   summary{cursor:pointer;font-weight:600}
   .form{display:grid;gap:12px;margin-top:12px}
@@ -254,10 +279,13 @@
 
   <section id="view-results" hidden><div id="resultsBox"></div></section>
   <section id="view-videos" hidden>
-    <p class="intro">Match clips uploaded by approved members, newest first.</p>
+    <p class="intro" id="vIntro">Clips shared by the members.</p>
     <div id="uploadBox"></div>
-    <div class="filters"><input id="vq" type="search" placeholder="Filter videos by team, referee, word…"></div>
+    <div id="vCatAdmin"></div>
+    <div id="vFilters" hidden></div>
+    <div class="filters" id="vSearch" hidden><input id="vq" type="search" placeholder="Filter videos by team, referee, word…"></div>
     <div id="videoList"></div>
+    <div id="vBulk" hidden></div>
   </section>
 
   <section id="view-account" hidden><div id="accountBox"></div></section>
@@ -273,7 +301,8 @@ const SUPABASE_URL      = 'https://zinuspouctowujhocevy.supabase.co';          /
 const SUPABASE_ANON_KEY = 'sb_publishable_sElFdQnVmyqIZMRqBV5dAg_VrstG7T8';     // publishable key — meant to be public; data is protected by RLS
 const SUPABASE_JS       = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
 const EBFU_URL          = 'https://ebfu.net/';   // match-video site — automatic search will be added once the process is defined
-const MAX_UPLOAD_MB     = 50;   // Supabase free plan upload limit
+const MAX_UPLOAD_MB     = 50;   // Supabase free plan upload limit; bigger recordings are compressed in the browser first
+const MEDIABUNNY        = 'https://cdn.jsdelivr.net/npm/mediabunny@1.61.6/dist/bundles/mediabunny.min.mjs';   // in-browser video compressor
 
 const SEASON_START_DEFAULT = '2026-07-01'; // 2026/27 season — efbet Liga kicked off 17 July 2026
 const CONCURRENCY          = 3;
@@ -617,6 +646,7 @@ function toEmbed(u, kind){
   if (h === 'youtu.be') id = url.pathname.slice(1, 12);
   else if (/(^|\.)youtube(-nocookie)?\.com$/.test(h)) id = url.searchParams.get('v') || (url.pathname.match(/\/(?:embed|shorts|live|v)\/([\w-]{11})/) || [])[1];
   if (id && /^[\w-]{11}$/.test(id)) return { kind:'YouTube', key:'yt:' + id, src:`https://www.youtube-nocookie.com/embed/${id}` };
+  if ((h === 'drive.google.com' || h === 'docs.google.com') && (id = driveId(u))) return { kind:'Google Drive', key:'gd:' + id, src:`https://drive.google.com/file/d/${id}/preview` };
   if (h === 'vimeo.com' || h === 'player.vimeo.com') { id = (url.pathname.match(/(\d{6,})/) || [])[1]; if (id) return { kind:'Vimeo', key:'vm:' + id, src:`https://player.vimeo.com/video/${id}` }; }
   if (h.endsWith('dailymotion.com') || h === 'dai.ly') { id = (url.pathname.match(/(?:video\/|^\/)([a-z0-9]{6,})/i) || [])[1]; if (id) return { kind:'Dailymotion', key:'dm:' + id, src:`https://www.dailymotion.com/embed/video/${id}` }; }
   if (h.endsWith('vbox7.com')) { id = url.searchParams.get('vid') || (url.pathname.match(/play:(\w+)/) || [])[1]; if (id && /^\w+$/.test(id)) return { kind:'Vbox7', key:'vb:' + id, src:`https://www.vbox7.com/emb/external.php?vid=${id}` }; }
@@ -632,6 +662,13 @@ function toEmbed(u, kind){
   if (kind === 'player' && url.protocol === 'https:' && url.origin !== location.origin)
     return { kind:'Video player', key:'pl:' + url.origin + url.pathname, src:url.href, sandbox:true };
   return null;
+}
+// a Google Drive file (not a folder): /file/d/ID/…, open?id=ID, uc?id=ID
+function driveId(u){
+  let url; try { url = new URL(u); } catch (e) { return null; }
+  if (!/^(drive|docs)\.google\.com$/.test(url.hostname)) return null;
+  const id = (url.pathname.match(/\/file\/d\/([\w-]{10,})/) || [])[1] || (/^\/(open|uc)$/.test(url.pathname) ? url.searchParams.get('id') : null);
+  return id && /^[\w-]{10,}$/.test(id) ? id : null;
 }
 function videoFile(u){
   let url; try { url = new URL(u); } catch (e) { return null; }
@@ -719,6 +756,9 @@ function storyHasVideo(s, M){
 let SB = null, USER = null, PROFILE = null, AUTH = 'loading', RECOVERY = false, VIDEOS = [], USERS = [], PREFILL = null;
 let COMMENTS = {};   // video id -> comments, oldest first
 let VID_VER = 0;     // bumps when videos or comments change (re-draw the Videos list only then)
+let CATS_V = [], VCAT = {}, CATV_VER = 0;   // video categories (in order) and video id -> Set of category ids
+let SIGNED = {};     // storage path -> { url, at }: uploaded files play through short-lived signed links (members only)
+let SB_CONF = { url: '', key: '' };
 const approved = () => !!(PROFILE && (PROFILE.approved || PROFILE.role === 'admin'));
 const isAdmin = () => !!(PROFILE && PROFILE.role === 'admin');
 
@@ -731,6 +771,7 @@ async function initSupabase(){
   try {
     if (!window.supabase) await loadScript(SUPABASE_JS);
     SB = window.supabase.createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    SB_CONF = { url, key };
   } catch (e) { AUTH = 'error'; log('Supabase failed to load: ' + e.message); showWarn('The news database could not be reached: ' + e.message); renderAll(); return; }
   loadNews(true);
   SB.auth.onAuthStateChange((event, session) => {
@@ -739,7 +780,8 @@ async function initSupabase(){
   });
   const { data } = await SB.auth.getSession();
   await handleSession(data.session);
-  loadVideos();
+  // signed links last 6 hours: renew them before they run out
+  setInterval(() => { if (approved() && VIDEOS.some(v => v.storage_path && (!SIGNED[v.storage_path] || Date.now() - SIGNED[v.storage_path].at > 5 * 3600e3))) loadVideos(); }, 20 * 60e3);
 }
 async function handleSession(session){
   const uid = session && session.user ? session.user.id : null;
@@ -755,15 +797,36 @@ async function handleSession(session){
   }
   AUTH = 'ready';
   renderAll();
+  loadVideos();          // the members' videos depend on who is logged in
 }
+// the members' videos, their categories and comments — approved members only (the database enforces it too)
 async function loadVideos(){
   if (!SB) return;
-  const { data, error } = await SB.from('videos').select('*').order('created_at', { ascending: false }).limit(500);
-  if (error) { log('Could not load videos: ' + error.message); return; }
-  VIDEOS = data || [];
+  if (!approved()) { VIDEOS = []; CATS_V = []; VCAT = {}; COMMENTS = {}; VID_VER++; CATV_VER++; renderAll(); return; }
+  const [v, c, i] = await Promise.all([
+    SB.from('videos').select('*').order('created_at', { ascending: false }).limit(1000),
+    SB.from('video_categories').select('id,name,sort').order('sort', { ascending: true }).order('name', { ascending: true }),
+    SB.from('video_category_items').select('video_id,category_id').limit(20000),
+  ]);
+  if (v.error) { log('Could not load videos: ' + v.error.message); return; }
+  VIDEOS = v.data || [];
+  if (c.error) log('Could not load video categories: ' + c.error.message);
+  else if (JSON.stringify(c.data) !== JSON.stringify(CATS_V)) { CATS_V = c.data || []; CATV_VER++; }
+  VCAT = {};
+  if (i.error) log('Could not load video categories: ' + i.error.message);
+  else for (const r of i.data || []) (VCAT[r.video_id] || (VCAT[r.video_id] = new Set())).add(r.category_id);
+  await signVideos();
   VID_VER++;
   await loadComments();
   renderAll();
+}
+async function signVideos(){
+  const now = Date.now();
+  const need = [...new Set(VIDEOS.filter(v => v.storage_path).map(v => v.storage_path))].filter(p => !SIGNED[p] || now - SIGNED[p].at > 5 * 3600e3);
+  if (!need.length) return;
+  const { data, error } = await SB.storage.from('videos').createSignedUrls(need, 6 * 3600);
+  if (error) { log('Could not open the uploaded files: ' + error.message); return; }
+  for (const r of data || []) if (r.signedUrl && r.path) SIGNED[r.path] = { url: r.signedUrl, at: now };
 }
 async function loadComments(){
   if (!SB || !VIDEOS.length) { COMMENTS = {}; return; }
@@ -800,9 +863,8 @@ async function loadUsers(){
   USERS = data || [];
   renderAdmin(); renderNav();
 }
-const publicUrl = path => SB ? SB.storage.from('videos').getPublicUrl(path).data.publicUrl : '';
 function uploadedPlayer(v){
-  if (v.storage_path) return `<video class="file" controls preload="metadata" playsinline src="${esc(publicUrl(v.storage_path))}"></video>`;
+  if (v.storage_path) { const s = SIGNED[v.storage_path]; return s ? `<video class="file" controls preload="metadata" playsinline src="${esc(s.url)}"></video>` : '<div class="msg muted">The video file could not be opened right now.</div>'; }
   const e = toEmbed(v.video_url || '');
   if (e) return playerHtml(e);
   return `<div class="msg"><a class="btn small" href="${esc(safeUrl(v.video_url))}" target="_blank" rel="noopener noreferrer">▶ Watch video</a></div>`;
@@ -833,7 +895,7 @@ function renderNav(){
   const stories = buildStories();
   const nb = stories.filter(s => s.bg).length, nw = stories.filter(s => s.world).length;
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
-  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', VIDEOS.length],
+  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', approved() ? VIDEOS.length : null],
     ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
   if (isAdmin()) items.push(['admin', 'Admin', pending || null]);
   $('#nav').innerHTML = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
@@ -993,101 +1055,424 @@ function preserveForm(container, draw){
 }
 
 /* ======================= UI: VIDEOS ======================= */
+// Members' clips: Bulgarian / World → approved by the Referee Committee or not checked → Laws-of-the-Game category.
+// Only approved members see them (the database enforces it). The admin keeps the categories and sorts the videos.
+const VREGION = { bg: 'Bulgarian videos', world: 'World videos' };
+const VREVIEW = { approved: 'Approved by the Referee Committee', unchecked: 'Not checked by the Referee Committee' };
+const VSEL = Object.assign({ region: 'bg', status: '', cat: '' }, loadJSON('bgRefWatch.vsel') || {});
+const VPICK = new Set();          // videos the admin has ticked for a bulk move / copy
+let DRIVE_PICK = null;            // videos found in the Google Drive folders of the upload form
 let UP_KEY = '', LIST_KEY = '';
+const vRegion = v => v.region === 'world' ? 'world' : 'bg';
+const vCats = v => VCAT[v.id] || new Set();
+const catName = id => (CATS_V.find(c => c.id === Number(id)) || {}).name || '';
+const saveVsel = () => saveJSON('bgRefWatch.vsel', VSEL);
+const vMatch = (v, sel) => vRegion(v) === sel.region && (!sel.status || v.review_status === sel.status) &&
+  (!sel.cat || (sel.cat === 'none' ? !vCats(v).size : vCats(v).has(Number(sel.cat))));
+
 function renderVideos(){
-  const box = $('#uploadBox');
-  // the upload form is only re-drawn when who is logged in (or the story it's for) changes — never while typing
-  const upKey = [AUTH, USER && USER.id, approved(), PREFILL ? PREFILL.article_key : ''].join('|');
+  const box = $('#uploadBox'), member = approved();
+  $('#vIntro').textContent = member
+    ? 'Clips shared by the members: Bulgarian or World, approved by the Referee Committee or not checked yet, and filed by the Laws of the Game.'
+    : 'Clips shared by the members — for approved members only.';
+  // the upload form is only re-drawn when who is logged in, the story it's for or the category list changes — never while typing
+  const upKey = [AUTH, USER && USER.id, member, PREFILL ? PREFILL.article_key : '', CATV_VER].join('|');
   if (upKey !== UP_KEY) {
     UP_KEY = upKey;
-    if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Video uploads need the Supabase connection, which isn't set up on this site yet.</div>`;
+    if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Videos need the Supabase connection, which isn't set up on this site yet.</div>`;
     else if (AUTH === 'loading') box.innerHTML = '<p class="muted">Loading…</p>';
-    else if (!USER) box.innerHTML = `<div class="card"><b>Want to add a clip?</b><p class="muted">Members approved by the admin can upload match videos and comment on them. <a href="#account">Log in or register</a>.</p></div>`;
-    else if (!approved()) box.innerHTML = `<div class="card"><b>Waiting for approval</b><p class="muted">Your account is registered. The admin needs to approve it before you can upload videos or comment.</p></div>`;
-    else box.innerHTML = uploadForm();
+    else if (!USER) box.innerHTML = `<div class="card"><b>Members only</b><p class="muted">The members' videos and comments are visible to members approved by the admin. <a href="#account">Log in or register</a>.</p></div>`;
+    else if (!member) box.innerHTML = `<div class="card"><b>Waiting for approval</b><p class="muted">Your account is registered. Once the admin approves it you can watch, upload and comment on the members' videos.</p></div>`;
+    else preserveForm(box, () => { box.innerHTML = uploadForm(); if (DRIVE_PICK) drawDrivePick(); });
   }
+  $('#vFilters').hidden = $('#vSearch').hidden = !member;
+  if (!member) { $('#videoList').innerHTML = ''; $('#vBulk').hidden = true; $('#vCatAdmin').innerHTML = ''; LIST_KEY = ''; return; }
+  // a #video-12 link shows that clip whatever the filters were
+  if (SCROLL_TO && SCROLL_TO.startsWith('v-')) {
+    const v = VIDEOS.find(x => 'v-' + x.id === SCROLL_TO);
+    if (v) { VSEL.region = vRegion(v); VSEL.status = ''; VSEL.cat = ''; }
+  }
+  if (VSEL.cat && VSEL.cat !== 'none' && !CATS_V.some(c => c.id === Number(VSEL.cat))) VSEL.cat = '';
+  renderVideoFilters();
+  renderCatAdmin();
   const text = norm($('#vq').value);
-  const listKey = [VID_VER, text, USER && USER.id, approved(), isAdmin(), AUTH].join('|');
-  if (listKey === LIST_KEY) return;
-  LIST_KEY = listKey;
-  const vids = VIDEOS.filter(v => !text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name].join(' ')).includes(text));
-  preserveForm($('#videoList'), () => {
-    $('#videoList').innerHTML = vids.length ? vids.map(videoCard).join('') : `<div class="empty">${AUTH === 'off' ? '' : 'No videos uploaded yet.'}</div>`;
-  });
+  const listKey = [VID_VER, text, USER && USER.id, isAdmin(), AUTH, VSEL.region, VSEL.status, VSEL.cat].join('|');
+  if (listKey !== LIST_KEY) {
+    LIST_KEY = listKey;
+    const vids = VIDEOS.filter(v => vMatch(v, VSEL) && (!text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name, v.committee_note,
+      ...[...vCats(v)].map(catName)].join(' ')).includes(text)));
+    preserveForm($('#videoList'), () => {
+      $('#videoList').innerHTML = vids.length ? vids.map(videoCard).join('')
+        : `<div class="empty">${VIDEOS.length ? 'No videos here yet.' : 'No videos uploaded yet.'}</div>`;
+    });
+  }
+  renderBulk();
 }
+function renderVideoFilters(){
+  const inR = VIDEOS.filter(v => vRegion(v) === VSEL.region), inS = inR.filter(v => !VSEL.status || v.review_status === VSEL.status);
+  const n = k => `<span class="n">${k}</span>`;
+  const cnt = {};
+  inS.forEach(v => vCats(v).forEach(c => cnt[c] = (cnt[c] || 0) + 1));
+  const none = inS.filter(v => !vCats(v).size).length;
+  $('#vFilters').innerHTML = `
+    <div class="seg" role="tablist" aria-label="Bulgarian or World">${Object.entries(VREGION).map(([k, l]) =>
+      `<button class="${VSEL.region === k ? 'on' : ''}" data-vreg="${k}" role="tab" aria-selected="${VSEL.region === k}">${esc(l)}${n(VIDEOS.filter(v => vRegion(v) === k).length)}</button>`).join('')}</div>
+    <div class="seg vstatus" aria-label="Referee Committee">${[['', 'All', inR.length], ['approved', '✓ Approved by the Referee Committee', inR.filter(v => v.review_status === 'approved').length],
+      ['unchecked', 'Not checked yet', inR.filter(v => v.review_status !== 'approved').length]].map(([k, l, c]) =>
+      `<button class="${VSEL.status === k ? 'on' : ''}" data-vst="${k}">${esc(l)}${n(c)}</button>`).join('')}</div>
+    <div class="chips" aria-label="Laws of the Game">
+      <button class="chip${!VSEL.cat ? ' on' : ''}" data-vcat="">All categories${n(inS.length)}</button>
+      ${CATS_V.map(c => `<button class="chip${VSEL.cat === String(c.id) ? ' on' : ''}" data-vcat="${c.id}">${esc(c.name)}${n(cnt[c.id] || 0)}</button>`).join('')}
+      ${none ? `<button class="chip${VSEL.cat === 'none' ? ' on' : ''}" data-vcat="none">Not in a category${n(none)}</button>` : ''}
+    </div>`;
+}
+const catChecks = (name, checked, prefix) => CATS_V.map(c => `<label class="ck"><input type="checkbox" name="${name}" value="${c.id}"${checked.has(c.id) ? ' checked' : ''}${prefix ? ` data-vc="${prefix}:${c.id}"` : ''}>${esc(c.name)}</label>`).join('');
 function videoCard(v){
   const canDelete = USER && (v.uploaded_by === USER.id || isAdmin());
-  const cs = COMMENTS[v.id] || [];
+  const cs = COMMENTS[v.id] || [], cats = [...vCats(v)].filter(catName);
+  const ok = v.review_status === 'approved';
   const comments = cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'member')}</b> · ${esc(fmtDate(Date.parse(c.created_at)))}
       ${USER && (c.user_id === USER.id || isAdmin()) ? `<button class="small link" data-cdel="${esc(c.id)}">delete</button>` : ''}</div><div>${esc(c.body)}</div></div>`).join('');
-  const form = approved()
-    ? `<form class="cform" data-vid="${esc(v.id)}"><textarea name="body" maxlength="2000" required placeholder="Write a comment…"></textarea><div class="bar"><button class="small primary" type="submit">Post comment</button></div><div class="msg"></div></form>`
-    : `<p class="muted">${USER ? 'Commenting opens once the admin approves your account.' : '<a href="#account">Log in</a> as an approved member to comment.'}</p>`;
-  return `<article class="card" id="v-${esc(v.id)}">
-    <div class="meta"><span>${esc(fmtDate(Date.parse(v.created_at)))}</span><span>·</span><span>by ${esc(v.uploader_name || 'member')}</span>${v.division ? `<span>·</span><span>${esc(DIVS[v.division] || v.division)}</span>` : ''}</div>
+  const form = `<form class="cform" data-vid="${esc(v.id)}"><textarea name="body" maxlength="2000" required placeholder="Write a comment…"></textarea><div class="bar"><button class="small primary" type="submit">Post comment</button></div><div class="msg"></div></form>`;
+  const note = v.committee_note || ok ? `<div class="rcnote${ok ? ' ok' : ''}"><b>${ok ? '✓ Approved by the Referee Committee' : 'Referee Committee'}</b>${v.reviewed_at ? `<span class="muted"> · ${esc(fmtDate(Date.parse(v.reviewed_at)))}${v.reviewed_by_name ? ' · ' + esc(v.reviewed_by_name) : ''}</span>` : ''}${v.committee_note ? `<p>${esc(v.committee_note)}</p>` : ''}</div>` : '';
+  const admin = isAdmin() ? `<details class="vadmin"><summary>⚙ Sort this video</summary>
+      <form class="form vaform" data-vid="${esc(v.id)}">
+        <div class="two"><label>Section<select name="region">${Object.entries(VREGION).map(([k, l]) => `<option value="${k}"${vRegion(v) === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+          <label>Referee Committee<select name="review_status">${Object.entries(VREVIEW).map(([k, l]) => `<option value="${k}"${(v.review_status || 'unchecked') === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label></div>
+        <label>Referee Committee's comment<textarea name="committee_note" maxlength="4000" placeholder="The decision, the Law and why">${esc(v.committee_note || '')}</textarea></label>
+        <div class="bar"><button class="small primary" type="submit">Save</button><span class="msg"></span></div>
+      </form>
+      <div class="catpick"><div class="muted">Categories — tick to add the video, untick to take it out:</div>${catChecks('vc-' + v.id, vCats(v), v.id)}</div>
+    </details>` : '';
+  return `<article class="card vcard${VPICK.has(v.id) ? ' picked' : ''}" id="v-${esc(v.id)}">
+    <div class="meta">${isAdmin() ? `<label class="pick" title="Select for moving or copying"><input type="checkbox" data-pick="${esc(v.id)}"${VPICK.has(v.id) ? ' checked' : ''}></label>` : ''}
+      <span class="badge ${ok ? 'rcok' : 'rcno'}">${ok ? '✓ RC approved' : 'Not checked'}</span>
+      <span>${esc(fmtDate(Date.parse(v.created_at)))}</span><span>·</span><span>by ${esc(v.uploader_name || 'member')}</span>
+      <span>·</span><span>${esc(vRegion(v) === 'world' ? 'World' : 'Bulgaria')}</span>${v.division && vRegion(v) === 'bg' ? `<span>·</span><span>${esc(DIVS[v.division] || v.division)}</span>` : ''}</div>
     <h2>${esc(v.title)}</h2>
     <div class="muted">${[v.match, v.match_date && fmtDay(Date.parse(v.match_date)), v.minutes && 'minutes ' + v.minutes].filter(Boolean).map(esc).join(' · ')}</div>
+    ${cats.length ? `<div class="tags">${cats.map(c => `<button class="tag div" data-vcat="${c}">${esc(catName(c))}</button>`).join('')}</div>` : ''}
     ${uploadedPlayer(v)}
+    ${note}
     ${v.description ? `<p class="desc">${esc(v.description)}</p>` : ''}
     <div class="actions">${v.article_url ? `<a class="btn small" href="${esc(safeUrl(v.article_url))}" target="_blank" rel="noopener noreferrer">Related article</a>` : ''}
+      ${driveId(v.video_url) ? `<a class="btn small" href="${esc(safeUrl(v.video_url))}" target="_blank" rel="noopener noreferrer">Open in Google Drive</a>` : ''}
       ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Delete video</button>` : ''}</div>
+    ${admin}
     <div class="comments"><h3>💬 ${cs.length} comment${cs.length === 1 ? '' : 's'}</h3>${comments}${form}</div>
   </article>`;
 }
+
+/* --- admin: move / copy several videos at once --- */
+function renderBulk(){
+  const bar = $('#vBulk');
+  [...VPICK].forEach(id => { if (!VIDEOS.some(v => v.id === id)) VPICK.delete(id); });
+  if (!isAdmin() || !VPICK.size) { bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  const from = VSEL.cat && VSEL.cat !== 'none' ? catName(VSEL.cat) : '';
+  const opts = CATS_V.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const key = [VPICK.size, from, CATV_VER].join('|');
+  if (bar.dataset.key === key) return;     // keep the choices being made
+  bar.dataset.key = key;
+  bar.innerHTML = `<b>${VPICK.size} selected</b>
+    <label>Copy to<select data-bulk="copy"><option value="">category…</option>${opts}</select></label>
+    <label title="${from ? `Takes them out of “${esc(from)}”` : 'Takes them out of all their categories'}">Move ${from ? `from “${esc(from)}” ` : ''}to<select data-bulk="move"><option value="">category…</option>${opts}</select></label>
+    <label>Section<select data-bulk="region"><option value="">…</option>${Object.entries(VREGION).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
+    <label>Referee Committee<select data-bulk="review_status"><option value="">…</option>${Object.entries(VREVIEW).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
+    <button class="small" data-bulk-all>Select all shown</button><button class="small" data-bulk-clear>Clear</button>
+    <span class="msg" id="bulkMsg"></span>`;
+}
+async function bulkAction(kind, value){
+  const ids = [...VPICK], msg = $('#bulkMsg');
+  if (!ids.length || !value) return;
+  const say = (t, cls) => { if (msg) { msg.textContent = t; msg.className = 'msg ' + (cls || ''); } };
+  say('Saving…');
+  let error;
+  if (kind === 'copy' || kind === 'move') {
+    const cid = Number(value);
+    if (kind === 'move') {
+      let q = SB.from('video_category_items').delete().in('video_id', ids);
+      if (VSEL.cat && VSEL.cat !== 'none') q = q.eq('category_id', Number(VSEL.cat));
+      ({ error } = await q.neq('category_id', cid));
+    }
+    if (!error) ({ error } = await SB.from('video_category_items').upsert(ids.map(id => ({ video_id: id, category_id: cid })), { onConflict: 'video_id,category_id', ignoreDuplicates: true }));
+  } else ({ error } = await SB.from('videos').update(kind === 'region' && value === 'world' ? { region: value, division: null } : { [kind]: value }).in('id', ids));
+  if (error) { say('Could not save: ' + error.message, 'err'); return; }
+  const what = kind === 'copy' ? `copied to “${catName(value)}”` : kind === 'move' ? `moved to “${catName(value)}”` : kind === 'region' ? `moved to ${VREGION[value]}` : `marked “${VREVIEW[value]}”`;
+  VPICK.clear();
+  await loadVideos();
+  toast(`${ids.length} video${ids.length > 1 ? 's' : ''} ${what}.`);
+}
+function toast(t){
+  let el = $('#toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+  el.textContent = t; el.classList.add('on');
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 3500);
+}
+
+/* --- admin: the categories --- */
+function renderCatAdmin(){
+  const box = $('#vCatAdmin');
+  if (!isAdmin()) { box.innerHTML = ''; return; }
+  const counts = {};
+  VIDEOS.forEach(v => vCats(v).forEach(c => counts[c] = (counts[c] || 0) + 1));
+  const key = [CATV_VER, VID_VER].join('|');
+  if (box.dataset.key === key && box.firstChild) return;
+  box.dataset.key = key;
+  const open = box.querySelector('details') && box.querySelector('details').open;
+  preserveForm(box, () => {
+    box.innerHTML = `<details class="box catadmin"${open ? ' open' : ''}><summary>⚙ Manage categories (${CATS_V.length})</summary>
+      <p class="muted">Rename, reorder, add or delete categories. Deleting a category keeps its videos — they just leave that category.
+        To move or copy videos, tick them (☐ at the top of each video) and use the bar that appears; or open “Sort this video”.</p>
+      <div class="catrows">${CATS_V.map((c, i) => `<form class="catrow" data-cid="${c.id}">
+        <input type="text" name="cname-${c.id}" value="${esc(c.name)}" maxlength="80" required aria-label="Category name">
+        <span class="muted">${counts[c.id] || 0} video${counts[c.id] === 1 ? '' : 's'}</span>
+        <button type="button" class="small" data-cmove="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button type="button" class="small" data-cmove="1" ${i === CATS_V.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+        <button type="submit" class="small">Rename</button>
+        <button type="button" class="small" data-cdelete>Delete</button></form>`).join('')}</div>
+      <form class="catrow" id="catAdd"><input type="text" name="newcat" maxlength="80" required placeholder="New category, e.g. Goalkeeper infringements"><button type="submit" class="small primary">Add category</button></form>
+      <div class="msg" id="catMsg"></div></details>`;
+  });
+}
+async function catAction(kind, form, btn){
+  const say = (t, cls) => { const m = $('#catMsg'); if (m) { m.textContent = t; m.className = 'msg ' + (cls || ''); } };
+  const id = form && form.dataset.cid ? Number(form.dataset.cid) : null;
+  let error;
+  if (kind === 'add') {
+    const name = String(new FormData(form).get('newcat') || '').trim();
+    if (!name) return;
+    ({ error } = await SB.from('video_categories').insert({ name, sort: Math.max(0, ...CATS_V.map(c => c.sort || 0)) + 10 }));
+    if (!error) form.reset();
+  } else if (kind === 'rename') {
+    const name = String(new FormData(form).get('cname-' + id) || '').trim();
+    if (!name) return;
+    ({ error } = await SB.from('video_categories').update({ name }).eq('id', id));
+  } else if (kind === 'delete') {
+    const c = CATS_V.find(x => x.id === id), n = VIDEOS.filter(v => vCats(v).has(id)).length;
+    if (!c || !confirm(`Delete the category “${c.name}”?${n ? ` Its ${n} video${n > 1 ? 's stay' : ' stays'} on the site.` : ''}`)) return;
+    ({ error } = await SB.from('video_categories').delete().eq('id', id));
+  } else if (kind === 'move') {
+    const i = CATS_V.findIndex(c => c.id === id), j = i + Number(btn.dataset.cmove);
+    if (i < 0 || j < 0 || j >= CATS_V.length) return;
+    // give every category its place in steps of 10, with the two swapped
+    const order = CATS_V.slice(); [order[i], order[j]] = [order[j], order[i]];
+    const changed = order.map((c, k) => ({ id: c.id, sort: (k + 1) * 10 })).filter((c, k) => order[k].sort !== c.sort);
+    for (const c of changed) { ({ error } = await SB.from('video_categories').update({ sort: c.sort }).eq('id', c.id)); if (error) break; }
+  }
+  if (error) { say(/duplicate|unique/i.test(error.message) ? 'There is already a category with that name.' : 'Could not save: ' + error.message, 'err'); return; }
+  await loadVideos();
+  say(kind === 'add' ? 'Category added.' : kind === 'rename' ? 'Renamed.' : kind === 'delete' ? 'Category deleted.' : '', 'ok');
+}
+
+/* --- admin: one video --- */
+async function saveVideoAdmin(form){
+  const f = new FormData(form), id = Number(form.dataset.vid), msg = form.querySelector('.msg');
+  const patch = { region: f.get('region'), review_status: f.get('review_status'), committee_note: String(f.get('committee_note') || '').trim() || null };
+  if (patch.region === 'world') patch.division = null;
+  const { error } = await SB.from('videos').update(patch).eq('id', id);
+  if (error) { msg.textContent = 'Could not save: ' + error.message; msg.className = 'msg err'; return; }
+  await loadVideos();
+  toast('Saved.');
+}
+async function setVideoCat(vid, cid, on){
+  const { error } = on ? await SB.from('video_category_items').upsert({ video_id: vid, category_id: cid }, { onConflict: 'video_id,category_id', ignoreDuplicates: true })
+    : await SB.from('video_category_items').delete().eq('video_id', vid).eq('category_id', cid);
+  if (error) { alert('Could not save: ' + error.message); return; }
+  const s = VCAT[vid] || (VCAT[vid] = new Set());
+  on ? s.add(cid) : s.delete(cid);
+  // the card keeps playing; only the filters and tags are drawn again
+  const card = document.getElementById('v-' + vid);
+  if (card) { const t = card.querySelector('.tags'), html = [...s].filter(catName).map(c => `<button class="tag div" data-vcat="${c}">${esc(catName(c))}</button>`).join('');
+    if (t) t.innerHTML = html; else if (html) card.querySelector('h2').nextElementSibling.insertAdjacentHTML('afterend', `<div class="tags">${html}</div>`); }
+  renderVideoFilters();
+  $('#vCatAdmin').dataset.key = '';
+  renderCatAdmin();
+}
+
+/* --- adding videos --- */
 function uploadForm(){
   const p = PREFILL || {};
-  return `<details class="box" ${PREFILL ? 'open' : ''}><summary>⬆ Upload a video</summary>
+  return `<details class="box" ${PREFILL ? 'open' : ''}><summary>⬆ Add videos</summary>
     <form class="form" id="upForm">
       ${p.article_key ? `<div class="muted">For the story: <b>${esc(p.storyTitle)}</b></div>` : ''}
-      <label>Title *<input type="text" name="title" required minlength="3" maxlength="200" value="${esc(p.title || '')}"></label>
+      <div class="two">
+        <label>Section<select name="region"><option value="bg"${p.region !== 'world' ? ' selected' : ''}>Bulgarian video</option><option value="world"${p.region === 'world' ? ' selected' : ''}>World video</option></select></label>
+        <label>Division (Bulgarian videos)<select name="division"><option value="">—</option>${Object.entries(DIVS).filter(([k]) => k !== 'unk' && k !== 'eur').map(([k, l]) => `<option value="${k}" ${p.division === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      </div>
+      <label>Title<input type="text" name="title" maxlength="200" value="${esc(p.title || '')}" placeholder="Needed for one video; videos from a folder take their file names"></label>
       <div class="two">
         <label>Match<input type="text" name="match" placeholder="Левски – Дунав" value="${esc(p.match || '')}"></label>
         <label>Match date<input type="date" name="match_date" value="${esc(p.match_date || '')}"></label>
       </div>
-      <div class="two">
-        <label>Minute(s)<input type="text" name="minutes" placeholder="23, 67, 90+2" value="${esc(p.minutes || '')}"></label>
-        <label>Division<select name="division"><option value="">—</option>${Object.entries(DIVS).filter(([k]) => k !== 'unk').map(([k, l]) => `<option value="${k}" ${p.division === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-      </div>
-      <label>Video file (MP4/WebM/MOV, up to ${MAX_UPLOAD_MB} MB)<input type="file" name="file" accept="video/mp4,video/webm,video/quicktime"></label>
-      <label>…or a video link (YouTube, Facebook, Vimeo, Vbox7, Instagram, TikTok)<input type="url" name="video_url" placeholder="https://www.youtube.com/watch?v=…"></label>
+      <label>Minute(s)<input type="text" name="minutes" placeholder="23, 67, 90+2" value="${esc(p.minutes || '')}"></label>
+      <fieldset class="catpick"><legend>Categories (Laws of the Game)</legend>${catChecks('cats', new Set())}</fieldset>
+      <label>Video file — a screen recording of up to about 5 minutes is fine: anything over ${MAX_UPLOAD_MB} MB is compressed in your browser before uploading
+        <input type="file" name="file" accept="video/*"></label>
+      <label>…or links, one per line: Google Drive files or whole Google Drive folders, YouTube, Facebook, Vimeo, Vbox7, Instagram, TikTok
+        <textarea name="links" rows="3" placeholder="https://drive.google.com/drive/folders/…&#10;https://drive.google.com/file/d/…/view"></textarea></label>
+      <p class="muted small">Google Drive: share the file or folder as “Anyone with the link” so it plays here. A folder adds every video in it, subfolders included.</p>
+      <div id="drivePick"></div>
       <label>Description<textarea name="description" maxlength="2000"></textarea></label>
       <input type="hidden" name="article_key" value="${esc(p.article_key || '')}">
       <input type="hidden" name="article_url" value="${esc(p.article_url || '')}">
-      <div class="bar"><button class="primary" type="submit">Upload</button>${PREFILL ? '<button type="button" data-act="clearPrefill">Not for a story</button>' : ''}</div>
-      <div id="upMsg" class="msg"></div>
+      <div class="bar"><button class="primary" type="submit">Add</button>${PREFILL ? '<button type="button" data-act="clearPrefill">Not for a story</button>' : ''}</div>
+      <div class="prog" id="upProg" hidden><div></div></div>
+      <div id="upMsg" class="msg" role="status"></div>
     </form></details>`;
 }
+function drawDrivePick(){
+  const box = $('#drivePick');
+  if (!box) return;
+  if (!DRIVE_PICK || !DRIVE_PICK.items.length) { box.innerHTML = ''; return; }
+  const items = DRIVE_PICK.items;
+  box.innerHTML = `<div class="dpick"><div class="bar"><b>${items.length} video${items.length > 1 ? 's' : ''} in ${esc(DRIVE_PICK.title || 'the folder')}</b>
+      <button type="button" class="small" data-dpall="1">Tick all</button><button type="button" class="small" data-dpall="0">Untick all</button></div>
+    <div class="dlist">${items.map((it, i) => `<label class="ck"><input type="checkbox" name="dp" value="${i}" checked>${esc(it.name || it.id)}${it.folder ? ` <span class="muted">· ${esc(it.folder)}</span>` : ''}</label>`).join('')}</div></div>`;
+}
+const driveFolder = u => { const m = String(u || '').match(/^https:\/\/drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders\/|embeddedfolderview\?id=|open\?id=)([\w-]{10,})/); return m && !/\/file\//.test(u) ? m[1] : null; };
+async function listDriveFolder(url){
+  const { data } = await SB.auth.getSession();
+  const r = await fetch('/drive/list', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session && data.session.access_token) }, body: JSON.stringify({ url }) });
+  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('Reading Google Drive folders works on the published site.');
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Google Drive could not be read');
+  return j;
+}
+const stripExt = n => String(n || '').replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_]+/g, ' ').trim();
+const fmtDur = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 async function submitUpload(form){
-  const msg = $('#upMsg'), btn = form.querySelector('button[type=submit]');
+  const msg = $('#upMsg'), btn = form.querySelector('button[type=submit]'), prog = $('#upProg');
   const f = new FormData(form);
-  const file = f.get('file'), link = String(f.get('video_url') || '').trim();
+  const file = f.get('file'), lines = String(f.get('links') || '').split(/\s+/).map(s => s.trim()).filter(Boolean);
   const say = (t, cls) => { msg.textContent = t; msg.className = 'msg ' + (cls || ''); };
-  if (!(file && file.size) && !link) return say('Choose a video file or paste a video link.', 'err');
-  if (file && file.size > MAX_UPLOAD_MB * 1048576) return say(`The file is larger than ${MAX_UPLOAD_MB} MB.`, 'err');
-  if (link && !/^https:\/\//i.test(link)) return say('The video link must start with https://', 'err');
+  const bar = p => { prog.hidden = p == null; if (p != null) prog.firstElementChild.style.width = Math.round(p * 100) + '%'; };
+  const hasFile = !!(file && file.size);
+  if (!hasFile && !lines.length) return say('Choose a video file or paste a link.', 'err');
+  const bad = lines.find(l => !/^https:\/\//i.test(l));
+  if (bad) return say('Links must start with https:// — check: ' + bad.slice(0, 80), 'err');
   btn.disabled = true;
   let path = null;
   try {
-    if (file && file.size) {
-      say('Uploading the file…');
-      path = `${USER.id}/${Date.now()}-${(file.name || 'video').replace(/[^\w.-]+/g, '_').slice(-80)}`;
-      const { error } = await SB.storage.from('videos').upload(path, file, { contentType: file.type || 'video/mp4', upsert: false });
-      if (error) throw error;
+    // 1. a Google Drive folder: list its videos first, so the member can untick some
+    const folders = lines.filter(driveFolder), fkey = folders.join('|');
+    if (folders.length && (!DRIVE_PICK || DRIVE_PICK.key !== fkey)) {
+      say('Reading the Google Drive folder' + (folders.length > 1 ? 's' : '') + '…');
+      const items = [], titles = [];
+      for (const u of folders) {
+        const j = await listDriveFolder(u);
+        titles.push(j.folder || 'folder');
+        j.files.forEach(x => items.push({ url: x.url, name: x.name, folder: [j.folder, x.folder].filter(Boolean).join(' / '), id: x.id }));
+      }
+      DRIVE_PICK = { key: fkey, items, title: titles.map(t => `“${t}”`).join(', ') };
+      drawDrivePick();
+      if (!items.length) { DRIVE_PICK = null; return say('No videos found in that folder. Is it shared as “Anyone with the link”?', 'err'); }
+      return say(`Found ${items.length} video${items.length > 1 ? 's' : ''}. Untick any you don't want and press Add again.`, 'ok');
     }
-    const row = { title: String(f.get('title')).trim(), match: String(f.get('match') || '').trim() || null,
+    // 2. what will be added
+    const picked = DRIVE_PICK && DRIVE_PICK.key === fkey ? [...form.querySelectorAll('input[name=dp]:checked')].map(i => DRIVE_PICK.items[Number(i.value)]) : [];
+    const items = [];
+    if (hasFile) items.push({ file });
+    lines.filter(l => !driveFolder(l)).forEach(url => items.push({ url }));
+    picked.forEach(it => items.push({ url: it.url, name: it.name, folder: it.folder }));
+    if (!items.length) return say('Nothing ticked to add.', 'err');
+    const title = String(f.get('title') || '').trim();
+    if (items.length === 1 && !title && !items[0].name) return say('Give the video a title.', 'err');
+    // 3. the file: compressed when it is too big (or not MP4/WebM/MOV), then uploaded with progress
+    if (hasFile) {
+      let blob = file;
+      if (file.size > MAX_UPLOAD_MB * 1048576 || !/^video\/(mp4|webm|quicktime)$/.test(file.type)) {
+        say('Compressing the video in your browser… 0%');
+        bar(0);
+        blob = await compressVideo(file, p => { bar(p); say(`Compressing the video in your browser… ${Math.round(p * 100)}%`); });
+        say(`Compressed to ${(blob.size / 1048576).toFixed(1)} MB.`);
+      }
+      path = `${USER.id}/${Date.now()}-${(stripExt(file.name) || 'video').replace(/[^\w.-]+/g, '_').slice(-70)}.${blob === file ? (file.name.split('.').pop() || 'mp4').toLowerCase() : 'mp4'}`;
+      bar(0);
+      await putFile(path, blob, p => { bar(p); say(`Uploading… ${Math.round(p * 100)}%`); });
+    }
+    // 4. the rows, then their categories
+    const base = { region: f.get('region') === 'world' ? 'world' : 'bg', match: String(f.get('match') || '').trim() || null,
       match_date: f.get('match_date') || null, minutes: String(f.get('minutes') || '').trim() || null,
-      division: f.get('division') || null, description: String(f.get('description') || '').trim() || null,
-      article_key: f.get('article_key') || null, article_url: f.get('article_url') || null,
-      storage_path: path, video_url: path ? null : link };
-    const { error } = await SB.from('videos').insert(row);
-    if (error) { if (path) await SB.storage.from('videos').remove([path]); throw error; }
-    PREFILL = null;
-    form.reset();
+      description: String(f.get('description') || '').trim() || null, article_key: f.get('article_key') || null, article_url: f.get('article_url') || null };
+    base.division = base.region === 'bg' ? (f.get('division') || null) : null;
+    const rows = items.map((it, i) => {
+      let t = items.length === 1 ? (title || stripExt(it.name)) : (stripExt(it.name) || (title ? `${title} (${i + 1})` : `Video ${i + 1}`));
+      if (t.length < 3) t = 'Video ' + t;
+      return { ...base, title: t.slice(0, 200), storage_path: it.file ? path : null, video_url: it.file ? null : it.url,
+        description: base.description || (it.folder ? 'Google Drive: ' + it.folder : null) };
+    });
+    say(`Saving ${rows.length} video${rows.length > 1 ? 's' : ''}…`);
+    const { data, error } = await SB.from('videos').insert(rows).select('id');
+    if (error) { if (path) await SB.storage.from('videos').remove([path]); path = null; throw error; }
+    const cats = f.getAll('cats').map(Number).filter(Boolean);
+    if (cats.length && data && data.length) {
+      const { error: e2 } = await SB.from('video_category_items').insert(data.flatMap(r => cats.map(c => ({ video_id: r.id, category_id: c }))));
+      if (e2) log('Categories not saved: ' + e2.message);
+    }
+    PREFILL = null; DRIVE_PICK = null;
+    form.reset(); drawDrivePick();
+    VSEL.region = base.region; VSEL.status = ''; VSEL.cat = ''; saveVsel();
     await loadVideos();
-    const m = $('#upMsg'); if (m) { m.textContent = 'Uploaded — the video is now on the site.'; m.className = 'msg ok'; }
+    const m = $('#upMsg'); if (m) { m.textContent = rows.length > 1 ? `Added ${rows.length} videos.` : 'Added — the video is now on the site.'; m.className = 'msg ok'; }
   } catch (e) {
-    say('Upload failed: ' + (e.message || e), 'err');
-  } finally { btn.disabled = false; }
+    say((path ? 'Upload failed: ' : '') + (e.message || e), 'err');
+  } finally { btn.disabled = false; bar(null); }
+}
+// upload straight to Supabase Storage, so the progress can be shown
+async function putFile(path, blob, onProgress){
+  const { data } = await SB.auth.getSession();
+  const token = data.session && data.session.access_token;
+  await new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', SB_CONF.url + '/storage/v1/object/videos/' + path.split('/').map(encodeURIComponent).join('/'));
+    x.setRequestHeader('Authorization', 'Bearer ' + token);
+    x.setRequestHeader('apikey', SB_CONF.key);
+    x.setRequestHeader('Content-Type', blob.type || 'video/mp4');
+    x.setRequestHeader('x-upsert', 'false');
+    x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    x.onload = () => { if (x.status < 300) resolve(); else { let m = 'HTTP ' + x.status; try { const j = JSON.parse(x.responseText); m = j.message || j.error || m; } catch (e) {} reject(new Error(m)); } };
+    x.onerror = () => reject(new Error('the connection was lost'));
+    x.send(blob);
+  });
+}
+// Re-encode a recording in the browser (WebCodecs, via Mediabunny) so it fits the upload limit: H.264 MP4 up to 720p,
+// 30 frames a second, with the bitrate worked out from its length (5 minutes ≈ 1.2 Mbit/s).
+let MB_LIB = null;
+async function compressVideo(file, onProgress){
+  if (typeof VideoEncoder === 'undefined') throw new Error('This browser cannot compress video. Use Chrome, Edge or Safari, or add the video from Google Drive.');
+  const M = await (MB_LIB || (MB_LIB = import(MEDIABUNNY).catch(e => { MB_LIB = null; throw new Error('The video compressor could not be loaded: ' + e.message); })));
+  const open = () => new M.Input({ formats: M.ALL_FORMATS, source: new M.BlobSource(file) });
+  const probe = open();
+  const vt = await probe.getPrimaryVideoTrack();
+  if (!vt) throw new Error('No video found in that file.');
+  const dur = await probe.computeDuration();
+  if (!(dur > 0)) throw new Error('The length of the video could not be read.');
+  let fps = 0;
+  try { fps = (await vt.computePacketStats(120)).averagePacketRate || 0; } catch (e) {}
+  const limitBits = (MAX_UPLOAD_MB - 3) * 1048576 * 8, audioBits = 96e3;
+  const total = limitBits / dur;
+  if (total < 450e3) throw new Error(`The video is ${fmtDur(dur)} long — too long to fit ${MAX_UPLOAD_MB} MB in a watchable quality. Upload it to Google Drive and paste the link instead.`);
+  const run = async factor => {
+    const vb = Math.round(Math.min(2.5e6, Math.max(300e3, (total - audioBits) * factor)));
+    const width = Math.min(vt.displayWidth, vb >= 1.0e6 ? 1280 : vb >= 0.6e6 ? 960 : 640) & ~1;
+    const height = Math.round(width * vt.displayHeight / vt.displayWidth / 2) * 2;
+    const codec = (await M.canEncodeVideo('avc', { width, height, bitrate: vb })) ? 'avc' : (await M.canEncodeVideo('vp9', { width, height, bitrate: vb })) ? 'vp9' : null;
+    if (!codec) throw new Error('This browser cannot compress video. Use Chrome, Edge or Safari, or add the video from Google Drive.');
+    const acodec = (await M.canEncodeAudio('aac')) ? 'aac' : 'opus';
+    const output = new M.Output({ format: new M.Mp4OutputFormat({ fastStart: 'in-memory' }), target: new M.BufferTarget() });
+    const conv = await M.Conversion.init({ input: open(), output, showWarnings: false,
+      video: { width, codec, quality: new M.Quality({ bitrate: vb }), forceTranscode: true, ...(fps > 31 ? { frameRate: 30 } : {}) },
+      audio: { codec: acodec, quality: new M.Quality({ bitrate: audioBits }), forceTranscode: true } });
+    if (!conv.isValid) throw new Error('The browser cannot read this video (' + conv.discardedTracks.map(t => t.reason.replace(/_/g, ' ')).join(', ') + '). Add it from Google Drive instead.');
+    conv.onProgress = p => onProgress(Math.min(1, p));
+    await conv.execute();
+    return new Blob([output.target.buffer], { type: 'video/mp4' });
+  };
+  let blob = await run(1);
+  if (blob.size > MAX_UPLOAD_MB * 1048576) blob = await run(0.75);     // the encoder overshot: once more, smaller
+  if (blob.size > MAX_UPLOAD_MB * 1048576) throw new Error(`Even compressed the video is ${(blob.size / 1048576).toFixed(0)} MB. Upload it to Google Drive and paste the link instead.`);
+  return blob;
 }
 async function deleteVideo(id){
   const v = VIDEOS.find(x => String(x.id) === String(id));
@@ -1095,7 +1480,44 @@ async function deleteVideo(id){
   const { error } = await SB.from('videos').delete().eq('id', v.id);
   if (error) { alert('Could not delete: ' + error.message); return; }
   if (v.storage_path) await SB.storage.from('videos').remove([v.storage_path]);
+  VPICK.delete(v.id);
   loadVideos();
+}
+function initVideosUI(){
+  const view = $('#view-videos');
+  view.addEventListener('click', e => {
+    const r = e.target.closest('[data-vreg]');
+    if (r) { VSEL.region = r.dataset.vreg; VSEL.status = ''; VSEL.cat = ''; saveVsel(); renderVideos(); return; }
+    const st = e.target.closest('[data-vst]');
+    if (st) { VSEL.status = st.dataset.vst; saveVsel(); renderVideos(); return; }
+    const c = e.target.closest('[data-vcat]');
+    if (c) { VSEL.cat = VSEL.cat === c.dataset.vcat && c.classList.contains('tag') ? '' : c.dataset.vcat; saveVsel(); renderVideos(); if (c.classList.contains('tag')) $('#vFilters').scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    const d = e.target.closest('[data-del]'); if (d) { deleteVideo(d.dataset.del); return; }
+    const cd = e.target.closest('[data-cdel]'); if (cd) { deleteComment(cd.dataset.cdel); return; }
+    if (e.target.closest('[data-act="clearPrefill"]')) { PREFILL = null; renderVideos(); return; }
+    const da = e.target.closest('[data-dpall]'); if (da) { view.querySelectorAll('input[name=dp]').forEach(i => i.checked = da.dataset.dpall === '1'); return; }
+    if (e.target.closest('[data-bulk-clear]')) { VPICK.clear(); view.querySelectorAll('[data-pick]').forEach(i => { i.checked = false; i.closest('.vcard').classList.remove('picked'); }); renderBulk(); return; }
+    if (e.target.closest('[data-bulk-all]')) { view.querySelectorAll('[data-pick]').forEach(i => { i.checked = true; VPICK.add(Number(i.dataset.pick)); i.closest('.vcard').classList.add('picked'); }); renderBulk(); return; }
+    const cm = e.target.closest('[data-cmove]'); if (cm) { catAction('move', cm.closest('.catrow'), cm); return; }
+    const cx = e.target.closest('[data-cdelete]'); if (cx) { catAction('delete', cx.closest('.catrow')); return; }
+  });
+  view.addEventListener('change', e => {
+    const p = e.target.closest('[data-pick]');
+    if (p) { const id = Number(p.dataset.pick); p.checked ? VPICK.add(id) : VPICK.delete(id); p.closest('.vcard').classList.toggle('picked', p.checked); renderBulk(); return; }
+    const vc = e.target.closest('[data-vc]');
+    if (vc) { const [vid, cid] = vc.dataset.vc.split(':').map(Number); setVideoCat(vid, cid, vc.checked); return; }
+    const b = e.target.closest('[data-bulk]');
+    if (b && b.value) { bulkAction(b.dataset.bulk, b.value); return; }
+    if (e.target.name === 'links' && DRIVE_PICK) { DRIVE_PICK = null; drawDrivePick(); }
+  });
+  view.addEventListener('submit', e => {
+    const f = e.target;
+    if (f.id === 'upForm') { e.preventDefault(); submitUpload(f); }
+    else if (f.classList.contains('cform')) { e.preventDefault(); postComment(f); }
+    else if (f.classList.contains('vaform')) { e.preventDefault(); saveVideoAdmin(f); }
+    else if (f.id === 'catAdd') { e.preventDefault(); catAction('add', f); }
+    else if (f.classList.contains('catrow')) { e.preventDefault(); catAction('rename', f); }
+  });
 }
 
 /* ======================= UI: ACCOUNT ======================= */
@@ -1117,7 +1539,7 @@ function drawAccount(box){
     return;
   }
   if (USER) {
-    const status = isAdmin() ? 'Admin' : approved() ? 'Approved member — you can upload videos' : 'Waiting for admin approval';
+    const status = isAdmin() ? 'Admin' : approved() ? 'Approved member — you can watch, upload and comment on videos' : 'Waiting for admin approval';
     box.innerHTML = `<div class="card"><h2>${esc((PROFILE && PROFILE.display_name) || USER.email)}</h2>
       <p class="muted">${esc(USER.email)}</p><p><b>Status:</b> ${esc(status)}</p>
       <p class="muted">Your read marks are saved to your account and follow you to other devices.</p>
@@ -1135,7 +1557,7 @@ function drawAccount(box){
       <div class="bar"><button class="primary" type="submit">${login ? 'Log in' : 'Create account'}</button>${login ? '<button type="button" id="btnForgot">Forgot password?</button>' : ''}</div>
       <div id="accMsg" class="msg"></div>
     </form>
-    <p class="muted">You don't need an account to read the news. Accounts are for uploading match videos (after admin approval) and keeping your read marks across devices.</p>
+    <p class="muted">You don't need an account to read the news. Accounts are for the members' videos — watching, uploading and commenting, after admin approval — and keeping your read marks across devices.</p>
   </div>`;
 }
 function accSay(t, cls){ const m = $('#accMsg'); if (m) { m.textContent = t; m.className = 'msg ' + (cls || ''); } }
@@ -1718,18 +2140,13 @@ function initUI(){
     if (b.dataset.act === 'upload') {
       const mins = new Set(); extractTargets(s).forEach(a => (X[a.aid] ? X[a.aid].minutes : []).forEach(m => mins.add(minLabel(m).replace("'", ''))));
       PREFILL = { article_key: s.rep.aid, article_url: s.rep.link, storyTitle: s.rep.title, title: '', match: storyMatch(s),
-        match_date: ymd(new Date(s.first)), minutes: [...mins].join(', '), division: s.divs.find(d => d !== 'unk') || '' };
+        match_date: ymd(new Date(s.first)), minutes: [...mins].join(', '), division: s.divs.find(d => d !== 'unk' && d !== 'eur') || '',
+        region: VIEW === 'world' ? 'world' : 'bg' };
       go('videos');
     }
   });
 
-  $('#videoList').addEventListener('click', e => {
-    const b = e.target.closest('[data-del]'); if (b) deleteVideo(b.dataset.del);
-    const c = e.target.closest('[data-cdel]'); if (c) deleteComment(c.dataset.cdel);
-  });
-  $('#videoList').addEventListener('submit', e => { const f = e.target.closest('.cform'); if (f) { e.preventDefault(); postComment(f); } });
-  $('#uploadBox').addEventListener('submit', e => { if (e.target.id === 'upForm') { e.preventDefault(); submitUpload(e.target); } });
-  $('#uploadBox').addEventListener('click', e => { if (e.target.closest('[data-act="clearPrefill"]')) { PREFILL = null; renderVideos(); } });
+  initVideosUI();
   $('#accountBox').addEventListener('submit', e => { e.preventDefault(); onAccountSubmit(e.target); });
   $('#accountBox').addEventListener('click', async e => {
     const tab = e.target.closest('[data-tab]'); if (tab) { ACC_TAB = tab.dataset.tab; renderAccount(true); return; }
@@ -1761,7 +2178,7 @@ setTimeout(autoCheck, 500);
 setInterval(autoCheck, 10 * 60e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
 
-window.BGRW = { loadNews, buildStories, toEmbed, renderAll, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
+window.BGRW = { loadNews, buildStories, toEmbed, renderAll, compressVideo, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
 })();
 </script>
 </body>
