@@ -96,13 +96,13 @@ Deno.serve(async (req) => {
     out.mode = 'reclassify';                        // passes, and move the rest to their current section / competitions
     const rows: any[] = [];
     for (let from = 0; ; from += 1000) {
-      const page = await rest(`news_articles?select=aid,title,descr,scope,divs,comps&order=aid&offset=${from}&limit=1000`);
+      const page = await rest(`news_articles?select=aid,title,descr,src,link,scope,divs,comps&order=aid&offset=${from}&limit=1000`);
       rows.push(...page);
       if (page.length < 1000) break;
     }
     const drop: any[] = [], move: any[] = [];
     for (const r of rows) {
-      const a = N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
+      const a = N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
       if (!a) { drop.push(r); continue; }
       const same = a.scope === r.scope && [...a.comps].sort().join() === [...(r.comps ?? [])].sort().join();
       if (!same) move.push({ aid: r.aid, title: r.title, from: `${r.scope}:${(r.comps ?? []).join('+')}`, to: `${a.scope}:${a.comps.join('+')}`,

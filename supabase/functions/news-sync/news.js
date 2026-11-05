@@ -264,6 +264,12 @@ export function analyze(title, desc, q) {
   return { scope, divs, comps, cats, score, hinted, clubs, vh: RX.video.test(title) };
 }
 
+// Russian, Ukrainian, Serbian or Macedonian (Google News also gives those for Bulgarian searches): letters Bulgarian
+// doesn't have, or a site from those countries
+const NOT_BG_LETTERS = /[ыэёіїєґѓќѕџљњјђћ]/iu;
+export const notBulgarian = (title, src, link) => NOT_BG_LETTERS.test(String(title)) ||
+  /\.(?:ru|ua|by|kz|rs|mk|me|ba)$/i.test(String(src || '').trim()) || /^https?:\/\/[^/]*\.(?:ru|ua|by|kz|rs|mk|me|ba)(?:[/:?#]|$)/i.test(String(link || ''));
+
 // one feed item → an article row (or null when it isn't about refereeing / is before the season)
 export function toArticle(raw, kind, q, now = Date.now()) {
   let title = String(raw.title || '').replace(/\s+/g, ' ').trim();
@@ -279,6 +285,7 @@ export function toArticle(raw, kind, q, now = Date.now()) {
   const bare = src && desc.endsWith(src) ? desc.slice(0, -src.length).trim() : desc;
   if (desc && (norm(bare).startsWith(norm(title).slice(0, 40)) || norm(title).startsWith(norm(bare)))) desc = '';
   if (desc.length > 300) desc = desc.slice(0, 297) + '…';
+  if (notBulgarian(title, src, link)) return null;
   const a = analyze(title, desc, q);
   if (!a) return null;
   let d = raw.date instanceof Date ? raw.date.getTime() : NaN;

@@ -63,4 +63,8 @@ for (const [t, scope, comps] of [
   ['Славия Прага ощетена от рефера в Шампионска лига', 'world', ['ucl']],
   ['Левски с дузпа и червен картон, съдийството на световно ниво', 'bg', []],
 ]) { const r = N.analyze(t, '', loose); ok(r && r.scope === scope && comps.every(c => r.comps.includes(c)), `${scope} ${comps}: ${t} → ${r && r.scope + ':' + r.comps}`); }
+// other languages written in Cyrillic, and sites from those countries
+ok(N.notBulgarian('Сдержал ли Моуринью обещание разоблачить ошибочные решения арбитров', 'Tribuna.com', '') &&
+  N.notBulgarian('ВАР, пречки, повреди и драма во 89-та! Баерн и Дортмунд го одиграа мечот', 'sportstation.mk', '') &&
+  N.notBulgarian('Судија', 'x', 'https://www.sportklub.rs/a') && !N.notBulgarian('Кабаков ще свири дербито', 'Sportal.bg', 'https://www.sportal.bg/x'), 'Russian / Macedonian / Serbian articles are left out');
 console.log(fails ? fails + ' FAILED' : 'all passed');
