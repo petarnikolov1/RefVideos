@@ -67,4 +67,14 @@ for (const [t, scope, comps] of [
 ok(N.notBulgarian('Сдержал ли Моуринью обещание разоблачить ошибочные решения арбитров', 'Tribuna.com', '') &&
   N.notBulgarian('ВАР, пречки, повреди и драма во 89-та! Баерн и Дортмунд го одиграа мечот', 'sportstation.mk', '') &&
   N.notBulgarian('Судија', 'x', 'https://www.sportklub.rs/a') && !N.notBulgarian('Кабаков ще свири дербито', 'Sportal.bg', 'https://www.sportal.bg/x'), 'Russian / Macedonian / Serbian articles are left out');
+// World stories about Bulgarian clubs or referees are also shown in the Bulgaria tab (division "eur")
+for (const [t, eur] of [
+  ['Албански рефер ще ръководи мача на Левски с Ягелония в Лига Европа', true],
+  ['Радослав Гидженов получи наряд за мач от Лига на нациите', true],
+  ['Наш съдия ще свири на Будьо/Глимт и Лил в Шампионска лига', true],
+  ['Съдия №1 у нас дебютира в Лига Европа', true],
+  ['УЕФА даде 5-и мач в Лига Европа на български съдия тази есен', true],
+  ['Скандал с ВАР в Ливърпул – Арсенал: Оливър отмени гола на Салах', false],
+  ['Червен картон и скандал в мача на Англия в квалификациите за Мондиал 2030', false],
+]) { const r = N.analyze(t, '', loose); ok(r && r.scope === 'world' && r.divs.includes('eur') === eur, `${eur ? 'also Bulgaria' : 'World only'}: ${t} → ${r && r.scope + ':' + r.divs}`); }
 console.log(fails ? fails + ' FAILED' : 'all passed');

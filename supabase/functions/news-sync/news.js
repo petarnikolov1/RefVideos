@@ -148,6 +148,9 @@ export const RX = {
   otherSport:rx(`баскетбол${W}|волейбол${W}|хандбал${W}|футзал${W}|плаж${W} футбол${W}|мини-?футбол${W}|хокей${W}|тенис${W}|бокс${W}|mma${E}|формула 1|ръгби|водна топка`),
   court:     rx(`прокурат${W}|съд${E}|съда${E}|съдът|подсъдим${W}|обвиняем${W}|присъд${W}|осъд${W}|дело${E}|делото|адвокат${W}|районн${W} съд|градск${W} съд|апелатив${W}|мярка за неотклонение`),
   video:     rx(`видео${W}|video${E}|клип${W}|кадри${E}|вижте${E}|гледайте`),
+  // a Bulgarian referee without a name: "български съдия", "наш рефер", "съдия №1 у нас", "варненски съдия", "българинът"
+  bgRef:     rx(`(?:българск|наш|варненск|пловдивск|софийск|бургаск|русенск|старозагорск|търновск|великотърновск)${W} (?:съди|рефер|арбит)${W}|` +
+    `(?:съди|рефер)${W} (?:№ ?|номер )(?:1|едно) (?:у нас|на българия|в българия)|българин(?:ът)?${E}|великотърновец${E}`),
 };
 
 // Bulgarian clubs: [key, division, display name, pattern]
@@ -251,6 +254,9 @@ export function analyze(title, desc, q) {
 
   const divs = [];
   let hinted = false;
+  // a World story about a Bulgarian club (Левски in the Europa League) or a Bulgarian referee (Гидженов in the Nations
+  // League) is shown in the Bulgaria tab too: division "eur"
+  if (scope === 'world' && (clubsIn(title).length || REFNAMES.test(title) || RX.bgRef.test(title))) divs.push('eur');
   if (scope === 'bg') {
     if (L1) divs.push('d1'); if (L2) divs.push('d2'); if (L3) divs.push('d3'); if (CUP) divs.push('cup');
     if (!divs.length) for (const d of new Set(clubs.map(k => CLUBS.find(c => c.k === k).div))) divs.push(d);

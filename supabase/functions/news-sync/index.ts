@@ -104,9 +104,10 @@ Deno.serve(async (req) => {
     for (const r of rows) {
       const a = N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
       if (!a) { drop.push(r); continue; }
-      const same = a.scope === r.scope && [...a.comps].sort().join() === [...(r.comps ?? [])].sort().join();
+      const same = a.scope === r.scope && [...a.comps].sort().join() === [...(r.comps ?? [])].sort().join() &&
+        (a.scope !== 'world' || [...a.divs].sort().join() === [...(r.divs ?? [])].sort().join());
       if (!same) move.push({ aid: r.aid, title: r.title, from: `${r.scope}:${(r.comps ?? []).join('+')}`, to: `${a.scope}:${a.comps.join('+')}`,
-        patch: { scope: a.scope, comps: a.comps, divs: a.scope === 'bg' ? (r.scope === 'bg' ? r.divs : a.divs) : [] } });
+        patch: { scope: a.scope, comps: a.comps, divs: a.scope === 'bg' && r.scope === 'bg' ? r.divs : a.divs } });
     }
     if (!body.dry) {
       for (let k = 0; k < drop.length; k += 100) {

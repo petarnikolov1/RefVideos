@@ -321,7 +321,9 @@ const CLUBS = [
 ].map(([k, div, label, pat]) => ({ k, div, label, re: CS([pat || label]) }));
 const CLUB_LABEL = Object.fromEntries(CLUBS.map(c => [c.k, c.label]));
 
-const DIVS = { d1:'1st League (efbet)', d2:'2nd League', d3:'3rd League', cup:'Bulgarian Cup', unk:'Unclassified' };
+const DIVS = { d1:'1st League (efbet)', d2:'2nd League', d3:'3rd League', cup:'Bulgarian Cup', eur:'Europe & abroad', unk:'Unclassified' };
+// which tab an article belongs to: Bulgarian, World, or both (a Bulgarian club in a European cup, a Bulgarian referee abroad)
+const artSide = a => a.scope === 'bg' ? 'bg' : (a.divs || []).includes('eur') ? 'both' : 'world';
 const COMPS = { nat:'National teams', ucl:'Champions League', uel:'Europa League', uecl:'Conference League',
   eng:'England', esp:'Spain', ita:'Italy', ger:'Germany', fra:'France' };
 // the World tab is split into three sections
@@ -446,7 +448,7 @@ function feat(a){
   if (/вечн\p{L}* дерби/iu.test(a.title)) { clubs.add('levski'); clubs.add('cska'); }
   const rnd = new Set([...String(a.title).matchAll(/(\d{1,2})\s*-?\s*(?:ия|ти|ви|ри|и)?\s+кръг/giu)].map(m => m[1]));
   f = { tok, base: norm(a.title), full: new Set(words.filter(Boolean)), cats: (a.cats || []).filter(c => c !== 'other'),
-    clubs, divs: new Set((a.divs || []).filter(x => x !== 'unk')), comps: new Set(a.comps || []), rnd };
+    clubs, divs: new Set((a.divs || []).filter(x => x !== 'unk' && x !== 'eur')), comps: new Set(a.comps || []), rnd, side: artSide(a) };
   FEAT.set(a.aid, f);
   return f;
 }
@@ -459,10 +461,11 @@ function clusterArticles(arts){
   for (const f of F) for (const t of f.tok) df.set(t, (df.get(t) || 0) + 1);
   const idf = new Map([...df].map(([t, c]) => [t, Math.log((n + 1) / (c + 1)) ** 2]));
   const len = F.map(f => Math.sqrt([...f.tok].reduce((x, t) => x + idf.get(t), 0)) || 1);
-  // similarity of every pair of articles of the same section within a few days (cosine of the weighted words)
+  // similarity of every pair of articles of the same tab within a few days (cosine of the weighted words);
+  // a "both" article (Левски in the Europa League) can join either tab's articles
   const nb = arts.map(() => new Map());
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n && arts[j].date - arts[i].date <= span; j++) {
-    if (arts[i].scope !== arts[j].scope) continue;
+    if (F[i].side !== F[j].side && F[i].side !== 'both' && F[j].side !== 'both') continue;
     let s = 0, shared = 0;
     for (const t of F[i].tok) if (F[j].tok.has(t)) { s += idf.get(t); shared++; }
     if (shared < 2) continue;                      // one word in common (a name, "наряд", "глоба") is not enough
@@ -523,6 +526,7 @@ function buildStories(){
     const score = Math.max(...g.map(a => a.score || 1)) + Math.min(6, sources - 1);
     list.push({
       key: g[0].aid, scope: rep.scope, arts: g.slice().reverse(), aidSet: new Set(g.map(a => a.aid)), rep,
+      bg: g.some(a => artSide(a) !== 'world'), world: g.some(a => a.scope === 'world'), bgOnly: g.some(a => a.scope === 'bg'),
       date: g[g.length - 1].date, first: g[0].date, sources, score,
       divs: union('divs', 'unk'), comps: union('comps'), cats: union('cats', 'other'),
       hot: score >= 12 || sources >= 4, hasNew: g.some(isNewArt), vh: g.some(a => a.vh),
@@ -694,7 +698,7 @@ function mediaHtml(s){
   if (M.links.length) out.push('<div class="msg">' + M.links.slice(0, 4).map(l => `<a class="btn small" href="${esc(safeUrl(l.href))}" target="_blank" rel="noopener noreferrer">▶ ${esc(l.label)} (${esc(l.from)})</a>`).join(' ') + '</div>');
   if (M.mins.length) out.push('<h3>Minutes mentioned</h3><div class="mins">' + M.mins.map(m =>
     `<div class="minrow"><span class="min">${minLabel(m)}</span>${m.tags.length ? '<b>' + esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) + '</b> · ' : ''}<span class="muted">…${esc(m.ctx || '')}… (${esc(m.from)})</span></div>`).join('') + '</div>');
-  if (s.scope === 'bg') out.push(ebfuHtml(s, M.mins));
+  if (s.bgOnly) out.push(ebfuHtml(s, M.mins));
   if (EXTRACT === 'off') out.push('<div class="muted">Finding videos inside articles works on the Cloudflare-hosted site.</div>');
   else if (M.pending) out.push(`<div class="muted">Looking for videos in ${M.targets.length} article${M.targets.length > 1 ? 's' : ''}…</div>`);
   else if (!players.length && !M.files.length && !M.links.length && !uploads.length) out.push('<div class="muted">No video found in the articles.</div>');
@@ -827,7 +831,7 @@ function applyView(){
 }
 function renderNav(){
   const stories = buildStories();
-  const nb = stories.filter(s => s.scope === 'bg').length, nw = stories.filter(s => s.scope === 'world').length;
+  const nb = stories.filter(s => s.bg).length, nw = stories.filter(s => s.world).length;
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
   const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', VIDEOS.length],
     ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
@@ -864,7 +868,7 @@ function updateLastRun(){
 function filteredStories(){
   const scope = VIEW === 'world' ? 'world' : 'bg';
   const text = norm($('#q').value);
-  return buildStories().filter(s => s.scope === scope &&
+  return buildStories().filter(s => s[scope] &&
     (!$('#onlyNew').checked || s.hasNew) && (!$('#onlyHot').checked || s.hot) && (!$('#hideRead').checked || !storyRead(s)) &&
     (!text || s.arts.some(a => norm(a.title + ' ' + a.desc + ' ' + a.src).includes(text))));
 }
@@ -891,7 +895,8 @@ function storyCard(s){
   const rel = relatedArts(s), more = s.arts.length - 1 - Math.min(REL_SHOWN, rel.length);
   const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}${
     more > 0 ? `<li><button class="more" data-act="expand">+${more} more article${more > 1 ? 's' : ''}</button></li>` : ''}</ul>` : '';
-  const tags = (s.scope === 'world' ? s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`) : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`))
+  const compTags = s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`);
+  const tags = (VIEW === 'world' ? compTags : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`).concat(s.world ? compTags : []))
     .concat(s.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`));
   const M = storyMedia(s);
   if (M.mins.length) tags.unshift(`<span class="tag">⏱ ${M.mins.slice(0, 4).map(minLabel).join(' ')}${M.mins.length > 4 ? ' …' : ''}</span>`);
@@ -919,7 +924,7 @@ function storyCard(s){
     <div class="actions">
       <button class="small" data-act="expand">${open ? '▴ Hide' : '▾ ' + (s.arts.length > 1 ? `All ${s.arts.length} articles & video` : 'Details & video')}</button>
       <button class="small" data-act="read">${read ? 'Mark unread' : 'Mark read'}</button>
-      ${s.scope === 'bg' ? `<a class="btn small" href="${esc(EBFU_URL)}" target="_blank" rel="noopener" title="Match video in the ebfu.net archive (your own login)">🎥 ebfu.net</a>` : ''}
+      ${s.bgOnly ? `<a class="btn small" href="${esc(EBFU_URL)}" target="_blank" rel="noopener" title="Match video in the ebfu.net archive (your own login)">🎥 ebfu.net</a>` : ''}
     </div>${panel}
   </article>`;
 }
@@ -928,7 +933,7 @@ function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
   $('#intro').innerHTML = world
     ? 'Refereeing stories from the national teams, the European cups (Champions League, Europa League, Conference League) and the top five leagues: England, Spain, Italy, Germany and France. <a href="#results" data-world-results>Results &amp; tables →</a>'
-    : 'Refereeing stories from the efbet Liga, 2nd League, 3rd League and the Bulgarian Cup. Articles about the same incident are grouped into one story.';
+    : 'Refereeing stories from the efbet Liga, 2nd League, 3rd League and the Bulgarian Cup, and Bulgarian clubs and referees in Europe and abroad. Articles about the same incident are grouped into one story.';
   let base = filteredStories();
   // World: a section first (national teams / European cups / top 5 leagues), then the competitions inside it
   const sectEl = $('#sectChips');
