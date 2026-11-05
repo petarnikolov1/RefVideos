@@ -52,4 +52,15 @@ for (const [want, t, cat] of [['keep', 'БФС призна ощетяване �
   ['keep', 'Никола Попов свири на Левски, Великов на ЦСКА - Ботев Пловдив', 'committee'], ['keep', 'Избраха рефера на Левски - ЦСКА', 'committee'],
   ['keep', 'Ботев Вр се оплака от съдийството на мача с Черно море във Варна', 'dispute']]) {
   const r = N.analyze(t, '', { ctx: 'bg' }); ok(r && r.cats.includes(cat), want + ' as ' + cat + ': ' + t + ' → ' + (r && r.cats)); }
+// World: the five leagues, the three European cups and national teams each go to their own competition
+for (const [t, scope, comps] of [
+  ['Скандално съдийство в Лига Европа: Лудогорец ощетен от рефера', 'world', ['uel']],
+  ['ВАР отмени гол на Фиорентина в Лигата на конференциите', 'world', ['uecl']],
+  ['Съдията от мача България – Исландия в Лигата на нациите е от Норвегия', 'world', ['nat']],
+  ['Червен картон и скандал в мача на Англия в квалификациите за Мондиал 2030', 'world', ['nat']],
+  ['Майкъл Оливър отново в центъра на скандал с ВАР', 'world', ['eng']],
+  ['Червен картон за играч на Хофенхайм след намеса на ВАР', 'world', ['ger']],
+  ['Славия Прага ощетена от рефера в Шампионска лига', 'world', ['ucl']],
+  ['Левски с дузпа и червен картон, съдийството на световно ниво', 'bg', []],
+]) { const r = N.analyze(t, '', loose); ok(r && r.scope === scope && comps.every(c => r.comps.includes(c)), `${scope} ${comps}: ${t} → ${r && r.scope + ':' + r.comps}`); }
 console.log(fails ? fails + ' FAILED' : 'all passed');

@@ -70,6 +70,11 @@
   .card h2 a{text-decoration:none}
   .card h2 a:hover{text-decoration:underline}
   .desc{margin:4px 0 0;font-size:14px;color:var(--muted)}
+  .rel{list-style:none;margin:8px 0 0;padding:0 0 0 10px;border-left:2px solid var(--line)}
+  .rel li{font-size:13.5px;line-height:1.35;padding:2px 0}
+  .rel a{text-decoration:none;color:var(--text)} .rel a:hover{text-decoration:underline}
+  .rel .rs{color:var(--muted);font-size:12px;margin-right:5px;white-space:nowrap}
+  .rel .more{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
   .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
   .tag{font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--chip)}
   .tag.div{background:transparent;border:1px solid var(--line)}
@@ -113,7 +118,16 @@
   button.link{border:none;background:none;padding:0 4px;color:var(--muted);text-decoration:underline;font-size:12px}
 
   /* results & table (card style after the BFU e-championship) */
-  .lgbar{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px}
+  [hidden]{display:none !important}      /* hidden wins over display:flex of .chips / .seg */
+  .lgbar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+  /* segmented control: the World news sections and the Results sections */
+  .seg{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:10px}
+  .seg>button,.seg>.chip{flex:1 1 auto;border:0;border-radius:0;background:var(--card);color:var(--text);padding:8px 12px;font-size:13.5px;font-weight:600;text-align:center}
+  .seg>.on{background:var(--accent);color:var(--accent-ink)}
+  .seg .n{opacity:.7;margin-left:5px;font-weight:400}
+  #resultsBox>.seg{margin-top:14px}
+  .grphead{font-size:14px;margin:16px 0 0}
+  .standgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:0 14px}
   .roundnav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0}
   .roundnav .mid{text-align:center;flex:1;min-width:0}
   .roundnav h2{font-size:18px;margin:0}
@@ -210,6 +224,7 @@
     <p class="intro" id="intro"></p>
     <div class="filters">
       <input id="q" type="search" placeholder="Filter by team, referee, word…">
+      <div id="sectChips" class="chips seg" hidden></div>
       <div id="groupChips" class="chips"></div>
       <div id="catChips" class="chips"></div>
       <div class="row">
@@ -307,7 +322,11 @@ const CLUBS = [
 const CLUB_LABEL = Object.fromEntries(CLUBS.map(c => [c.k, c.label]));
 
 const DIVS = { d1:'1st League (efbet)', d2:'2nd League', d3:'3rd League', cup:'Bulgarian Cup', unk:'Unclassified' };
-const COMPS = { eng:'England', esp:'Spain', ita:'Italy', ger:'Germany', fra:'France', ucl:'Champions League' };
+const COMPS = { nat:'National teams', ucl:'Champions League', uel:'Europa League', uecl:'Conference League',
+  eng:'England', esp:'Spain', ita:'Italy', ger:'Germany', fra:'France' };
+// the World tab is split into three sections
+const WSECT = { nat: ['National teams', ['nat']], euro: ['European cups', ['ucl', 'uel', 'uecl']], top5: ['Top 5 leagues', ['eng', 'esp', 'ita', 'ger', 'fra']] };
+const inSect = (s, k) => s.comps.some(c => WSECT[k][1].includes(c));
 const CATS = { red:'Cards', penalty:'Penalties', offside:'Offsides / disallowed goals', var:'VAR', foul:'Fouls & handballs',
   committee:'Referee committee & appointments', discipline:'Discipline & sanctions', fights:'Fights & incidents',
   dispute:'Disputes & scandals', other:'Other' };
@@ -406,39 +425,79 @@ async function loadNews(force){
 }
 
 /* ======================= STORY GROUPING ======================= */
+// Articles about the same event become one story. Headlines are compared word by word (word stems), and words that
+// appear in many headlines (БФС, Левски, червен картон…) count for little, while rare ones (a player's or referee's
+// name, a town, a sum) count for a lot. Groups are joined by average linkage: an article only joins a story when it is
+// close to the story as a whole, not just to one of its articles, so unrelated stories are never chained together.
 const stem = w => w.slice(0, 5);
 const STOP = new Set(('като след срещу между което които която който това този тази така също може вече само беше бяха няма преди около ' +
-  'какво както когато заради днес вчера утре съдия съдията съдии съдийство съдийска съдийски съдийско рефер рефера арбитър ' +
-  'футбол футболен футболна мача мачът мачове лига лигата efbet ефбет кръг кръга отбор отбора видео снимки гледайте вижте ' +
-  'скандал скандално скандален сезон първа втора трета минута').split(' ').map(stem));
-const NAME_SKIP = new Set(['Видео','Вижте','Гледайте','Скандал','Съдията','Съдийската','Дисциплинарната','Официално','Ексклузивно','Снимки','Голям']);
+  'какво както когато заради днес вчера утре футбол футболен футболна мача мачът мачове лига лигата efbet ефбет кръг кръга отбор отбора ' +
+  'видео снимки гледайте вижте сезон първа втора трета минута новини подробности коментар излезе позиция официална официално заяви стана ' +
+  'бесен бесни избухна изригна скочи ядоса').split(' ').map(stem));
+const STORY_SIM = 0.27;               // average similarity two groups need to become one story
 const FEAT = new Map();
 function feat(a){
   let f = FEAT.get(a.aid);
   if (f) return f;
   const words = norm(a.title).split(' ');
-  const tok = new Set(words.filter(w => w.length >= 4 && !/^\d+$/.test(w)).map(stem).filter(s => !STOP.has(s)));
-  const names = new Set();
-  a.title.split(/\s+/).slice(1).forEach(w => {
-    const m = w.match(/^[„"«(]?([А-Я][а-яё]{3,})/);
-    if (m && !NAME_SKIP.has(m[1]) && !CLUBS.some(c => c.re.test(m[1]))) names.add(stem(m[1].toLowerCase()));
-  });
-  f = { tok, names, clubs: new Set(a.clubs || []), cats: new Set((a.cats || []).filter(c => c !== 'other')),
-        base: norm(a.title), full: new Set(words.filter(Boolean)) };
+  const tok = new Set(words.filter(w => (w.length >= 4 && !/^\d+$/.test(w)) || /^\d{2,}$/.test(w)).map(w => /^\d/.test(w) ? w : stem(w)).filter(t => !STOP.has(t)));
+  // who and what it is about: clubs (the "eternal derby" is Левски – ЦСКА), division, competition and round number
+  const clubs = new Set(a.clubs || []);
+  if (/вечн\p{L}* дерби/iu.test(a.title)) { clubs.add('levski'); clubs.add('cska'); }
+  const rnd = new Set([...String(a.title).matchAll(/(\d{1,2})\s*-?\s*(?:ия|ти|ви|ри|и)?\s+кръг/giu)].map(m => m[1]));
+  f = { tok, base: norm(a.title), full: new Set(words.filter(Boolean)), cats: (a.cats || []).filter(c => c !== 'other'),
+    clubs, divs: new Set((a.divs || []).filter(x => x !== 'unk')), comps: new Set(a.comps || []), rnd };
   FEAT.set(a.aid, f);
   return f;
 }
 const inter = (a, b) => { let n = 0; for (const x of a) if (b.has(x)) n++; return n; };
+const apart = (a, b) => a.size > 0 && b.size > 0 && !inter(a, b);     // both say, and they say different things
 const jacc = (a, b) => { const i = inter(a, b); return i ? i / (a.size + b.size - i) : 0; };
-function linked(a, b){
-  const j = jacc(a.tok, b.tok);
-  if (j >= 0.5) return true;
-  const sc = inter(a.clubs, b.clubs), sn = inter(a.names, b.names), sk = inter(a.cats, b.cats);
-  if (sc >= 2 && (sk >= 1 || j >= 0.2)) return true;           // same match + same kind of incident
-  if (sc >= 1 && sn >= 1 && (sk >= 1 || j >= 0.25)) return true; // same club + same player/referee
-  if (sn >= 2) return true;
-  return j >= 0.34 && sc + sn >= 1;
+// arts sorted oldest → newest; returns groups of indexes
+function clusterArticles(arts){
+  const n = arts.length, F = arts.map(feat), span = STORY_DAYS * 864e5, df = new Map();
+  for (const f of F) for (const t of f.tok) df.set(t, (df.get(t) || 0) + 1);
+  const idf = new Map([...df].map(([t, c]) => [t, Math.log((n + 1) / (c + 1)) ** 2]));
+  const len = F.map(f => Math.sqrt([...f.tok].reduce((x, t) => x + idf.get(t), 0)) || 1);
+  // similarity of every pair of articles of the same section within a few days (cosine of the weighted words)
+  const nb = arts.map(() => new Map());
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n && arts[j].date - arts[i].date <= span; j++) {
+    if (arts[i].scope !== arts[j].scope) continue;
+    let s = 0, shared = 0;
+    for (const t of F[i].tok) if (F[j].tok.has(t)) { s += idf.get(t); shared++; }
+    if (shared < 2) continue;                      // one word in common (a name, "наряд", "глоба") is not enough
+    s /= len[i] * len[j];
+    // a different kind of incident (a fine vs. a referee appointment for the same club) is less likely the same story
+    if (F[i].cats.length && F[j].cats.length && !F[i].cats.some(c => F[j].cats.includes(c))) s *= 0.6;
+    // different clubs, divisions, competitions or rounds: a different story (Дунав's fine is not Марек's fine)
+    if (apart(F[i].clubs, F[j].clubs)) s *= 0.3;
+    if (apart(F[i].comps, F[j].comps)) s *= 0.4;
+    if (apart(F[i].rnd, F[j].rnd)) s *= 0.3;
+    if (apart(F[i].divs, F[j].divs)) s *= 0.6;
+    if (s > 0.08) { nb[i].set(j, s); nb[j].set(i, s); }
+  }
+  // average linkage: keep joining the two closest groups while they are close enough
+  const size = arts.map(() => 1), members = arts.map((_, i) => [i]), alive = arts.map(() => true);
+  for (;;) {
+    let bi = -1, bj = -1, bv = STORY_SIM;
+    for (let i = 0; i < n; i++) if (alive[i]) for (const [j, sum] of nb[i]) if (j > i) { const v = sum / (size[i] * size[j]); if (v > bv) { bv = v; bi = i; bj = j; } }
+    if (bi < 0) break;
+    for (const [k, v] of nb[bj]) { if (k === bi) continue; nb[bi].set(k, (nb[bi].get(k) || 0) + v); nb[k].set(bi, (nb[k].get(bi) || 0) + v); nb[k].delete(bj); }
+    nb[bi].delete(bj); nb[bj].clear();
+    size[bi] += size[bj]; members[bi].push(...members[bj]); alive[bj] = false;
+  }
+  return members.filter((_, i) => alive[i]).map(g => g.sort((x, y) => x - y));
 }
+
+// The headline of a story is the article from the best-known outlet; among equals, the one closest to the rest of the
+// story (the most typical headline), then the earliest. The other articles are listed under it.
+const MEDIA = [
+  [3, /sportal|gong|blitz|блиц|topsport|btv|бтв|nova\b|nova\.bg|нова|бнт|bnt|24\s?chasa|24 часа|dnevnik|дневник/i],
+  [2, /dsport|7dnisport|dnes\.bg|днес|fakti|факти|mediapool|offnews|actualno|football24|sportlive|\bgol\b|gol\.bg|novsport|bfunion|футболен съюз|бнр|bnr|бта|\bbta\b|dir\.bg|webcafe|telegraph|телеграф|trud|труд|standart|стандарт|bgonair|arena\s?sport|арена спорт|fokus|фокус|plovdiv24|marica|марица/i],
+  [0, /facebook|novini247|topnovini|winbet|vbox7|youtube|unknown/i],
+];
+const mediaTier = src => { for (const [t, re] of MEDIA) if (re.test(src || '')) return t; return 1; };
+const cutTitle = t => /(\.\.\.|…)\s*$/.test(t) || /\s(?:на|в|от|по|за|и|с|между)\s*$/i.test(t);   // a headline cut off by the feed
 
 let STORY_CACHE = { ver: -1, season: '', list: [] };
 const DUP = new Map();   // aid -> aid of the earlier identical article
@@ -446,36 +505,27 @@ function buildStories(){
   if (STORY_CACHE.ver === VER && STORY_CACHE.season === S.settings.seasonStart) return STORY_CACHE.list;
   const min = seasonStartTs();
   const arts = Object.values(S.articles).filter(a => a.date >= min).sort((x, y) => x.date - y.date);
-  const parent = arts.map((_, i) => i);
-  const find = i => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
-  const F = arts.map(feat), span = STORY_DAYS * 864e5;
-  for (let i = 0; i < arts.length; i++)
-    for (let j = i + 1; j < arts.length && arts[j].date - arts[i].date <= span; j++) {
-      if (arts[i].scope !== arts[j].scope) continue;
-      const ri = find(i), rj = find(j);
-      if (ri !== rj && linked(F[i], F[j])) parent[rj] = ri;
-    }
-  const groups = new Map();
-  arts.forEach((a, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(a); });
   DUP.clear();
   const list = [];
-  for (const g of groups.values()) {            // g is sorted oldest → newest
+  for (const idx of clusterArticles(arts)) {
+    const g = idx.map(i => arts[i]);            // oldest → newest
     const originals = [];
     for (const a of g) {
       const f = feat(a);
       const d = originals.find(o => o.f.base === f.base || jacc(o.f.full, f.full) >= 0.85);
       if (d) DUP.set(a.aid, d.a.aid); else originals.push({ a, f });
     }
-    const rep = g.slice().sort((x, y) => (y.score - x.score) || ((DUP.has(x.aid) ? 1 : 0) - (DUP.has(y.aid) ? 1 : 0)) || (x.date - y.date))[0];
+    const central = a => g.length < 2 ? 0 : g.reduce((x, b) => x + (b === a ? 0 : jacc(feat(a).tok, feat(b).tok)), 0) / (g.length - 1);
+    const rank = a => mediaTier(a.src) * 10 + central(a) * 8 + (a.desc ? 1 : 0) - (cutTitle(a.title) ? 6 : 0) - (DUP.has(a.aid) ? 2 : 0);
+    const rep = g.map(a => [a, rank(a)]).sort((x, y) => (y[1] - x[1]) || (x[0].date - y[0].date))[0][0];
     const union = (key, filler) => { const s = new Set(g.flatMap(a => a[key] || [])); if (filler && s.size > 1) s.delete(filler); return [...s]; };
     const sources = new Set(g.map(a => a.src)).size;
-    const score = rep.score + Math.min(6, sources - 1);
+    const score = Math.max(...g.map(a => a.score || 1)) + Math.min(6, sources - 1);
     list.push({
       key: g[0].aid, scope: rep.scope, arts: g.slice().reverse(), aidSet: new Set(g.map(a => a.aid)), rep,
       date: g[g.length - 1].date, first: g[0].date, sources, score,
       divs: union('divs', 'unk'), comps: union('comps'), cats: union('cats', 'other'),
       hot: score >= 12 || sources >= 4, hasNew: g.some(isNewArt), vh: g.some(a => a.vh),
-      important: sources >= 2 || rep.score >= 10,
     });
   }
   STORY_CACHE = { ver: VER, season: S.settings.seasonStart, list };
@@ -777,7 +827,7 @@ function applyView(){
 }
 function renderNav(){
   const stories = buildStories();
-  const nb = stories.filter(s => s.scope === 'bg').length, nw = stories.filter(s => s.scope === 'world' && s.important).length;
+  const nb = stories.filter(s => s.scope === 'bg').length, nw = stories.filter(s => s.scope === 'world').length;
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
   const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', VIDEOS.length],
     ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
@@ -794,7 +844,7 @@ function renderAll(){
 }
 
 /* ======================= UI: NEWS ======================= */
-const SEL = { bg: { group: new Set(), cats: new Set() }, world: { group: new Set(), cats: new Set() } };
+const SEL = { bg: { group: new Set(), cats: new Set() }, world: { group: new Set(), cats: new Set(), sect: '' } };
 const EXPANDED = new Set();
 let shown = PAGE_SIZE, renderTimer = null;
 function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 350); }
@@ -814,7 +864,7 @@ function updateLastRun(){
 function filteredStories(){
   const scope = VIEW === 'world' ? 'world' : 'bg';
   const text = norm($('#q').value);
-  return buildStories().filter(s => s.scope === scope && (scope !== 'world' || s.important) &&
+  return buildStories().filter(s => s.scope === scope &&
     (!$('#onlyNew').checked || s.hasNew) && (!$('#onlyHot').checked || s.hot) && (!$('#hideRead').checked || !storyRead(s)) &&
     (!text || s.arts.some(a => norm(a.title + ' ' + a.desc + ' ' + a.src).includes(text))));
 }
@@ -825,10 +875,22 @@ function renderChips(el, labels, sel, list, key){
     `<button class="chip${sel.has(k) ? ' on' : ''}" data-k="${k}">${esc(label)}<span class="n">${counts[k] || 0}</span></button>`).join('');
 }
 
+// the other articles of a story, listed under its headline: no re-posts, best-known outlets first, one per outlet first
+function relatedArts(s){
+  const r = s.rep, seen = new Set([r.src]);
+  const list = s.arts.filter(a => a !== r && !DUP.has(a.aid) && DUP.get(r.aid) !== a.aid)
+    .sort((x, y) => (mediaTier(y.src) - mediaTier(x.src)) || (y.date - x.date));
+  const first = [], rest = [];
+  for (const a of list) (seen.has(a.src) ? rest : first).push(a), seen.add(a.src);
+  return first.concat(rest);
+}
+const REL_SHOWN = 3;
 function storyCard(s){
-  const read = storyRead(s), r = s.rep, extra = s.sources - 1;
-  const others = s.arts.filter(a => a.src !== r.src).map(a => a.src);
-  const srcLine = esc(r.src) + (extra > 0 ? ` <span title="${esc([...new Set(others)].join(', '))}">+${extra} more source${extra > 1 ? 's' : ''}</span>` : '');
+  const read = storyRead(s), r = s.rep;
+  const srcLine = esc(r.src) + (s.sources > 1 ? ` <span class="muted">· ${s.sources} sources</span>` : '');
+  const rel = relatedArts(s), more = s.arts.length - 1 - Math.min(REL_SHOWN, rel.length);
+  const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}${
+    more > 0 ? `<li><button class="more" data-act="expand">+${more} more article${more > 1 ? 's' : ''}</button></li>` : ''}</ul>` : '';
   const tags = (s.scope === 'world' ? s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`) : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`))
     .concat(s.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`));
   const M = storyMedia(s);
@@ -852,7 +914,7 @@ function storyCard(s){
     <div class="meta">${s.hot ? '<span class="badge hot">HOT</span>' : ''}${s.hasNew ? '<span class="badge new">NEW</span>' : ''}${read ? '<span class="badge read">✓ READ</span>' : ''}
       <span>${esc(fmtDate(s.date))}</span><span>·</span><span>${srcLine}</span></div>
     <h2><a href="${esc(safeUrl(r.link))}" data-aid="${esc(r.aid)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h2>
-    ${r.desc ? `<p class="desc">${esc(r.desc)}</p>` : ''}
+    ${r.desc ? `<p class="desc">${esc(r.desc)}</p>` : ''}${relHtml}
     <div class="tags">${tags.join('')}</div>
     <div class="actions">
       <button class="small" data-act="expand">${open ? '▴ Hide' : '▾ ' + (s.arts.length > 1 ? `All ${s.arts.length} articles & video` : 'Details & video')}</button>
@@ -864,14 +926,25 @@ function storyCard(s){
 
 function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
-  $('#intro').textContent = world
-    ? 'Only the biggest refereeing stories from the Premier League, La Liga, Serie A, Bundesliga, Ligue 1 and the Champions League — covered by at least two outlets or rated major.'
+  $('#intro').innerHTML = world
+    ? 'Refereeing stories from the national teams, the European cups (Champions League, Europa League, Conference League) and the top five leagues: England, Spain, Italy, Germany and France. <a href="#results" data-world-results>Results &amp; tables →</a>'
     : 'Refereeing stories from the efbet Liga, 2nd League, 3rd League and the Bulgarian Cup. Articles about the same incident are grouped into one story.';
-  const base = filteredStories();
+  let base = filteredStories();
+  // World: a section first (national teams / European cups / top 5 leagues), then the competitions inside it
+  const sectEl = $('#sectChips');
+  sectEl.hidden = !world;
+  if (world) {
+    sectEl.innerHTML = `<button class="chip${!sel.sect ? ' on' : ''}" data-sect="">All<span class="n">${base.length}</span></button>` +
+      Object.entries(WSECT).map(([k, [label]]) => `<button class="chip${sel.sect === k ? ' on' : ''}" data-sect="${k}">${esc(label)}<span class="n">${base.filter(s => inSect(s, k)).length}</span></button>`).join('');
+    if (sel.sect) base = base.filter(s => inSect(s, sel.sect));
+  }
   const groupKey = world ? 'comps' : 'divs';
+  const groupLabels = world ? Object.fromEntries(Object.entries(COMPS).filter(([k]) => !sel.sect || WSECT[sel.sect][1].includes(k))) : DIVS;
   const byCat = base.filter(s => !sel.cats.size || s.cats.some(c => sel.cats.has(c)));
   const byGroup = base.filter(s => !sel.group.size || s[groupKey].some(d => sel.group.has(d)));
-  renderChips($('#groupChips'), world ? COMPS : DIVS, sel.group, byCat, groupKey);
+  // the competition chips appear once a section is picked; a section with one competition (national teams) has none
+  $('#groupChips').hidden = world && (!sel.sect || Object.keys(groupLabels).length < 2);
+  renderChips($('#groupChips'), groupLabels, sel.group, byCat, groupKey);
   renderChips($('#catChips'), CATS, sel.cats, byGroup, 'cats');
   const list = byCat.filter(s => byGroup.includes(s));
   list.sort($('#sort').value === 'score' ? (a, b) => b.score - a.score || b.date - a.date : (a, b) => b.date - a.date);
@@ -1204,7 +1277,25 @@ async function setApproved(id, val){
 const FB_SEASON = '2026/27';
 const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\s+/, '');   // "ПФК Локомотив София 1929" → "Локомотив София 1929"
 const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига' };
-const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set(), oth: {} };
+const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set(), oth: {},
+  comps: null, compsLoading: false, last: {}, want: '' };
+// the Results sections: the Bulgarian leagues, then the world competitions (read from ESPN by the world-sync job)
+const RSECT = [['bg', 'България'], ['top5', 'Топ 5 лиги'], ['euro', 'Евротурнири'], ['nat', 'Национални отбори']];
+const isWorld = lg => !LEAGUES[lg];
+const compOf = lg => (FB.comps || []).find(c => c.key === lg);
+// the five leagues and the European cups are always listed; national-team competitions only while they (or their
+// qualifiers) are being played
+const visibleComps = () => (FB.comps || []).filter(c => c.season && (c.grp !== 'nat' || c.active));
+const sectOf = lg => LEAGUES[lg] ? 'bg' : (compOf(lg) || {}).grp || 'top5';
+const seasonLabel = s => { const m = String(s || '').match(/\d{4}(?:-\d{2})?/); return m ? m[0].replace('-', '/') : ''; };
+async function loadComps(){
+  if (!SB || FB.compsLoading || FB.comps) return;
+  FB.compsLoading = true;
+  const { data, error } = await SB.from('football_competitions').select('key,name,grp,ord,season,active,first_match,last_match').order('ord');
+  FB.compsLoading = false;
+  if (error) { log('Competitions could not be loaded: ' + error.message); FB.comps = []; } else FB.comps = data || [];
+  if (VIEW === 'results') renderResults(true);
+}
 if (!LEAGUES[FB.league]) FB.league = 'efbet';
 const BG_DAYS = ['Нед', 'Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб'], BG_MONTHS = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
 function sofiaParts(iso){
@@ -1229,11 +1320,110 @@ const logoHtml = (src, name) => src && /^https:\/\//.test(src)
   ? `<img class="tlogo" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-init="${esc(initials(name))}">`
   : `<span class="tinit">${esc(initials(name))}</span>`;
 
+// World competitions on the Results page: ESPN gives no matchday, so the rounds are worked out from the fixture list.
+// A league or group stage: every team plays once per round. Matches are taken in kickoff order and a round closes when
+// it is full, when a team would play twice, or after a gap of more than 36 hours. A match played out of turn (postponed
+// or moved) ends up almost alone: it goes back to the nearest round that is missing both its teams.
+// A knockout stage (play-off, 1/8-финал, final…) is one page with both legs.
+const W_KO = /round-of|final|play-?off|quarter|semi|3rd|third|qualifying|preliminary|knockout/;
+const W_STAGE = [[/^league-phase$/, 'Основна фаза'], [/^group-stage$|^group-phase$/, 'Групова фаза'], [/knockout-round-playoff|^playoffs?$|play-?off/, 'Плейоф'],
+  [/round-of-64/, '1/32-финал'], [/round-of-32/, '1/16-финал'], [/round-of-16/, '1/8-финал'], [/quarter/, 'Четвъртфинал'], [/semi/, 'Полуфинал'],
+  [/3rd|third/, 'Мач за 3-то място'], [/^finals?$/, 'Финал'], [/(\d)(?:st|nd|rd|th)-qualifying/, m => `${m[1]}-ви квалификационен кръг`], [/qualifying|preliminary/, 'Квалификации']];
+function wStageName(slug){
+  const s = String(slug || '').toLowerCase();
+  for (const [re, bg] of W_STAGE) { const m = s.match(re); if (m) return typeof bg === 'function' ? bg(m) : bg; }
+  return '';
+}
+const wGroup = m => { const g = String(m.note || '').split(' · ')[0]; return /^Група /.test(g) ? g : ''; };
+const wTime = m => Date.parse(m.kickoff) || 0;
+const wPut = (r, m) => { r.ms.push(m); r.teams.add(m.home_name); r.teams.add(m.away_name); };
+const wFree = (r, m, cap) => r.ms.length < cap && !r.teams.has(m.home_name) && !r.teams.has(m.away_name);
+// a league (or a league phase of 36 clubs): leagues play their rounds either over a weekend (Friday–Monday) or midweek
+// (Tuesday–Thursday). Each such block with at least half a round of matches is a round; a match played on its own
+// outside one (postponed, moved, or a round that started on a Thursday) goes to the nearest round that is missing both
+// its teams and isn't full yet.
+const wBlock = t => { const d = new Date(t), dow = d.getUTCDay(), back = [2, 3, 0, 1, 2, 0, 1][dow];   // Sun..Sat
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back); };
+function leagueRounds(pool, teams){
+  const cap = Math.floor(teams.size / 2), blocks = new Map(), rounds = [], spare = [];
+  for (const m of pool) { const k = wBlock(wTime(m)); if (!blocks.has(k)) blocks.set(k, []); blocks.get(k).push(m); }
+  for (const list of [...blocks.keys()].sort((a, b) => a - b).map(k => blocks.get(k))) {
+    const r = { ms: [], teams: new Set(), at: wTime(list[Math.floor(list.length / 2)]) }, rest = [];
+    for (const m of list) if (wFree(r, m, cap)) wPut(r, m); else rest.push(m);
+    if (r.ms.length >= Math.ceil(cap / 2)) { rounds.push(r); spare.push(...rest); } else spare.push(...list);
+  }
+  for (const m of spare.sort((a, b) => wTime(a) - wTime(b))) {
+    const t = wTime(m), near = rounds.slice().sort((a, b) => Math.abs(a.at - t) - Math.abs(b.at - t));
+    const r = near.find(r => wFree(r, m, cap)) || near.find(r => !r.teams.has(m.home_name) && !r.teams.has(m.away_name));
+    if (r) wPut(r, m); else { const x = { ms: [], teams: new Set(), at: t }; wPut(x, m); rounds.push(x); }
+  }
+  return rounds.sort((a, b) => a.at - b.at).map(r => r.ms);
+}
+// a group of 3–6 teams: rounds in kickoff order, a new one when a team would play twice, the round is full
+// (2 matches in a group of 4) or after a gap of more than 36 hours
+function groupRounds(pool, teams){
+  const cap = Math.max(1, Math.floor(teams.size / 2)), out = [];
+  let cur = null;
+  for (const m of pool) {
+    const t = wTime(m);
+    if (!cur || !wFree(cur, m, cap) || t - cur.last > 36 * 3600e3) out.push(cur = { ms: [], teams: new Set(), last: t });
+    wPut(cur, m); cur.last = t;
+  }
+  return out.map(r => r.ms);
+}
+function worldRounds(ms){
+  const sorted = ms.slice().sort((a, b) => wTime(a) - wTime(b) || String(a.home_name).localeCompare(String(b.home_name)));
+  const stages = new Map();
+  for (const m of sorted) { const k = m.round_name || ''; if (!stages.has(k)) stages.set(k, []); stages.get(k).push(m); }
+  const out = [];
+  for (const [slug, list] of stages) {
+    const stage = wStageName(slug);
+    if (W_KO.test(slug)) { out.push({ stage, ko: true, label: stage || 'Елиминации', matches: list }); continue; }
+    // numbered rounds, each group on its own, then round n of every group together
+    const pools = new Map();
+    for (const m of list) { const g = wGroup(m); if (!pools.has(g)) pools.set(g, []); pools.get(g).push(m); }
+    const byNo = [];
+    let teamsMax = 0;
+    for (const pool of pools.values()) {
+      const teams = new Set(pool.flatMap(m => [m.home_name, m.away_name]));
+      teamsMax = Math.max(teamsMax, teams.size);
+      (teams.size >= 10 ? leagueRounds : groupRounds)(pool, teams).forEach((ms2, i) => (byNo[i] ??= []).push(...ms2));
+    }
+    byNo.forEach((ms2, i) => out.push({ stage, ko: false, no: i + 1, teams: teamsMax, label: `Кръг ${i + 1}`, matches: ms2.sort((a, b) => wTime(a) - wTime(b)) }));
+  }
+  // in time order; several stages (groups, then knockouts) get the stage in the name
+  const at = r => { const ts = r.matches.map(wTime).sort((a, b) => a - b); return r.ko ? ts[0] : ts[Math.floor(ts.length / 2)]; };
+  out.sort((a, b) => at(a) - at(b));
+  const many = new Set(out.map(r => r.stage)).size > 1;
+  out.forEach(r => { if (!r.ko && many && r.stage) r.label = `${r.stage} · кръг ${r.no}`; });
+  return out;
+}
+
 async function loadFootball(league, force){
   if (!SB || FB.loading[league]) return;
   const fresh = FB.data[league] && Date.now() - FB.data[league].at < 5 * 60e3;
   if (fresh && !force) return;
   FB.loading[league] = true; FB.err = '';
+  if (isWorld(league)) {
+    try {
+      const comp = compOf(league);
+      if (!comp) throw new Error('unknown competition');
+      const [m, t] = await Promise.all([
+        SB.from('football_matches').select('id,league,round_name,note,kickoff,status,home_name,away_name,home_logo,away_logo,home_score,away_score,source_url')
+          .eq('league', league).eq('season', comp.season).order('kickoff', { ascending: true }).limit(1000),
+        SB.from('football_standings').select('*').eq('league', league).eq('season', comp.season).order('grp_order', { ascending: true, nullsFirst: true }).order('rank', { ascending: true }),
+      ]);
+      if (m.error) throw m.error;
+      if (t.error) throw t.error;
+      const matches = m.data || [];
+      FB.data[league] = { at: Date.now(), matches, rounds: worldRounds(matches), world: true };
+      const rows = t.data || [], newest = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
+      FB.table[league] = rows.filter(r => !newest || Date.parse(newest) - Date.parse(r.updated_at) < 3600e3);
+    } catch (e) { FB.err = e.message || String(e); log('Results could not be loaded: ' + FB.err); }
+    FB.loading[league] = false;
+    if (VIEW === 'results') renderResults();
+    return;
+  }
   try {
     const [m, t, rv] = await Promise.all([
       SB.from('football_matches').select('id,league,round,kickoff,status,home_name,away_name,home_logo,away_logo,home_score,away_score,ht_home,ht_away,short_video,long_video,other_videos,updated_at')
@@ -1256,7 +1446,11 @@ async function loadFootball(league, force){
   if (VIEW === 'results') renderResults();
 }
 function leagueBar(){
-  return `<div class="lgbar">${Object.entries(LEAGUES).map(([k, l]) => `<button class="chip${FB.league === k ? ' on' : ''}" data-lg="${k}">${esc(l)}</button>`).join('')}</div>`;
+  const sect = sectOf(FB.league), vis = visibleComps();
+  const sects = RSECT.filter(([k]) => k === 'bg' || vis.some(c => c.grp === k));
+  const list = sect === 'bg' ? Object.entries(LEAGUES) : vis.filter(c => c.grp === sect).map(c => [c.key, c.name]);
+  return `<div class="seg" role="tablist">${sects.map(([k, l]) => `<button class="${sect === k ? 'on' : ''}" data-rsect="${k}" role="tab" aria-selected="${sect === k}">${esc(l)}</button>`).join('')}</div>
+    <div class="lgbar">${list.map(([k, l]) => `<button class="chip${FB.league === k ? ' on' : ''}" data-lg="${k}">${esc(l)}</button>`).join('')}</div>`;
 }
 function defaultRound(ms){
   const played = ms.filter(m => m.status === 'finished' || m.status === 'live');
@@ -1267,7 +1461,8 @@ function defaultRound(ms){
   if (next.length && next.some(m => m.status === 'live' || (m.kickoff && Date.parse(m.kickoff) < Date.now() + 864e5))) return last + 1;
   return last;
 }
-function matchCard(m){
+function matchCard(m, top){
+  if (typeof top !== 'string') top = '';     // also called straight from Array.map
   const L = LEAGUES[m.league];
   const played = m.status === 'finished' || m.status === 'live';
   const past = m.kickoff && Date.parse(m.kickoff) < Date.now() - 3 * 3600e3;
@@ -1303,15 +1498,15 @@ function matchCard(m){
   const player = ov || chips ? `<div class="mplayer">${chips}${ov ? `${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ov.id)}?autoplay=1&rel=0` })}
       <div class="mfoot"><span class="mnote">${esc(ov.title)} · ${esc(ov.channel)}<br>Ако клипът не тръгва тук, гледай го в YouTube.</span>
       <a class="ytbtn" href="${ytWatch(ov.id)}" target="_blank" rel="noopener noreferrer"><span class="yti" aria-hidden="true"></span>Гледай в YouTube</a></div>` : ''}</div>` : '';
-  const none = played && m.status === 'finished' && !btns ? '<span class="mnote">Видеото още не е намерено</span>' : '';
+  const none = !top && played && m.status === 'finished' && !btns ? '<span class="mnote">Видеото още не е намерено</span>' : '';
   return `<article class="mcard" data-mid="${esc(m.id)}">
-    <div class="mtop"><span>${esc(L)} - ${m.round} Кръг</span><span>${esc(bgDate(m.kickoff))}</span></div>
+    <div class="mtop"><span>${esc(top || `${L} - ${m.round} Кръг`)}</span><span>${esc(bgDate(m.kickoff))}</span></div>
     <div class="mrow">
       <div class="mteam home"><span class="tname">${esc(teamName(m.home_name))}</span>${logoHtml(m.home_logo, m.home_name)}</div>
       ${score}
       <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(teamName(m.away_name))}</span></div>
     </div>
-    <div class="mbottom"><span class="muted">${esc(left)}</span>${btns ? `<div class="vbtns">${btns}</div>` : none}</div>
+    ${left || btns || none ? `<div class="mbottom"><span class="muted">${esc(left)}</span>${btns ? `<div class="vbtns">${btns}</div>` : none}</div>` : ''}
     ${player}
   </article>`;
 }
@@ -1335,27 +1530,54 @@ function roundReviewHtml(lg, r, list, d){
       <div class="rrmeta">${esc([chanName(v.channel), v.length].filter(Boolean).join(' · '))}</div></div>
     ${action}${player}</section>`;
 }
-// the league's table, shown under the round's results
+// the league's table, shown under the round's results (world competitions: one table per group)
+function standTable(rows, form){
+  return `<div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
+    ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0), f = r.form || (form && form[r.team_name]) || ''; return `<tr><td>${r.rank ?? ''}</td>
+      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}</span></td><td>${r.played ?? ''}</td>
+      <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
+      <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
+      <td class="hide-s">${String(f).split('').map(c => `<span class="fdot ${esc(c)}" title="${({ W: 'победа', D: 'равен', L: 'загуба' })[c] || ''}"></span>`).join('')}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+}
+// last five results of every team, oldest → newest, from the competition's matches
+function formFrom(ms){
+  const out = {};
+  for (const m of ms.filter(x => x.status === 'finished' && x.home_score != null).sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)))) {
+    const h = m.home_score > m.away_score ? 'W' : m.home_score < m.away_score ? 'L' : 'D', a = h === 'W' ? 'L' : h === 'L' ? 'W' : 'D';
+    out[m.home_name] = ((out[m.home_name] || '') + h).slice(-5); out[m.away_name] = ((out[m.away_name] || '') + a).slice(-5);
+  }
+  return out;
+}
 function standingsHtml(lg){
   const rows = FB.table[lg];
   if (!rows || !rows.length) return '';
   const upd = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
-  return `<div class="standhead" id="standings"><h2>Класиране — ${esc(LEAGUES[lg])} ${FB_SEASON}</h2>${upd ? `<span class="muted">обновено ${esc(bgDate(upd))}</span>` : ''}</div>
-    <div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
-    ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0); return `<tr><td>${r.rank ?? ''}</td>
-      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}</span></td><td>${r.played ?? ''}</td>
-      <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
-      <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
-      <td class="hide-s">${String(r.form || '').split('').map(c => `<span class="fdot ${esc(c)}" title="${({ W: 'победа', D: 'равен', L: 'загуба' })[c] || ''}"></span>`).join('')}</td></tr>`; }).join('')}
-    </tbody></table></div>
-    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : ''}</p>`;
+  const world = isWorld(lg), comp = compOf(lg), d = FB.data[lg];
+  const title = world ? `${comp ? comp.name : lg} ${seasonLabel(comp && comp.season)}` : `${LEAGUES[lg]} ${FB_SEASON}`;
+  let body;
+  if (world && rows.some(r => r.grp)) {
+    const groups = new Map();
+    for (const r of rows) { const g = r.grp || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
+    const form = d ? formFrom(d.matches) : null;
+    body = `<div class="standgrid">${[...groups].map(([g, rs]) => `<div><h3 class="grphead">${esc(g)}</h3>${standTable(rs, form)}</div>`).join('')}</div>`;
+  } else body = standTable(rows, world && d ? formFrom(d.matches) : null);
+  return `<div class="standhead" id="standings"><h2>Класиране — ${esc(title)}</h2>${upd ? `<span class="muted">обновено ${esc(bgDate(upd))}</span>` : ''}</div>
+    ${body}
+    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : world ? ' · форма — изчислена от резултатите' : ''}</p>`;
 }
 let RES_KEY = '';
 function renderResults(force){
   const box = $('#resultsBox');
   if (AUTH === 'off' || AUTH === 'error') { box.innerHTML = '<div class="warn">Results need the database connection, which is not available right now.</div>'; return; }
+  if (!FB.comps) loadComps();
+  // the World news links here: open the section the reader was looking at
+  if (FB.want && FB.comps) { const c = visibleComps().find(x => x.grp === FB.want); if (c) FB.league = FB.last[FB.want] || c.key; FB.want = ''; }
+  if (isWorld(FB.league) && FB.comps && !visibleComps().some(c => c.key === FB.league)) FB.league = 'efbet';
+  if (isWorld(FB.league) && !FB.comps) { box.innerHTML = '<p class="muted">Loading results…</p>'; return; }
   const lg = FB.league, d = FB.data[lg];
   if (!d) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Could not load: ' + FB.err) : 'Loading results…'}</p>`; loadFootball(lg); return; }
+  if (d.world) return renderWorldResults(box, lg, d, force);
   loadFootball(lg);   // refresh quietly when older than 5 minutes
   const ms = d.matches;
   if (!ms.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>' + standingsHtml(lg); return; }
@@ -1382,10 +1604,53 @@ function renderResults(force){
   // an old #table link opens Results at the table
   if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
 }
+// a world competition: the rounds are worked out from the fixture list, knockout stages are one page each
+function defaultWorldRound(rounds){
+  const now = Date.now();
+  let i = -1;
+  rounds.forEach((r, k) => { if (r.matches.some(m => m.status === 'finished' || m.status === 'live')) i = k; });
+  if (i < 0) return 0;
+  const next = rounds[i + 1];
+  if (next && next.matches.some(m => m.status === 'live' || (m.kickoff && Date.parse(m.kickoff) < now + 864e5))) return i + 1;
+  return i;
+}
+function renderWorldResults(box, lg, d, force){
+  const comp = compOf(lg) || { name: lg, grp: '' }, rounds = d.rounds;
+  if (!rounds.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>' + standingsHtml(lg); return; }
+  let i = FB.round[lg];
+  if (i == null || !rounds[i]) i = FB.round[lg] = defaultWorldRound(rounds);
+  const R = rounds[i], list = R.matches;
+  const days = list.map(m => m.kickoff).filter(Boolean).sort();
+  const span = days.length ? (() => { const a = sofiaParts(days[0]), b = sofiaParts(days[days.length - 1]); return a.d === b.d && a.m === b.m ? `${a.d} ${a.m}` : `${a.d} ${a.m} – ${b.d} ${b.m}`; })() : '';
+  // how many rounds a full season has, where that is fixed: a double round robin, or the 8 matchdays of a UEFA league phase
+  const total = R.ko ? 0 : comp.grp === 'top5' ? 2 * (R.teams - 1) : comp.grp === 'euro' && R.stage === 'Основна фаза' ? 8 : 0;
+  const key = [lg, i, d.at].join('|');
+  if (!force && key === RES_KEY && box.firstChild) return;
+  RES_KEY = key;
+  const top = m => `${comp.name} - ${R.ko ? (m.note || R.label) : R.label + (m.note && /^Група /.test(m.note) ? ' · ' + m.note : '')}`;
+  box.innerHTML = leagueBar() + `<div class="roundnav">
+      <button data-rnd="${i - 1}" ${i <= 0 ? 'disabled' : ''} aria-label="Previous round">‹</button>
+      <div class="mid"><h2>${esc(R.label)}${total ? ` от ${total}` : ''}</h2><div class="muted">${esc(span)}${R.ko || !R.stage || / · /.test(R.label) ? '' : ' · ' + esc(R.stage)}</div>
+        <select id="rndSel" aria-label="Round">${rounds.map((x, k) => `<option value="${k}"${k === i ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
+      <button data-rnd="${i + 1}" ${i >= rounds.length - 1 ? 'disabled' : ''} aria-label="Next round">›</button></div>
+    ${list.map(m => matchCard(m, top(m))).join('')}
+    ${standingsHtml(lg)}
+    <p class="muted">Results and tables: <a href="https://www.espn.com/soccer/" target="_blank" rel="noopener">ESPN</a> · updated every 30 minutes${comp.grp === 'nat' ? ' · national-team competitions are listed only while they or their qualifiers are being played' : ''}</p>`;
+  if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
+}
 function initFootballUI(){
   $('#resultsBox').addEventListener('click', e => {
+    const sb = e.target.closest('[data-rsect]');
+    if (sb) {
+      const k = sb.dataset.rsect;
+      if (k !== sectOf(FB.league)) {
+        FB.league = k === 'bg' ? (FB.last.bg || 'efbet') : (FB.last[k] || (visibleComps().find(c => c.grp === k) || {}).key || 'efbet');
+        saveJSON('bgRefWatch.fbLeague', FB.league); FB.open.clear(); renderResults(true);
+      }
+      return;
+    }
     const lg = e.target.closest('[data-lg]');
-    if (lg) { FB.league = lg.dataset.lg; saveJSON('bgRefWatch.fbLeague', FB.league); FB.open.clear(); renderResults(true); return; }
+    if (lg) { FB.league = lg.dataset.lg; FB.last[sectOf(FB.league)] = FB.league; saveJSON('bgRefWatch.fbLeague', FB.league); FB.open.clear(); renderResults(true); return; }
     const nav = e.target.closest('[data-rnd]');
     if (nav && !nav.disabled) { FB.round[FB.league] = Number(nav.dataset.rnd); FB.open.clear(); renderResults(true); return; }
     const rp = e.target.closest('button.rrplay[data-review]');
@@ -1415,6 +1680,14 @@ function initUI(){
   window.addEventListener('hashchange', applyView);
   $('#nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) go(b.dataset.view); });
 
+  // "Results & tables" in the World intro opens Results at the section being read
+  $('#intro').addEventListener('click', e => { if (e.target.closest('[data-world-results]')) { FB.want = SEL.world.sect || 'top5'; FB.round = {}; } });
+  $('#sectChips').addEventListener('click', e => {
+    const b = e.target.closest('[data-sect]'); if (!b) return;
+    const w = SEL.world;
+    w.sect = w.sect === b.dataset.sect ? '' : b.dataset.sect;
+    w.group.clear(); shown = PAGE_SIZE; render();
+  });
   ['#groupChips', '#catChips'].forEach(id => $(id).addEventListener('click', e => {
     const b = e.target.closest('.chip'); if (!b) return;
     const sel = SEL[VIEW === 'world' ? 'world' : 'bg'][id === '#groupChips' ? 'group' : 'cats'];

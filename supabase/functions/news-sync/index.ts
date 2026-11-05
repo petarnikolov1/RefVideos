@@ -92,20 +92,35 @@ Deno.serve(async (req) => {
     return Response.json(out);
   }
 
-  if (body.reclassify) {                            // run the current filter over everything saved; remove what no longer passes
-    out.mode = 'reclassify';
+  if (body.reclassify) {                            // run the current filter over everything saved: remove what no longer
+    out.mode = 'reclassify';                        // passes, and move the rest to their current section / competitions
     const rows: any[] = [];
     for (let from = 0; ; from += 1000) {
-      const page = await rest(`news_articles?select=aid,title,descr,scope&order=aid&offset=${from}&limit=1000`);
+      const page = await rest(`news_articles?select=aid,title,descr,scope,divs,comps&order=aid&offset=${from}&limit=1000`);
       rows.push(...page);
       if (page.length < 1000) break;
     }
-    const drop = rows.filter(r => !N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' }));
-    for (let k = 0; k < drop.length; k += 100) {
-      const ids = drop.slice(k, k + 100).map(r => '"' + String(r.aid).replace(/"/g, '\\"') + '"').join(',');
-      await rest(`news_articles?aid=in.(${encodeURIComponent(ids)})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    const drop: any[] = [], move: any[] = [];
+    for (const r of rows) {
+      const a = N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
+      if (!a) { drop.push(r); continue; }
+      const same = a.scope === r.scope && [...a.comps].sort().join() === [...(r.comps ?? [])].sort().join();
+      if (!same) move.push({ aid: r.aid, title: r.title, from: `${r.scope}:${(r.comps ?? []).join('+')}`, to: `${a.scope}:${a.comps.join('+')}`,
+        patch: { scope: a.scope, comps: a.comps, divs: a.scope === 'bg' ? (r.scope === 'bg' ? r.divs : a.divs) : [] } });
     }
-    out.checked = rows.length; out.removed = drop.length; out.sample = drop.slice(0, 25).map(r => r.title);
+    if (!body.dry) {
+      for (let k = 0; k < drop.length; k += 100) {
+        const ids = drop.slice(k, k + 100).map(r => '"' + String(r.aid).replace(/"/g, '\\"') + '"').join(',');
+        await rest(`news_articles?aid=in.(${encodeURIComponent(ids)})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      }
+      let i = 0;
+      const todo = move.slice(0, 600);
+      await Promise.all([0, 1, 2, 3].map(async () => { while (i < todo.length) { const m = todo[i++];
+        await rest(`news_articles?aid=eq.${encodeURIComponent(m.aid)}`, { method: 'PATCH', body: JSON.stringify({ ...m.patch, updated_at: new Date().toISOString() }), headers: { Prefer: 'return=minimal' } }); } }));
+    }
+    out.checked = rows.length; out.removed = drop.length; out.moved = move.length; out.dry = !!body.dry;
+    out.sample = drop.slice(0, 25).map(r => r.title);
+    out.movedSample = move.slice(0, 40).map(m => `${m.from} → ${m.to} | ${m.title}`);
   } else if (body.recent) {
     out.mode = 'recent';
     const tasks = [...googleTasks(started - 3 * 864e5, started + 864e5),
