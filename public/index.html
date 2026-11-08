@@ -281,6 +281,48 @@
   .mnewsbox .card{margin:8px 0}
   .mnewsbox .mnhead{font-size:12px;color:var(--muted);margin:10px 2px 0}
   @media (max-width:560px){ .mnwrap{margin:-10px 8px 12px} .mnews .hl{display:none} }
+  /* the referees on a match card, the whole crew behind a button; players who sit the match out */
+  .mref{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px}
+  .mref .whistle{width:15px;height:15px;color:var(--accent);flex:0 0 auto;margin-right:2px}
+  .mref .rl,.mban .rl{color:var(--muted);font-size:12px;margin-right:3px}
+  .mref b{font-weight:600}
+  .mref .sep{color:var(--muted);margin:0 2px}
+  .mref.none{color:var(--muted);font-size:12.5px}
+  .crewbtn{margin-left:auto;font-size:12px;padding:3px 10px;border-radius:999px}
+  .crew{margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--chip)}
+  .crew dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 16px;margin:0}
+  .crew dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .crew dd{margin:1px 0 0;font-size:13.5px;font-weight:600}
+  .crew .src{display:block;margin-top:9px;font-size:12px;color:var(--muted)}
+  .mban{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:6px;font-size:12.5px}
+  .mban .ban{display:inline-flex;align-items:center;gap:5px}
+  .cardic{display:inline-block;width:9px;height:12px;border-radius:2px;flex:0 0 auto;background:#f2c200;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+  .cardic.r{background:#d93025}
+  .cardic.o{background:var(--muted)}
+  /* the Third League's punishments, under the round's matches */
+  .discip{margin:18px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+  .dhead{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}
+  .dhead h2{margin:0;font-size:17px}
+  .dlist{list-style:none;margin:10px 0 0;padding:0}
+  .dlist li{display:grid;grid-template-columns:12px minmax(0,1fr) auto auto;align-items:center;gap:3px 10px;padding:7px 0;border-top:1px solid var(--line);font-size:13.5px}
+  .dlist li:first-child{border-top:0}
+  .dlist .why{color:var(--muted);font-size:12.5px}
+  .dlist .ban{font-weight:600;white-space:nowrap}
+  .dlist.all{margin-top:6px}
+  .dlist.all li{grid-template-columns:12px minmax(0,1fr) auto auto 46px}
+  .dlist .rnd{text-align:right;font-size:12px}
+  .ddec{margin-top:10px;font-size:13px}
+  .ddec summary{cursor:pointer;color:var(--accent);font-weight:600}
+  .ddec ul{margin:8px 0 0;padding-left:18px}
+  .ddec li{margin:5px 0}
+  .dsrc{font-size:12px;margin:10px 0 0}
+  .dall{margin-top:10px;font-size:13px}
+  @media (max-width:560px){
+    .dlist li,.dlist.all li{grid-template-columns:12px minmax(0,1fr) auto;grid-auto-flow:dense}
+    .dlist .why{grid-column:2/-1}
+    .dlist.all .why{grid-column:2}
+    .dlist.all .rnd{grid-column:3}
+  }
   /* on a news card: the match a story is about, opens it on the Results page */
   .mlinks{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
   .mlink{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:3px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));background:color-mix(in srgb,var(--accent) 9%,var(--card));color:var(--text)}
@@ -1801,8 +1843,10 @@ async function setApproved(id, val){
 // Filled by the football-sync job in Supabase every 30 minutes: results from efbetleague.com and mr-bit.bg,
 // short report and extended report from YouTube (Gong.bg first, then the league's and the clubs' channels).
 const FB_SEASON = '2026/27';
-const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\s+/, '');   // "ПФК Локомотив София 1929" → "Локомотив София 1929"
-const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига' };
+// "ПФК Локомотив София 1929" → "Локомотив София 1929"; the Third League's "Беласица (Петрич)" → "Беласица"
+const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\s+/, '').replace(/\s+\([^)]*\)$/, '');
+const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига', sw3: 'Трета лига Югозапад' };
+const VIDEO_LEAGUES = ['efbet', 'mrbit'];   // the leagues whose match reports are looked for on YouTube
 const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set(), oth: {},
   comps: null, compsLoading: false, last: {}, want: '', mnOpen: new Set(), goMatch: '' };
 // the Results sections: the Bulgarian leagues, then the world competitions (read from ESPN by the world-sync job)
@@ -1831,7 +1875,7 @@ function sofiaParts(iso){
   return { day: BG_DAYS[wd] || '', d: Number(p.day), m: BG_MONTHS[Number(p.month) - 1] || '', time: `${p.hour}:${p.minute}` };
 }
 const bgDate = iso => { if (!iso) return 'дата неизвестна'; const p = sofiaParts(iso); return `${p.day} ${p.d}, ${p.m} в ${p.time}`; };
-const initials = n => String(n || '').replace(/^(ПФК|ФК)\s+/, '').split(/\s+/).filter(w => !/^\d+$/.test(w)).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const initials = n => teamName(n).split(/\s+/).filter(w => !/^(\d+|I+|ОФК)$/.test(w)).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const isGongVid = v => !!(v && v.id && /gong/i.test(v.channel || ''));
 // every report from channels other than Gong (also any non-Gong video still saved as Репортаж/Разширен)
 function otherVids(m){
@@ -1951,19 +1995,25 @@ async function loadFootball(league, force){
     return;
   }
   try {
-    const [m, t, rv] = await Promise.all([
-      SB.from('football_matches').select('id,league,round,kickoff,status,home_name,away_name,home_logo,away_logo,home_score,away_score,ht_home,ht_away,short_video,long_video,other_videos,updated_at')
+    const [m, t, rv, of, dc] = await Promise.all([
+      SB.from('football_matches').select('id,league,round,kickoff,status,home_name,away_name,home_logo,away_logo,home_score,away_score,ht_home,ht_away,short_video,long_video,other_videos,note,updated_at')
         .eq('league', league).eq('season', FB_SEASON).order('kickoff', { ascending: true }).limit(500),
       SB.from('football_standings').select('*').eq('league', league).eq('season', FB_SEASON).order('rank', { ascending: true }),
       SB.from('football_rounds').select('round,review').eq('league', league).eq('season', FB_SEASON).not('review', 'is', null),
+      SB.from('football_officials').select('match_id,crew,src_url,src_title,posted_at').eq('league', league).eq('season', FB_SEASON).limit(1000),
+      league === 'sw3' ? SB.from('football_discipline').select('url,round,title,doc_url,posted_at,players,decisions').eq('league', league).eq('season', FB_SEASON).order('round', { ascending: true }) : Promise.resolve({ data: [] }),
     ]);
     if (m.error) throw m.error;
     if (t.error) throw t.error;
-    // the round reviews are an extra: the results still show if they can't be read
-    const reviews = {};
+    // the round reviews, referee appointments and punishments are extras: the results still show if they can't be read
+    const reviews = {}, officials = {};
     if (rv.error) log('Round reviews could not be loaded: ' + rv.error.message);
     else for (const x of rv.data || []) if (x.review && x.review.id) reviews[x.round] = x.review;
-    FB.data[league] = { at: Date.now(), matches: m.data || [], reviews };
+    if (of.error) log('Referee appointments could not be loaded: ' + of.error.message);
+    else for (const x of of.data || []) officials[x.match_id] = x;
+    if (dc.error) log('Punishments could not be loaded: ' + dc.error.message);
+    const matches = m.data || [], discipline = dc.data || [];
+    FB.data[league] = { at: Date.now(), matches, reviews, officials, discipline, banned: bansByMatch(matches, discipline) };
     const rows = t.data || [], newest = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
     // a team that dropped out of the source table keeps its old row: show only the latest update
     FB.table[league] = rows.filter(r => !newest || Date.parse(newest) - Date.parse(r.updated_at) < 3600e3);
@@ -1987,13 +2037,81 @@ function defaultRound(ms){
   if (next.length && next.some(m => m.status === 'live' || (m.kickoff && Date.parse(m.kickoff) < Date.now() + 864e5))) return last + 1;
   return last;
 }
+/* ── referee appointments and the Third League's punishments ── */
+const WHISTLE = '<svg class="whistle" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5a6 6 0 1 0 11.6-2.2L21 8V4.5h-9A6 6 0 0 0 3.5 12.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="9.5" cy="12.5" r="2" fill="currentColor"/></svg>';
+const ROLE_BG = { 'ГС': 'Главен съдия', 'АС1': 'Асистент 1', 'АС2': 'Асистент 2', '4-ТИ': 'Четвърти съдия', 'ВАР': 'ВАР', 'АВАР': 'АВАР', 'СН': 'Съдийски наблюдател', 'ДН': 'Делегат', 'РЕЗЕРВЕН': 'Резервен' };
+// "Никола Антонов Попов" → "Никола Попов" (the full name stays in the list and on hover)
+const shortName = n => { const w = String(n || '').trim().split(/\s+/); return w.length >= 3 ? `${w[0]} ${w[w.length - 1]}` : String(n || ''); };
+const noTime = m => /час — неуточнен/.test(m.note || '');
+const venueOf = m => String(m.note || '').split(' · ').filter(x => x && !/час — неуточнен|служебен/.test(x)).join(' · ');
+// players who sit a match out: a ban of N matches is served in the team's next N matches after the decision
+function bansByMatch(matches, posts){
+  const out = {}, byTeam = new Map();
+  if (!posts || !posts.length) return out;
+  for (const m of matches) for (const t of [m.home_name, m.away_name]) { if (!byTeam.has(t)) byTeam.set(t, []); byTeam.get(t).push(m); }
+  byTeam.forEach(l => l.sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff))));
+  for (const p of posts) for (const pl of p.players || []) {
+    if (!pl.team) continue;
+    const n = parseInt(pl.ban, 10) || 1, t0 = p.posted_at ? Date.parse(p.posted_at) : 0;
+    const next = (byTeam.get(pl.team) || []).filter(m => m.kickoff && Date.parse(m.kickoff) > t0 && m.status !== 'postponed').slice(0, n);
+    for (const m of next) (out[m.id] = out[m.id] || []).push({ ...pl, round: p.round });
+  }
+  return out;
+}
+// on a match card: the referee (and VAR), the whole crew behind a button
+function officialsHtml(m){
+  const d = FB.data[m.league], o = d && d.officials && d.officials[m.id];
+  if (!d || !d.officials) return '';
+  if (!o || !o.crew || !o.crew.length) {
+    // the committee names the referees a day or two before the match: until then a quiet note on the coming ones
+    const t = m.kickoff ? Date.parse(m.kickoff) : 0;
+    return m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? '<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>' : '';
+  }
+  const ref = o.crew.find(c => c.r === 'ГС'), vr = o.crew.find(c => c.r === 'ВАР'), open = FB.open.has('crew:' + m.id);
+  const who = c => `<b title="${esc(c.n)}">${esc(shortName(c.n))}</b>`;
+  return `<div class="mref">${WHISTLE}${ref ? `<span class="rl">Съдия</span>${who(ref)}` : ''}${vr ? `<span class="sep" aria-hidden="true">·</span><span class="rl">ВАР</span>${who(vr)}` : ''}
+      <button class="crewbtn" data-crew="${esc(m.id)}" aria-expanded="${open}">Бригада <span class="chev">${open ? '▴' : '▾'}</span></button></div>
+    <div class="crew" data-crewbox="${esc(m.id)}"${open ? '' : ' hidden'}><dl>${o.crew.map(c => `<div><dt>${esc(ROLE_BG[c.r] || c.r)}</dt><dd>${esc(c.n)}</dd></div>`).join('')}</dl>
+      <a class="src" href="${esc(o.src_url)}" target="_blank" rel="noopener">${esc(/bfunion/.test(o.src_url || '') ? 'Съдийска комисия на БФС' : 'БФС · Трета лига')} — ${esc(o.src_title || 'назначения')}</a></div>`;
+}
+const cardIc = r => `<i class="cardic ${r === 'red' ? 'r' : r === 'yellow' ? 'y' : 'o'}" title="${r === 'red' ? 'червен картон' : r === 'yellow' ? 'жълти картони' : 'по доклад'}"></i>`;
+function bansHtml(m){
+  const d = FB.data[m.league], b = d && d.banned && d.banned[m.id];
+  if (!b || !b.length) return '';
+  return `<div class="mban"><span class="rl">Наказани</span>${b.map(p => `<span class="ban">${cardIc(p.reason)}${esc(p.name)} <span class="muted">${esc(teamName(p.team))}</span></span>`).join('')}</div>`;
+}
+const banWhy = p => p.reason === 'yellow' ? `${p.detail ? p.detail + '-и ' : ''}жълт картон` : p.reason === 'red' ? `червен картон${p.detail ? ` (чл. ${p.detail})` : ''}` : 'по доклад';
+// the Third League: the Disciplinary Committee's decisions after the round, and the whole season's suspended players
+function disciplineHtml(lg, r, list, d){
+  if (lg !== 'sw3') return '';
+  const all = d.discipline || [], posts = all.filter(p => p.round === r);
+  const total = all.reduce((a, p) => a + (p.players || []).length, 0), openAll = FB.open.has('disc:all');
+  const row = (p, round) => `<li>${cardIc(p.reason)}<span class="who"><b>${esc(p.name)}</b> <span class="muted">${esc(p.team ? teamName(p.team) : p.club)}</span></span>
+    <span class="why">${esc(banWhy(p))}</span><span class="ban">${esc(p.ban)}</span>${round != null ? `<span class="muted rnd">${round} кр.</span>` : ''}</li>`;
+  let body;
+  if (posts.length) {
+    const players = posts.flatMap(p => p.players || []), dec = posts.flatMap(p => p.decisions || []);
+    body = `${players.length ? `<ul class="dlist">${players.map(p => row(p)).join('')}</ul>` : '<p class="muted">Няма наказани играчи.</p>'}
+      ${dec.length ? `<details class="ddec"><summary>Глоби и наказания на клубове и щаб (${dec.length})</summary><ul>${dec.map(x => `<li>${esc(x.text)}</li>`).join('')}</ul></details>` : ''}
+      <p class="muted dsrc">${posts.map(p => `<a href="${esc(p.doc_url || p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>`).join(' · ')} · наказаният играч пропуска следващия мач на отбора си</p>`;
+  } else {
+    const done = list.filter(m => m.status === 'finished').length;
+    if (!done) body = '';
+    else body = '<p class="muted">Наказанията за този кръг още не са публикувани — Дисциплинарната комисия ги обявява до няколко дни след кръга.</p>';
+  }
+  if (!body && !total) return '';
+  return `<section class="discip" aria-label="Наказания"><div class="dhead"><h2>Наказания след ${r} кръг</h2><span class="muted">Дисциплинарна комисия на БФС</span></div>
+    ${body}
+    ${total ? `<button class="dall" data-discall aria-expanded="${openAll}">${openAll ? 'Скрий' : 'Покажи'} всички наказани играчи през сезона (${total}) <span class="chev">${openAll ? '▴' : '▾'}</span></button>
+      ${openAll ? `<ul class="dlist all">${all.slice().reverse().flatMap(p => (p.players || []).map(x => row(x, p.round))).join('')}</ul>` : ''}` : ''}</section>`;
+}
 function matchCard(m, top){
   if (typeof top !== 'string') top = '';     // also called straight from Array.map
   const L = LEAGUES[m.league];
   const played = m.status === 'finished' || m.status === 'live';
   const past = m.kickoff && Date.parse(m.kickoff) < Date.now() - 3 * 3600e3;
   const score = played ? `<div class="mscore${m.status === 'live' ? ' live' : ''}">${m.home_score ?? ''}-${m.away_score ?? ''}</div>`
-    : `<div class="mscore time">${m.status === 'postponed' || past ? 'отложен' : m.kickoff ? esc(sofiaParts(m.kickoff).time) : '—'}</div>`;
+    : `<div class="mscore time">${m.status === 'postponed' || past ? 'отложен' : m.kickoff && !noTime(m) ? esc(sofiaParts(m.kickoff).time) : '—'}</div>`;
   const vb = (kind, v, label) => !v || !v.id ? '' : v.embed === false
     ? `<a class="vbtn yt" href="${ytWatch(v.id)}" target="_blank" rel="noopener noreferrer" data-kind="${kind}" title="${esc(v.title || '')} · ${esc(v.channel || '')}">
       <span class="ic">▶</span>${label}<span class="len">${esc(v.length || '')}</span></a>`
@@ -2006,7 +2124,7 @@ function matchCard(m, top){
     : others.length ? `<button class="vbtn${FB.open.has(m.id + ':other') ? ' on' : ''}" data-mid="${esc(m.id)}" data-kind="other" title="Репортажи от други канали">
       <span class="ic">▶</span>Други<span class="len">${others.length} клипа</span></button>` : '';
   const btns = vb('short', sv, 'Репортаж') + vb('long', lv, 'Разширен') + ob;
-  const left = m.ht_home != null && m.status === 'finished' ? `Полувреме ${m.ht_home}-${m.ht_away}` : m.status === 'live' ? 'На живо' : '';
+  const left = [m.ht_home != null && m.status === 'finished' ? `Полувреме ${m.ht_home}-${m.ht_away}` : m.status === 'live' ? 'На живо' : '', venueOf(m)].filter(Boolean).join(' · ');
   const openKind = ['short', 'long', 'other'].find(k => FB.open.has(m.id + ':' + k));
   let ov = openKind === 'short' ? sv : openKind === 'long' ? lv : null, chips = '';
   if (openKind === 'other') {
@@ -2024,20 +2142,23 @@ function matchCard(m, top){
   const player = ov || chips ? `<div class="mplayer">${chips}${ov ? `${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ov.id)}?autoplay=1&rel=0` })}
       <div class="mfoot"><span class="mnote">${esc(ov.title)} · ${esc(ov.channel)}<br>Ако клипът не тръгва тук, гледай го в YouTube.</span>
       <a class="ytbtn" href="${ytWatch(ov.id)}" target="_blank" rel="noopener noreferrer"><span class="yti" aria-hidden="true"></span>Гледай в YouTube</a></div>` : ''}</div>` : '';
-  const none = !top && played && m.status === 'finished' && !btns ? '<span class="mnote">Видеото още не е намерено</span>' : '';
+  const none = !top && played && m.status === 'finished' && !btns && VIDEO_LEAGUES.includes(m.league) ? '<span class="mnote">Видеото още не е намерено</span>' : '';
+  const when = !m.kickoff ? 'дата неизвестна' : noTime(m) ? (p => `${p.day} ${p.d}, ${p.m}`)(sofiaParts(m.kickoff)) : bgDate(m.kickoff);
   return `<article class="mcard" data-mid="${esc(m.id)}">
-    <div class="mtop"><span>${esc(top || `${L} - ${m.round} Кръг`)}</span><span>${esc(bgDate(m.kickoff))}</span></div>
+    <div class="mtop"><span>${esc(top || `${L} - ${m.round} Кръг`)}</span><span>${esc(when)}</span></div>
     <div class="mrow">
       <div class="mteam home"><span class="tname">${esc(teamName(m.home_name))}</span>${logoHtml(m.home_logo, m.home_name)}</div>
       ${score}
       <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(teamName(m.away_name))}</span></div>
     </div>
+    ${officialsHtml(m)}${bansHtml(m)}
     ${left || btns || none ? `<div class="mbottom"><span class="muted">${esc(left)}</span>${btns ? `<div class="vbtns">${btns}</div>` : none}</div>` : ''}
     ${player}
   </article>`;
 }
 // "Обзор на кръга" — the round's review show (Diema, uploaded by Gong.bg), shown above the round's matches
 function roundReviewHtml(lg, r, list, d){
+  if (!VIDEO_LEAGUES.includes(lg)) return '';
   const v = d.reviews && d.reviews[r], k = `review:${lg}:${r}`;
   if (!v) {
     // a note only once most of the round has been played; the review is usually up a day or two later
@@ -2087,10 +2208,10 @@ function standingsHtml(lg){
     for (const r of rows) { const g = r.grp || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
     const form = d ? formFrom(d.matches) : null;
     body = `<div class="standgrid">${[...groups].map(([g, rs]) => `<div><h3 class="grphead">${esc(g)}</h3>${standTable(rs, form)}</div>`).join('')}</div>`;
-  } else body = standTable(rows, world && d ? formFrom(d.matches) : null);
+  } else body = standTable(rows, (world || lg === 'sw3') && d ? formFrom(d.matches) : null);
   return `<div class="standhead" id="standings"><h2>Класиране — ${esc(title)}</h2>${upd ? `<span class="muted">обновено ${esc(bgDate(upd))}</span>` : ''}</div>
     ${body}
-    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : world ? ' · форма — изчислена от резултатите' : ''}</p>`;
+    <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : world || lg === 'sw3' ? ' · форма — изчислена от резултатите' : ''}</p>`;
 }
 let RES_KEY = '';
 function renderResults(force){
@@ -2121,13 +2242,16 @@ function renderResults(force){
   RES_KEY = key;
   box.innerHTML = leagueBar() + `<div class="roundnav">
       <button data-rnd="${r - 1}" ${r <= rounds[0] ? 'disabled' : ''} aria-label="Previous round">‹</button>
-      <div class="mid"><h2>Кръг ${r} от ${total}</h2><div class="muted">${esc(span)}${finished ? ` · видео за ${withVid} от ${finished} мача` : ''}</div>
+      <div class="mid"><h2>Кръг ${r} от ${total}</h2><div class="muted">${esc(span)}${finished && VIDEO_LEAGUES.includes(lg) ? ` · видео за ${withVid} от ${finished} мача` : ''}</div>
         <select id="rndSel" aria-label="Round">${rounds.map(x => `<option value="${x}"${x === r ? ' selected' : ''}>Кръг ${x}</option>`).join('')}</select></div>
       <button data-rnd="${r + 1}" ${r >= total ? 'disabled' : ''} aria-label="Next round">›</button></div>
     ${roundReviewHtml(lg, r, list, d)}
     ${list.map(m => matchCard(m) + mnWrap(lg, m)).join('')}
+    ${disciplineHtml(lg, r, list, d)}
     ${standingsHtml(lg)}
-    <p class="muted">Results and table: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Videos: YouTube (Gong.bg and others) · updated every 30 minutes</p>`;
+    <p class="muted">${lg === 'sw3'
+      ? 'Results and table: <a href="https://bulgarian-football.com/yugozapadna-treta-liga.html" target="_blank" rel="noopener">bulgarian-football.com</a> · Referee appointments and punishments: <a href="https://bfu-tournaments.com/leagues/third-sw/news" target="_blank" rel="noopener">bfu-tournaments.com</a>'
+      : `Results and table: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Referee appointments: <a href="https://bfunion.bg/%D0%A1%D1%8A%D0%B4%D0%B8%D0%B9%D1%81%D0%BA%D0%B0-%D0%BA%D0%BE%D0%BC%D0%B8%D1%81%D0%B8%D1%8F" target="_blank" rel="noopener">bfunion.bg</a> · Videos: YouTube (Gong.bg and others)`} · updated every 30 minutes</p>`;
   afterMatchNews(box);
   // an old #table link opens Results at the table
   if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
@@ -2174,6 +2298,15 @@ function initFootballUI(){
     const mn = e.target.closest('button[data-mnews]');
     if (mn) { toggleMatchNews(mn.dataset.mnews); return; }
     if (e.target.closest('.mnewsbox')) return;      // clicks inside the stories are handled by bindStoryEvents
+    const cb = e.target.closest('button[data-crew]');
+    if (cb) {   // in place, so a playing video keeps playing
+      const id = cb.dataset.crew, k = 'crew:' + id, open = !FB.open.has(k), box = [...$('#resultsBox').querySelectorAll('[data-crewbox]')].find(x => x.dataset.crewbox === id);
+      open ? FB.open.add(k) : FB.open.delete(k);
+      cb.setAttribute('aria-expanded', open); cb.querySelector('.chev').textContent = open ? '▴' : '▾';
+      if (box) box.hidden = !open;
+      return;
+    }
+    if (e.target.closest('button[data-discall]')) { FB.open.has('disc:all') ? FB.open.delete('disc:all') : FB.open.add('disc:all'); renderResults(true); return; }
     const sb = e.target.closest('[data-rsect]');
     if (sb) {
       const k = sb.dataset.rsect;
@@ -2223,6 +2356,8 @@ const TEAM_KEY = {   // the Bulgarian leagues' team names (as on efbetleague.com
   'Лудогорец II': 'ludo2', 'Марек': 'marek', 'Монтана': 'montana', 'Несебър': 'nesebar', 'Пирин Благоевград': 'pirin', 'Пирин': 'pirin',
   'Рилски Спортист': 'rilski', 'Спартак Плевен': 'spartakpl', 'Спортист Своге': 'sportist', 'Фратрия': 'fratria', 'Хебър 1918': 'hebar', 'Хебър': 'hebar',
   'ЦСКА София II': 'cska2', 'ЦСКА II': 'cska2', 'Черноморец 1919 Бургас': 'chernomorets', 'Черноморец': 'chernomorets', 'Янтра 2019': 'yantra', 'Янтра': 'yantra',
+  // the Third League South-West (bulgarian-football.com's names, without the town)
+  'Беласица': 'belasitsa', 'Миньор': 'minyor', 'Струмска слава 1927': 'strumska', 'Сливнишки герой': 'slivnishki',
   // Bulgarian clubs in the European cups (ESPN's names)
   'Levski Sofia': 'levski', 'CSKA Sofia': 'cska', 'Ludogorets Razgrad': 'ludo', 'Ludogorets': 'ludo', 'CSKA 1948 Sofia': 'cska48', 'CSKA 1948': 'cska48',
   'Lokomotiv Plovdiv': 'lokpd', 'Cherno More Varna': 'chm', 'Arda Kardzhali': 'arda', 'Botev Plovdiv': 'botpd', 'Slavia Sofia': 'slavia',
@@ -2305,7 +2440,7 @@ function matchNewsIndex(){
   const ckey = VER + '|' + MIDX.at + '|' + (FB.comps ? FB.comps.length : 0) + '|' + S.settings.seasonStart;
   if (MN_CACHE.key === ckey) return MN_CACHE;
   const POST = ['red', 'penalty', 'offside', 'var', 'foul', 'discipline', 'fights', 'dispute'];   // about a match already played
-  const vis = new Set(['efbet', 'mrbit', ...visibleComps().map(c => c.key)]);
+  const vis = new Set([...Object.keys(LEAGUES), ...visibleComps().map(c => c.key)]);
   const teams = new Map(), byTeam = new Map(), natKeys = new Set();
   for (const m of MIDX.matches) {
     if (!vis.has(m.league) || !m.kickoff) continue;
