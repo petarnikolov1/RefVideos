@@ -54,6 +54,47 @@
   #ptext{margin-top:4px}
   .intro{margin:14px 0 0;color:var(--muted);font-size:13.5px}
   .filters{padding:12px 0 4px}
+  /* news filters: one row (search · Filters · Refresh), the rest in a panel that opens, active filters as pills */
+  .fbar{display:flex;gap:8px;align-items:center;margin-top:12px}
+  .fbar input[type=search]{flex:1 1 auto;min-width:0;width:auto;height:38px}
+  .ftoggle{display:inline-flex;align-items:center;gap:7px;height:38px;white-space:nowrap;font-weight:600}
+  .ftoggle[aria-expanded="true"]{background:var(--chip);border-color:var(--accent)}
+  .fic{display:inline-flex;flex-direction:column;align-items:center;gap:3px;width:14px}
+  .fic i{display:block;height:2px;border-radius:1px;background:currentColor} .fic i:nth-child(1){width:14px} .fic i:nth-child(2){width:9px} .fic i:nth-child(3){width:4px}
+  .fcount{min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:11.5px;line-height:19px;text-align:center}
+  .ficon{flex:0 0 38px;width:38px;height:38px;padding:0;font-size:18px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+  .ficon.spin span{display:inline-block;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fpanel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 14px 12px;margin-top:8px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+  .fpanel .intro{margin:10px 0 0;font-size:13px}
+  .flabel{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:12px}
+  .fpanel .chips{margin-top:6px}
+  .fpfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+  .fpfoot .muted{font-size:12px}
+  #newsFilters>.seg{margin-top:8px}
+  .fstat{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:8px;min-height:24px}
+  #pills{display:contents}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;line-height:1.3;padding:3px 8px 3px 10px;border-radius:999px;background:var(--accent);color:var(--accent-ink);border:0;font-weight:600}
+  .pill .x{font-size:15px;line-height:1;opacity:.75}
+  .pill.clear{background:none;color:var(--muted);text-decoration:underline;font-weight:400;padding:3px 4px}
+  .fstat .flink{margin-left:auto;color:var(--accent);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
+  .fstat .flink:hover{text-decoration:underline}
+  @media (max-width:640px){
+    header .wrap{padding-top:8px;padding-bottom:6px}
+    .toprow{flex-wrap:nowrap;gap:10px}
+    h1{font-size:15px;white-space:nowrap;flex:0 0 auto}
+    nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0;margin-right:-16px;padding-right:16px;
+      -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+    nav::-webkit-scrollbar{display:none}
+    nav button{white-space:nowrap;padding:6px 9px;font-size:13.5px}
+    .fbar{margin-top:10px}
+    .ftoggle{padding:7px 10px}
+    #sectChips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+    #sectChips::-webkit-scrollbar{display:none}
+    #sectChips>button{white-space:nowrap;padding:7px 11px;font-size:13px}
+  }
+  @media (max-width:420px){ .xs-hide{display:none} }
+  @media (max-width:360px){ .ftoggle .ftxt{display:none} }
   input[type=search],input[type=date],input[type=text],input[type=email],input[type=password],input[type=url],select,textarea{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);max-width:100%}
   input[type=search]{width:100%}
   textarea{width:100%;min-height:70px}
@@ -221,6 +262,30 @@
   .fdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 1px;background:var(--muted)}
   .fdot.W{background:#16a34a} .fdot.L{background:#dc2626} .fdot.D{background:#9ca3af}
   @media (max-width:560px){ .hide-s{display:none} .mteam .tname{font-size:14px} .tlogo,.tinit{width:30px;height:30px;flex-basis:30px} .mscore{font-size:20px;min-width:52px} }
+  /* the news strip under every match: what was written about it; opens the stories, stacked like the news feed */
+  .mcard{scroll-margin-top:70px}
+  .mnwrap{margin:-10px 12px 12px;position:relative}
+  .mnews{display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:5px 12px;border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;
+    background:var(--chip);background:color-mix(in srgb,var(--accent) 13%,var(--card));border-color:color-mix(in srgb,var(--accent) 30%,var(--line));
+    color:var(--text);font-size:12.5px;line-height:1.3;text-align:left;cursor:pointer}
+  .mnews:hover{background:color-mix(in srgb,var(--accent) 20%,var(--card))}
+  .mnews.open{background:color-mix(in srgb,var(--accent) 24%,var(--card));border-color:var(--accent);box-shadow:inset 0 2px 0 var(--accent)}
+  .mnews .ic{flex:0 0 auto}
+  .mnews b{white-space:nowrap}
+  .mnews .tc{color:var(--muted);white-space:nowrap}
+  .mnews .hl{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+  .mnews .badge{flex:0 0 auto}
+  .mnews .chev{flex:0 0 auto;margin-left:auto;color:var(--accent);font-weight:700;white-space:nowrap}
+  .mnews.none{background:transparent;border-style:dashed;border-color:var(--line);border-top:0;color:var(--muted);cursor:default;font-size:12px;min-height:26px;padding:3px 12px}
+  .mnewsbox{padding:2px 0 6px}
+  .mnewsbox .card{margin:8px 0}
+  .mnewsbox .mnhead{font-size:12px;color:var(--muted);margin:10px 2px 0}
+  @media (max-width:560px){ .mnwrap{margin:-10px 8px 12px} .mnews .hl{display:none} }
+  /* on a news card: the match a story is about, opens it on the Results page */
+  .mlinks{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+  .mlink{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:3px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));background:color-mix(in srgb,var(--accent) 9%,var(--card));color:var(--text)}
+  .mlink:hover{border-color:var(--accent)}
+  .mlink b{font-variant-numeric:tabular-nums}
   table.users{width:100%;border-collapse:collapse;font-size:14px}
   table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   footer{padding:10px 0 40px;font-size:12px;color:var(--muted)}
@@ -231,14 +296,8 @@
 <header>
   <div class="wrap">
     <div class="toprow">
-      <h1>BG Referee Watch</h1>
+      <h1>BG Ref<span class="xs-hide">eree</span> Watch</h1>
       <nav id="nav"></nav>
-    </div>
-    <div id="scanArea">
-      <div class="bar">
-        <button id="btnRefresh" class="primary">↻ Refresh</button>
-        <span id="lastRun" class="muted"></span>
-      </div>
     </div>
   </div>
 </header>
@@ -246,22 +305,32 @@
 <main class="wrap">
   <!-- Bulgaria + World share this view -->
   <section id="view-news">
-    <p class="intro" id="intro"></p>
-    <div class="filters">
-      <input id="q" type="search" placeholder="Filter by team, referee, word…">
-      <div id="sectChips" class="chips seg" hidden></div>
-      <div id="groupChips" class="chips"></div>
-      <div id="catChips" class="chips"></div>
-      <div class="row">
-        <select id="sort">
-          <option value="date">Newest first</option>
-          <option value="score">Most important first</option>
-        </select>
-        <label><input type="checkbox" id="onlyNew"> Only new</label>
-        <label><input type="checkbox" id="onlyHot"> Only hot</label>
-        <label><input type="checkbox" id="hideRead"> Hide read</label>
-        <span id="count" class="muted"></span>
+    <!-- the filters take one row: search, a Filters button that opens the rest, Refresh; what is switched on shows as pills -->
+    <div id="newsFilters">
+      <div class="fbar">
+        <input id="q" type="search" placeholder="Search: team, referee, word…" aria-label="Search the stories">
+        <button id="ftoggle" class="ftoggle" aria-expanded="false" aria-controls="fpanel"><span class="fic" aria-hidden="true"><i></i><i></i><i></i></span><span class="ftxt">Filters</span><span id="fcount" class="fcount" hidden></span></button>
+        <button id="btnRefresh" class="ficon" title="Check for new stories" aria-label="Check for new stories"><span>↻</span></button>
       </div>
+      <div id="fpanel" class="fpanel" hidden>
+        <p class="intro" id="intro"></p>
+        <div class="flabel" id="groupLabel">Division</div>
+        <div id="groupChips" class="chips"></div>
+        <div class="flabel">Topic</div>
+        <div id="catChips" class="chips"></div>
+        <div class="row">
+          <select id="sort" aria-label="Order">
+            <option value="date">Newest first</option>
+            <option value="score">Most important first</option>
+          </select>
+          <label><input type="checkbox" id="onlyNew"> Only new</label>
+          <label><input type="checkbox" id="onlyHot"> Only hot</label>
+          <label><input type="checkbox" id="hideRead"> Hide read</label>
+        </div>
+        <div class="fpfoot"><span id="lastRun" class="muted"></span><button id="fdone" class="small">Done</button></div>
+      </div>
+      <div id="sectChips" class="chips seg" hidden></div>
+      <div class="fstat"><span id="pills"></span><span id="count" class="muted"></span><a id="resLink" class="flink" href="#results"></a></div>
     </div>
     <div id="warn" class="warn" hidden></div>
     <section id="feed"></section>
@@ -333,14 +402,15 @@ const CS = list => new RegExp('(?<![\\p{L}\\p{N}])(?:' + list.join('|') + ')(?![
 const CLUBS = [
   ['levski','d1','Левски'], ['cska','d1','ЦСКА','ЦСКА(?!\\s*(?:1948|II|2|Москва))'], ['cska48','d1','ЦСКА 1948'],
   ['ludo','d1','Лудогорец','Лудогорец(?!\\s*(?:II|2|III|3))'], ['chm','d1','Черно море','Черно море(?!\\s*(?:II|2))'],
-  ['lokpd','d1','Локомотив Пловдив','Локомотив\\s*\\(?(?:Пловдив|Пд)\\)?|Локо\\s*\\(?Пд\\)?'],
-  ['loksf','d1','Локомотив София','Локомотив\\s*\\(?(?:София|Сф)\\)?|Локо\\s*\\(?Сф\\)?'],
+  ['lokpd','d1','Локомотив Пловдив','Локо(?:мотив)?\\s*\\(?(?:Пловдив|Пд)\\)?'],
+  ['loksf','d1','Локомотив София','Локо(?:мотив)?\\s*\\(?(?:София|Сф)\\)?'],
   ['botpd','d1','Ботев Пловдив','Ботев\\s*\\(?(?:Пловдив|Пд)\\)?(?!\\s*(?:II|2))'], ['botvr','d1','Ботев Враца','Ботев\\s*\\(?(?:Враца|Вр)\\)?'],
   ['slavia','d1','Славия'], ['arda','d1','Арда'], ['septemvri','d1','Септември'],
   ['spartakvn','d1','Спартак Варна','Спартак\\s*\\(?(?:Варна|Вн)\\)?'], ['dunav','d1','Дунав'],
   ['beroe','d2','Берое'], ['dobrudzha','d2','Добруджа'], ['montana','d2','Монтана'], ['fratria','d2','Фратрия'],
   ['yantra','d2','Янтра'], ['vihren','d2','Вихрен'], ['etar','d2','Етър'], ['hebar','d2','Хебър'], ['maritsa','d2','Марица'],
-  ['pirin','d2','Пирин'], ['litex','d2','Литекс'], ['sportist','d2','Спортист'], ['chernomorets','d2','Черноморец'],
+  ['pirin','d2','Пирин'], ['litex','d2','Литекс'], ['sportist','d2','Спортист','(?<!Рилски\\s)Спортист(?:\\s*\\(?Своге\\)?)?'], ['chernomorets','d2','Черноморец'],
+  ['rilski','d2','Рилски спортист','Рилски\\s+[Сс]портист'], ['nesebar','d2','Несебър'],
   ['neftochimic','d2','Нефтохимик'], ['belasitsa','d2','Беласица'], ['minyor','d2','Миньор'], ['sevlievo','d2','Севлиево'],
   ['marek','d2','Марек'], ['strumska','d2','Струмска слава'], ['vitosha','d2','Витоша'], ['slivnishki','d2','Сливнишки герой'],
   ['spartakpl','d2','Спартак Плевен','Спартак\\s*\\(?Плевен\\)?'],
@@ -774,6 +844,7 @@ async function initSupabase(){
     SB_CONF = { url, key };
   } catch (e) { AUTH = 'error'; log('Supabase failed to load: ' + e.message); showWarn('The news database could not be reached: ' + e.message); renderAll(); return; }
   loadNews(true);
+  loadMatchIndex();   // the news cards link to the matches they are about; every match lists its stories
   SB.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') { RECOVERY = true; go('account'); }
     setTimeout(() => handleSession(session), 0);   // never await Supabase calls inside this callback
@@ -881,7 +952,6 @@ function applyView(){
   VIEW = v.startsWith('video-') ? 'videos' : v === 'table' ? 'results' : VIEWS.includes(v) ? v : 'bg';   // the table now sits under the results
   if (VIEW === 'admin' && !isAdmin() && AUTH !== 'loading') VIEW = 'account';
   $('#view-news').hidden = !(VIEW === 'bg' || VIEW === 'world');
-  $('#scanArea').hidden = !(VIEW === 'bg' || VIEW === 'world');
   $('#view-videos').hidden = VIEW !== 'videos';
   $('#view-account').hidden = VIEW !== 'account';
   $('#view-admin').hidden = VIEW !== 'admin';
@@ -898,12 +968,20 @@ function renderNav(){
   const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', approved() ? VIDEOS.length : null],
     ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
   if (isAdmin()) items.push(['admin', 'Admin', pending || null]);
-  $('#nav').innerHTML = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
+  const nav = $('#nav'), html = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
+  if (nav._html === html) return;
+  nav.innerHTML = nav._html = html;
+  // on a phone the tabs scroll sideways: keep the open one in view
+  const on = nav.querySelector('.on');
+  if (on && nav.scrollWidth > nav.clientWidth) {
+    const r = on.getBoundingClientRect(), nr = nav.getBoundingClientRect();
+    if (r.left < nr.left || r.right > nr.right - 28) nav.scrollLeft += r.left - nr.left - 8;
+  }
 }
 function renderAll(){
   renderNav();
   if (VIEW === 'bg' || VIEW === 'world') render();
-  else if (VIEW === 'results') renderResults();
+  else if (VIEW === 'results') { renderResults(); refreshMatchNews(); }
   else if (VIEW === 'videos') renderVideos();
   else if (VIEW === 'account') renderAccount();
   else if (VIEW === 'admin') renderAdmin();
@@ -917,6 +995,7 @@ function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(r
 
 function setBusy(b){
   $('#btnRefresh').disabled = b;
+  $('#btnRefresh').classList.toggle('spin', !!b);
   updateLastRun();
 }
 function showWarn(t){ const w = $('#warn'); w.textContent = t; w.hidden = false; }
@@ -958,7 +1037,8 @@ function storyCard(s){
   const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}${
     more > 0 ? `<li><button class="more" data-act="expand">+${more} more article${more > 1 ? 's' : ''}</button></li>` : ''}</ul>` : '';
   const compTags = s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`);
-  const tags = (VIEW === 'world' ? compTags : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`).concat(s.world ? compTags : []))
+  const worldTags = VIEW === 'world' || (VIEW === 'results' && isWorld(FB.league));
+  const tags = (worldTags ? compTags : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`).concat(s.world ? compTags : []))
     .concat(s.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`));
   const M = storyMedia(s);
   if (M.mins.length) tags.unshift(`<span class="tag">⏱ ${M.mins.slice(0, 4).map(minLabel).join(' ')}${M.mins.length > 4 ? ' …' : ''}</span>`);
@@ -982,7 +1062,7 @@ function storyCard(s){
       <span>${esc(fmtDate(s.date))}</span><span>·</span><span>${srcLine}</span></div>
     <h2><a href="${esc(safeUrl(r.link))}" data-aid="${esc(r.aid)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h2>
     ${r.desc ? `<p class="desc">${esc(r.desc)}</p>` : ''}${relHtml}
-    <div class="tags">${tags.join('')}</div>
+    <div class="tags">${tags.join('')}</div>${matchLinks(s)}
     <div class="actions">
       <button class="small" data-act="expand">${open ? '▴ Hide' : '▾ ' + (s.arts.length > 1 ? `All ${s.arts.length} articles & video` : 'Details & video')}</button>
       <button class="small" data-act="read">${read ? 'Mark unread' : 'Mark read'}</button>
@@ -991,6 +1071,20 @@ function storyCard(s){
   </article>`;
 }
 
+// what is switched on, as pills under the search row (a tap on one removes it); the Filters button counts them
+function renderPills(world, sel){
+  const p = [], q = $('#q').value.trim();
+  if (q) p.push(['q', `“${q.length > 24 ? q.slice(0, 23) + '…' : q}”`]);
+  sel.group.forEach(k => p.push(['group:' + k, (world ? COMPS : DIVS)[k] || k]));
+  sel.cats.forEach(k => p.push(['cats:' + k, CATS[k] || k]));
+  [['onlyNew', 'Only new'], ['onlyHot', 'Only hot'], ['hideRead', 'Hide read']].forEach(([id, l]) => { if ($('#' + id).checked) p.push([id, l]); });
+  if ($('#sort').value === 'score') p.push(['sort', 'Most important first']);
+  $('#pills').innerHTML = p.map(([k, l]) => `<button class="pill" data-pill="${esc(k)}" title="Remove">${esc(l)}<span class="x" aria-hidden="true">×</span></button>`).join('')
+    + (p.length > 1 ? '<button class="pill clear" data-pill="*">Clear all</button>' : '');
+  const n = p.filter(([k]) => k !== 'q').length, fc = $('#fcount');
+  fc.hidden = !n; fc.textContent = n;
+  $('#ftoggle').setAttribute('aria-label', n ? `Filters, ${n} on` : 'Filters');
+}
 function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
   $('#intro').innerHTML = world
@@ -1010,7 +1104,8 @@ function render(){
   const byCat = base.filter(s => !sel.cats.size || s.cats.some(c => sel.cats.has(c)));
   const byGroup = base.filter(s => !sel.group.size || s[groupKey].some(d => sel.group.has(d)));
   // the competition chips appear once a section is picked; a section with one competition (national teams) has none
-  $('#groupChips').hidden = world && (!sel.sect || Object.keys(groupLabels).length < 2);
+  $('#groupChips').hidden = $('#groupLabel').hidden = world && (!sel.sect || Object.keys(groupLabels).length < 2);
+  $('#groupLabel').textContent = world ? 'Competition' : 'Division';
   renderChips($('#groupChips'), groupLabels, sel.group, byCat, groupKey);
   renderChips($('#catChips'), CATS, sel.cats, byGroup, 'cats');
   const list = byCat.filter(s => byGroup.includes(s));
@@ -1018,6 +1113,10 @@ function render(){
 
   const totalArts = list.reduce((n, s) => n + s.arts.length, 0);
   $('#count').textContent = `${list.length} stories · ${totalArts} articles`;
+  renderPills(world, sel);
+  const rl = $('#resLink');
+  rl.textContent = world ? 'Results & tables →' : 'Results & table →';
+  rl.toggleAttribute('data-world-results', world); rl.toggleAttribute('data-bg-results', !world);
   const feed = $('#feed');
   // keep already-loaded video players alive across re-renders
   const keep = new Map([...feed.querySelectorAll('.media[data-key]')].map(m => [m.dataset.key, m]));
@@ -1705,7 +1804,7 @@ const FB_SEASON = '2026/27';
 const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\s+/, '');   // "ПФК Локомотив София 1929" → "Локомотив София 1929"
 const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига' };
 const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set(), oth: {},
-  comps: null, compsLoading: false, last: {}, want: '' };
+  comps: null, compsLoading: false, last: {}, want: '', mnOpen: new Set(), goMatch: '' };
 // the Results sections: the Bulgarian leagues, then the world competitions (read from ESPN by the world-sync job)
 const RSECT = [['bg', 'България'], ['top5', 'Топ 5 лиги'], ['euro', 'Евротурнири'], ['nat', 'Национални отбори']];
 const isWorld = lg => !LEAGUES[lg];
@@ -2010,6 +2109,7 @@ function renderResults(force){
   if (!ms.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>' + standingsHtml(lg); return; }
   const rounds = [...new Set(ms.map(m => m.round))].sort((a, b) => a - b);
   const total = Math.max(...rounds);
+  if (FB.goMatch) { const gm = ms.find(x => String(x.id) === FB.goMatch); if (gm) FB.round[lg] = gm.round; }
   if (!FB.round[lg] || !rounds.includes(FB.round[lg])) FB.round[lg] = defaultRound(ms);
   const r = FB.round[lg];
   const list = ms.filter(m => m.round === r).sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)) || a.home_name.localeCompare(b.home_name));
@@ -2025,9 +2125,10 @@ function renderResults(force){
         <select id="rndSel" aria-label="Round">${rounds.map(x => `<option value="${x}"${x === r ? ' selected' : ''}>Кръг ${x}</option>`).join('')}</select></div>
       <button data-rnd="${r + 1}" ${r >= total ? 'disabled' : ''} aria-label="Next round">›</button></div>
     ${roundReviewHtml(lg, r, list, d)}
-    ${list.map(matchCard).join('')}
+    ${list.map(m => matchCard(m) + mnWrap(lg, m)).join('')}
     ${standingsHtml(lg)}
     <p class="muted">Results and table: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Videos: YouTube (Gong.bg and others) · updated every 30 minutes</p>`;
+  afterMatchNews(box);
   // an old #table link opens Results at the table
   if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
 }
@@ -2044,6 +2145,7 @@ function defaultWorldRound(rounds){
 function renderWorldResults(box, lg, d, force){
   const comp = compOf(lg) || { name: lg, grp: '' }, rounds = d.rounds;
   if (!rounds.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>' + standingsHtml(lg); return; }
+  if (FB.goMatch) { const gi = rounds.findIndex(x => x.matches.some(m => String(m.id) === FB.goMatch)); if (gi >= 0) FB.round[lg] = gi; }
   let i = FB.round[lg];
   if (i == null || !rounds[i]) i = FB.round[lg] = defaultWorldRound(rounds);
   const R = rounds[i], list = R.matches;
@@ -2060,13 +2162,18 @@ function renderWorldResults(box, lg, d, force){
       <div class="mid"><h2>${esc(R.label)}${total ? ` от ${total}` : ''}</h2><div class="muted">${esc(span)}${R.ko || !R.stage || / · /.test(R.label) ? '' : ' · ' + esc(R.stage)}</div>
         <select id="rndSel" aria-label="Round">${rounds.map((x, k) => `<option value="${k}"${k === i ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
       <button data-rnd="${i + 1}" ${i >= rounds.length - 1 ? 'disabled' : ''} aria-label="Next round">›</button></div>
-    ${list.map(m => matchCard(m, top(m))).join('')}
+    ${list.map(m => matchCard(m, top(m)) + mnWrap(lg, m)).join('')}
     ${standingsHtml(lg)}
     <p class="muted">Results and tables: <a href="https://www.espn.com/soccer/" target="_blank" rel="noopener">ESPN</a> · updated every 30 minutes${comp.grp === 'nat' ? ' · national-team competitions are listed only while they or their qualifiers are being played' : ''}</p>`;
+  afterMatchNews(box);
   if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
 }
 function initFootballUI(){
+  bindStoryEvents($('#resultsBox'), refreshMatchNews);
   $('#resultsBox').addEventListener('click', e => {
+    const mn = e.target.closest('button[data-mnews]');
+    if (mn) { toggleMatchNews(mn.dataset.mnews); return; }
+    if (e.target.closest('.mnewsbox')) return;      // clicks inside the stories are handled by bindStoryEvents
     const sb = e.target.closest('[data-rsect]');
     if (sb) {
       const k = sb.dataset.rsect;
@@ -2102,13 +2209,320 @@ function initFootballUI(){
   }, true);
 }
 
+/* ======================= MATCH NEWS ======================= */
+// Every story is attached to the match(es) it is about, so each match on the Results page lists what was written
+// about it (as stacked stories, like the news feed) and each story in the feed links to its match.
+// A story belongs to a match when it names both teams within a few days of it; or, naming one team, to that team's
+// match it is closest to — the one just played for decisions, cards and complaints, the next one for referee
+// appointments. European-cup and national-team stories only go to those competitions' matches.
+const TEAM_KEY = {   // the Bulgarian leagues' team names (as on efbetleague.com / mr-bit.bg) → CLUBS
+  'Арда Кърджали': 'arda', 'Ботев Враца': 'botvr', 'Ботев Пловдив': 'botpd', 'Дунав Русе': 'dunav', 'Левски София': 'levski',
+  'Локомотив Пловдив': 'lokpd', 'Лудогорец': 'ludo', 'Локомотив София 1929': 'loksf', 'Локомотив София': 'loksf', 'Септември София': 'septemvri',
+  'Славия София': 'slavia', 'Спартак Варна': 'spartakvn', 'ЦСКА 1948': 'cska48', 'ЦСКА София': 'cska', 'Черно море Варна': 'chm', 'Черно море': 'chm',
+  'Берое': 'beroe', 'Вихрен': 'vihren', 'Добруджа': 'dobrudzha', 'Етър Велико Търново': 'etar', 'Етър': 'etar', 'Локомотив Г. Оряховица': 'lokgo',
+  'Лудогорец II': 'ludo2', 'Марек': 'marek', 'Монтана': 'montana', 'Несебър': 'nesebar', 'Пирин Благоевград': 'pirin', 'Пирин': 'pirin',
+  'Рилски Спортист': 'rilski', 'Спартак Плевен': 'spartakpl', 'Спортист Своге': 'sportist', 'Фратрия': 'fratria', 'Хебър 1918': 'hebar', 'Хебър': 'hebar',
+  'ЦСКА София II': 'cska2', 'ЦСКА II': 'cska2', 'Черноморец 1919 Бургас': 'chernomorets', 'Черноморец': 'chernomorets', 'Янтра 2019': 'yantra', 'Янтра': 'yantra',
+  // Bulgarian clubs in the European cups (ESPN's names)
+  'Levski Sofia': 'levski', 'CSKA Sofia': 'cska', 'Ludogorets Razgrad': 'ludo', 'Ludogorets': 'ludo', 'CSKA 1948 Sofia': 'cska48', 'CSKA 1948': 'cska48',
+  'Lokomotiv Plovdiv': 'lokpd', 'Cherno More Varna': 'chm', 'Arda Kardzhali': 'arda', 'Botev Plovdiv': 'botpd', 'Slavia Sofia': 'slavia',
+};
+// ESPN's team names → how Bulgarian headlines write them (case-sensitive patterns)
+const WORLD_TEAMS = {
+  'AFC Bournemouth': ['Борнемут', 'Борнмът'], 'Arsenal': ['Арсенал'], 'Aston Villa': ['Астън Вила'], 'Brentford': ['Брентфорд'], 'Brighton & Hove Albion': ['Брайтън'],
+  'Chelsea': ['Челси'], 'Coventry City': ['Ковънтри'], 'Crystal Palace': ['Кристъл Палас'], 'Everton': ['Евертън'], 'Fulham': ['Фулъм'], 'Hull City': ['Хъл Сити', 'Хъл'],
+  'Ipswich Town': ['Ипсуич'], 'Leeds United': ['Лийдс'], 'Liverpool': ['Ливърпул'], 'Manchester City': ['Манчестър Сити', 'Ман Сити'],
+  'Manchester United': ['Манчестър Юнайтед', 'Ман Юнайтед', '(?<!Лийдс |Нюкасъл |Уест Хям )Юнайтед'], 'Newcastle United': ['Нюкасъл'],
+  'Nottingham Forest': ['Нотингам(?: Форест)?'], 'Sunderland': ['Съндърланд'], 'Tottenham Hotspur': ['Тотнъм'], 'West Ham United': ['Уест Хям'],
+  'Wolverhampton Wanderers': ['Уулвърхямптън', 'Уулвс'], 'Burnley': ['Бърнли'],
+  'Alavés': ['Алавес'], 'Athletic Club': ['Атлетик(?: Билбао)?'], 'Atlético Madrid': ['Атлетико(?: Мадрид)?'], 'Barcelona': ['Барселона', 'Барса'], 'Celta Vigo': ['Селта'],
+  'Deportivo': ['Депортиво'], 'Elche': ['Елче'], 'Espanyol': ['Еспаньол'], 'Getafe': ['Хетафе'], 'Levante': ['Леванте'], 'Málaga': ['Малага'], 'Osasuna': ['Осасуна'],
+  'Racing Santander': ['Расинг(?: Сантандер)?'], 'Rayo Vallecano': ['Райо(?: Валекано)?'], 'Real Betis': ['Бетис'], 'Real Madrid': ['Реал Мадрид', 'Реал(?! Сосиедад| Бетис| Мадрид)'],
+  'Real Sociedad': ['Реал Сосиедад'], 'Sevilla': ['Севиля'], 'Valencia': ['Валенсия'], 'Villarreal': ['Виляреал'], 'Girona': ['Жирона'], 'Mallorca': ['Майорка'],
+  'AJ Auxerre': ['Оксер'], 'Angers': ['Анже'], 'AS Monaco': ['Монако'], 'Brest': ['Брест'], 'Le Havre AC': ['Хавър'], 'Le Mans': ['Льо Ман'], 'Lens': ['Ланс'], 'Lille': ['Лил'],
+  'Lorient': ['Лориен', 'Лориан'], 'Lyon': ['Лион'], 'Marseille': ['Марсилия'], 'Nice': ['Ница'], 'Paris FC': ['Пари ФК', 'Париж ФК'],
+  'Paris Saint-Germain': ['ПСЖ', 'Пари Сен Жермен'], 'Stade Rennais': ['Рен'], 'Strasbourg': ['Страсбург'], 'Toulouse': ['Тулуза'], 'Troyes': ['Троа'], 'Nantes': ['Нант'],
+  '1. FC Union Berlin': ['Унион Берлин'], 'Bayer Leverkusen': ['(?:Байер )?Леверкузен'], 'Bayern Munich': ['Байерн'], 'Borussia Dortmund': ['(?:Борусия )?Дортмунд'],
+  'Borussia Mönchengladbach': ['Мьонхенгладбах', 'Гладбах'], 'Eintracht Frankfurt': ['Айнтрахт'], 'FC Augsburg': ['Аугсбург'], 'FC Cologne': ['Кьолн'],
+  'Hamburg SV': ['Хамбургер', 'Хамбург'], 'Mainz': ['Майнц'], 'RB Leipzig': ['Лайпциг'], 'SC Freiburg': ['Фрайбург'], 'SC Paderborn 07': ['Падерборн'],
+  'Schalke 04': ['Шалке'], 'SV Elversberg': ['Елферсберг'], 'TSG Hoffenheim': ['Хофенхайм'], 'VfB Stuttgart': ['Щутгарт'], 'Werder Bremen': ['Вердер'], 'VfL Wolfsburg': ['Волфсбург'],
+  'AC Milan': ['Милан'], 'AS Roma': ['Рома'], 'Atalanta': ['Аталанта'], 'Bologna': ['Болоня'], 'Cagliari': ['Каляри'], 'Como': ['Комо'], 'Fiorentina': ['Фиорентина'],
+  'Frosinone': ['Фрозиноне'], 'Genoa': ['Дженоа'], 'Internazionale': ['Интер(?! Маями)'], 'Juventus': ['Ювентус'], 'Lazio': ['Лацио'], 'Lecce': ['Лече'], 'Monza': ['Монца'],
+  'Napoli': ['Наполи'], 'Parma': ['Парма'], 'Sassuolo': ['Сасуоло'], 'Torino': ['Торино'], 'Udinese': ['Удинезе'], 'Venezia': ['Венеция'],
+  // national teams
+  'Albania': ['Албания'], 'Andorra': ['Андора'], 'Armenia': ['Армения'], 'Austria': ['Австрия'], 'Azerbaijan': ['Азербайджан'], 'Belarus': ['Беларус'], 'Belgium': ['Белгия'],
+  'Bosnia-Herzegovina': ['Босна(?: и Херцеговина)?'], 'Bulgaria': ['България', 'трикольорите', 'Трикольорите'], 'Croatia': ['Хърватия'], 'Cyprus': ['Кипър'], 'Czechia': ['Чехия'],
+  'Denmark': ['Дания'], 'England': ['Англия'], 'Estonia': ['Естония'], 'Faroe Islands': ['Фарьорски(?:те)? острови'], 'Finland': ['Финландия'], 'France': ['Франция'],
+  'Georgia': ['Грузия'], 'Germany': ['Германия'], 'Gibraltar': ['Гибралтар'], 'Greece': ['Гърция'], 'Hungary': ['Унгария'], 'Iceland': ['Исландия'], 'Israel': ['Израел'],
+  'Italy': ['Италия'], 'Kazakhstan': ['Казахстан'], 'Kosovo': ['Косово'], 'Latvia': ['Латвия'], 'Liechtenstein': ['Лихтенщайн'], 'Lithuania': ['Литва'], 'Luxembourg': ['Люксембург'],
+  'Malta': ['Малта'], 'Moldova': ['Молдова'], 'Montenegro': ['Черна гора'], 'Netherlands': ['Нидерландия', 'Холандия'], 'North Macedonia': ['Северна Македония'],
+  'Northern Ireland': ['Северна Ирландия'], 'Norway': ['Норвегия'], 'Poland': ['Полша'], 'Portugal': ['Португалия'], 'Republic of Ireland': ['(?<!Северна )Ирландия'],
+  'Romania': ['Румъния'], 'San Marino': ['Сан Марино'], 'Scotland': ['Шотландия'], 'Serbia': ['Сърбия'], 'Slovakia': ['Словакия'], 'Slovenia': ['Словения'], 'Spain': ['Испания'],
+  'Sweden': ['Швеция'], 'Switzerland': ['Швейцария'], 'Türkiye': ['Турция'], 'Ukraine': ['Украйна'], 'Wales': ['Уелс'],
+};
+// One lean list of every match of the season (all competitions) is loaded for this, so a story is matched across
+// competitions: "ЦСКА" two days after a Conference League away game is about that game, not the league match before it.
+const MIDX = { at: 0, loading: false, matches: [] };
+async function loadMatchIndex(force){
+  if (!SB || MIDX.loading || (!force && Date.now() - MIDX.at < 30 * 60e3)) return;
+  MIDX.loading = true;
+  if (!FB.comps) loadComps();
+  const from = new Date(seasonStartTs() - 10 * DAY).toISOString(), to = new Date(Date.now() + 14 * DAY).toISOString(), all = [];
+  try {
+    for (let p = 0; p < 5; p++) {
+      const { data, error } = await SB.from('football_matches').select('id,league,round,kickoff,status,home_name,away_name,home_score,away_score')
+        .gte('kickoff', from).lte('kickoff', to).order('kickoff', { ascending: true }).order('id', { ascending: true }).range(p * 1000, p * 1000 + 999);
+      if (error) throw error;
+      all.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    MIDX.matches = all; MIDX.at = Date.now();
+  } catch (e) { log('The match list for the news could not be loaded: ' + (e.message || e)); MIDX.at = Date.now() - 25 * 60e3; }
+  MIDX.loading = false;
+  scheduleRender();
+}
+const COMP_LG = { eng: 'eng.1', esp: 'esp.1', ita: 'ita.1', ger: 'ger.1', fra: 'fra.1', ucl: 'uefa.champions', uel: 'uefa.europa', uecl: 'uefa.europa.conf' };
+const EURO_LG = ['uefa.champions', 'uefa.europa', 'uefa.europa.conf'];
+const lgGroup = lg => LEAGUES[lg] ? 'bg' : EURO_LG.includes(lg) ? 'euro' : Object.values(COMP_LG).includes(lg) ? 'top5' : 'nat';
+const RX_EURO = /УЕФА|Европ|Шампионск|Лига на конференциите|Конферентна лига|Лига Европа/u, RX_CUP = /(?<![\p{L}])Куп(?:а|ата)(?![\p{L}])/u;
+const RX_RIVALS = /съперни\p{L}*\s+на\s+[„"]?\p{Lu}\p{L}*(?:\s+\p{Lu}\p{L}*)?/gu;   // "between two of Levski's rivals" is not Levski's match
+const RX_SEP = /\s+-\s+|\s*[–—]\s*|\s+срещу\s+/gu;                                  // "Левски – ЦСКА", "Ботев срещу Дунав"
+// a referee appointment (about the next match), also when the news analysis tagged it only "other"
+const RX_APPOINT = /ще (?:ръководи|свири|води|бъде главен)|главен съдия на|(?<![\p{L}])свир(?:и|ят) (?:на|мача|дербито|срещата|гостуването)|наряд|назначи|определи|бригад|кой ще свири|ясни са съдиите|ясен е съдията|обявиха съдиите|(?<![\p{L}])съдии от/iu;
+function teamMatcher(name){
+  const n = teamName(name), k = TEAM_KEY[n];
+  let t = null;
+  if (k) { const c = CLUBS.find(x => x.k === k); if (c) t = { k, re: c.re, bg: true, loose: c.label.includes(' ') ? CS([c.label.split(' ')[0]]) : null }; }
+  else if (WORLD_TEAMS[n]) t = { k: 'w:' + n, re: CS(WORLD_TEAMS[n]) };
+  if (t) { t.endRe = new RegExp(t.re.source + '[)"“”»\\s]*$', 'u'); t.startRe = new RegExp('^[„"“«(\\s]*' + t.re.source, 'u');
+    if (t.loose) { t.lEnd = new RegExp(t.loose.source + '[)"“”»\\s]*$', 'u'); t.lStart = new RegExp('^[„"“«(\\s]*' + t.loose.source, 'u'); } }
+  return t;
+}
+const DAY = 864e5;
+let MN_CACHE = { key: '' };
+// every story → the matches it is about; every match → its stories
+function matchNewsIndex(){
+  const ckey = VER + '|' + MIDX.at + '|' + (FB.comps ? FB.comps.length : 0) + '|' + S.settings.seasonStart;
+  if (MN_CACHE.key === ckey) return MN_CACHE;
+  const POST = ['red', 'penalty', 'offside', 'var', 'foul', 'discipline', 'fights', 'dispute'];   // about a match already played
+  const vis = new Set(['efbet', 'mrbit', ...visibleComps().map(c => c.key)]);
+  const teams = new Map(), byTeam = new Map(), natKeys = new Set();
+  for (const m of MIDX.matches) {
+    if (!vis.has(m.league) || !m.kickoff) continue;
+    m._t = Date.parse(m.kickoff); m._g = lgGroup(m.league);
+    m._k = [m.home_name, m.away_name].map(n => { if (!teams.has(n)) teams.set(n, teamMatcher(n)); const t = teams.get(n); return t ? t.k : null; });
+    m._k.forEach(k => { if (!k) return; if (!byTeam.has(k)) byTeam.set(k, []); byTeam.get(k).push(m); });
+    if (m._g === 'nat') m._k.forEach(k => k && natKeys.add(k));
+  }
+  const matchers = [...new Map([...teams.values()].filter(Boolean).map(t => [t.k, t])).values()];
+  const bgM = matchers.filter(t => t.bg);
+  // the matches one headline is about. x: what is known about it — its tab, competitions, topics and when it was published
+  function hitsOf(text, x){
+    const cand = x.world || x.comps.length || x.eur ? matchers : bgM;
+    const title = text.replace(RX_RIVALS, ' ');
+    const found = cand.filter(t => t.re.test(title));
+    if (!found.length) return null;
+    // which competitions it can be about: the ones the news analysis named; the European cups when the headline says
+    // Europe/UEFA; none for the Bulgarian Cup (not on the Results page); otherwise its tab's competitions
+    const comps = x.comps.map(c => c === 'nat' ? 'nat' : COMP_LG[c]).filter(Boolean);
+    const euro = RX_EURO.test(title), cup = RX_CUP.test(title);
+    const ok = m => comps.length ? comps.includes(m.league) || (comps.includes('nat') && m._g === 'nat')
+      : euro ? m._g === 'euro' : cup ? false : (x.bg && (m._g === 'bg' || m._g === 'euro')) || (x.world && m._g !== 'bg');
+    // decisions, cards, complaints: the last match; an appointment: the next one; anything else: the nearer of the two
+    const post = x.cats.some(c => POST.includes(c)), pre = !post && (x.cats.includes('committee') || RX_APPOINT.test(title));
+    const strict = new Set(found.map(t => t.k));
+    const loose = new Set(cand.filter(t => t.loose && !strict.has(t.k) && t.loose.test(title)).map(t => t.k));
+    const t0 = x.t0, hits = new Map(), paired = new Set();
+    // 1. a match between two teams the headline names (one may be named loosely, "Ботев – Дунав"): the closest one
+    //    within a week before (an appointment) or nine days after (the aftermath)
+    const pairs = [new Map(), new Map()];
+    for (const k of strict) for (const m of byTeam.get(k) || []) {
+      if (!ok(m)) continue;
+      const o = m._k[0] === k ? m._k[1] : m._k[0], lvl = strict.has(o) ? 0 : loose.has(o) ? 1 : -1;
+      if (lvl < 0 || o === k) continue;
+      const dt = t0 - m._t;
+      if (dt < (post ? -90 * 60e3 : -7 * DAY) || dt > (pre ? 2 * 3600e3 : 9 * DAY)) continue;
+      const pk = [k, o].sort().join('|'), best = pairs[lvl].get(pk);
+      if (!best || Math.abs(dt) < Math.abs(t0 - best._t)) pairs[lvl].set(pk, m);
+    }
+    (pairs[0].size ? pairs[0] : pairs[1]).forEach(m => { hits.set(String(m.id), m); m._k.forEach(k => paired.add(k)); });
+    // 2. every other team: its last or next match. A headline naming a fixture that isn't on the list (a cup tie) adds
+    //    nothing; "Панатинайкос – ЦСКА" (a club the list has no name for) only goes to a match against such a club
+    let named = false;
+    const foreign = new Set();
+    for (const y of title.matchAll(RX_SEP)) {
+      const L = title.slice(Math.max(0, y.index - 40), y.index), R = title.slice(y.index + y[0].length, y.index + y[0].length + 40);
+      if (!/[А-ЯЁ][\p{L}.]*[)"“”»]?$/u.test(L) || !/^[„"“«(]?[А-ЯЁ]/u.test(R)) continue;
+      const lk = cand.filter(t => t.endRe.test(L) || (t.lEnd && t.lEnd.test(L))), rk = cand.filter(t => t.startRe.test(R) || (t.lStart && t.lStart.test(R)));
+      if (lk.length && rk.length) { if (![...lk, ...rk].some(t => paired.has(t.k))) named = true; }
+      else (lk.length ? lk : rk).forEach(t => foreign.add(t.k));
+    }
+    // a 1st League and a 2nd League club in one headline, not playing each other in the league: a cup tie
+    const divs = new Set(found.filter(t => t.bg && !paired.has(t.k)).map(t => (CLUBS.find(c => c.k === t.k) || {}).div));
+    if (named || (divs.has('d1') && divs.has('d2'))) return hits;
+    const back = (x.cats.includes('discipline') || x.cats.includes('committee') ? 5 : 3) * DAY;
+    for (const k of strict) {
+      if (paired.has(k) || (natKeys.has(k) && !x.comps.includes('nat'))) continue;   // "България" alone is not about the national team
+      const list = (byTeam.get(k) || []).filter(m => ok(m) && (!foreign.has(k) || !m._k[m._k[0] === k ? 1 : 0]));
+      const last = list.filter(m => m._t <= t0 + 90 * 60e3 && t0 - m._t < (post ? back : 3 * DAY)).pop();   // kickoff and publishing times are not exact
+      const next = list.find(m => m._t > t0 + (pre ? -2 * 3600e3 : 90 * 60e3) && m._t - t0 < (pre ? 5 : 3) * DAY);
+      const m = post ? last : pre ? next : !last ? next : !next ? last : (t0 - last._t <= next._t - t0 ? last : next);
+      if (m) hits.set(String(m.id), m);
+    }
+    return hits;
+  }
+  const byMatch = new Map(), byStory = new Map();
+  const info = a => ({ bg: artSide(a) !== 'world', world: a.scope === 'world', eur: (a.divs || []).includes('eur'), comps: a.comps || [], cats: a.cats || [], t0: a.date });
+  for (const s of buildStories()) {
+    // each headline on its own; a match counts for the story when at least a quarter of its headlines that name a team point to it
+    const count = new Map();
+    let named = 0;
+    for (const a of s.arts) {
+      if (DUP.has(a.aid)) continue;
+      const h = hitsOf(a.title, info(a));
+      if (!h) continue;
+      named++;
+      h.forEach((m, id) => count.set(id, { m, n: (count.has(id) ? count.get(id).n : 0) + 1 }));
+    }
+    if (!named) {   // no headline names a team: the descriptions, taken together
+      const h = hitsOf(s.arts.map(a => a.desc || '').join(' \n '), Object.assign(info(s.rep), { bg: s.bg, world: s.world, comps: s.comps, cats: s.cats, t0: s.first }));
+      if (h) { named = 1; h.forEach((m, id) => count.set(id, { m, n: 1 })); }
+    }
+    count.forEach(({ m, n }, id) => {
+      if (n < Math.max(1, Math.ceil(named / 4))) return;
+      if (!byMatch.has(id)) byMatch.set(id, []);
+      byMatch.get(id).push(s);
+      if (!byStory.has(s.key)) byStory.set(s.key, []);
+      byStory.get(s.key).push(m);
+    });
+  }
+  byMatch.forEach(list => list.sort((a, b) => b.date - a.date));
+  byStory.forEach(list => list.sort((a, b) => a._t - b._t));
+  return (MN_CACHE = { key: ckey, byMatch, byStory });
+}
+// the strip under a match card: how much was written about it; a tap opens the stories, stacked like the news feed
+const MN_HTML = {};
+function matchNewsStrip(lg, m){
+  const id = String(m.id), idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(id)) || [];
+  if (!ss.length) return `<div class="mnews none">${m.status === 'finished' || m.status === 'live' ? 'Няма статии за съдийството в този мач' : 'Още няма статии за този мач'}</div>`;
+  const n = ss.reduce((a, s) => a + s.arts.length, 0), open = FB.mnOpen.has(id), fresh = ss.some(s => s.hasNew);
+  const top = ss.slice().sort((a, b) => b.score - a.score || b.date - a.date)[0];
+  return `<button class="mnews${open ? ' open' : ''}" data-mnews="${esc(id)}" aria-expanded="${open}" title="Статиите за съдийството в този мач">
+      <span class="ic" aria-hidden="true">📰</span><b>${n} ${n === 1 ? 'статия' : 'статии'}</b>${ss.length > 1 && ss.length < n ? `<span class="tc">· ${ss.length} теми</span>` : ''}${fresh ? '<span class="badge new">NEW</span>' : ''}
+      <span class="hl">${esc(top.rep.title)}</span><span class="chev">${open ? 'Скрий ▴' : 'Виж ▾'}</span></button>
+    ${open ? `<div class="mnewsbox">${ss.map(storyCard).join('')}</div>` : ''}`;
+}
+function mnWrap(lg, m){
+  const id = String(m.id), h = matchNewsStrip(lg, m);
+  MN_HTML[id] = h;
+  return `<div class="mnwrap" data-mnw="${esc(id)}">${h}</div>`;
+}
+// after the round is drawn: remember what each strip shows, open a match that was linked from the news
+function afterMatchNews(box){
+  box.querySelectorAll('.mnwrap[data-mnw]').forEach(w => { w._html = MN_HTML[w.dataset.mnw]; });
+  if (FB.goMatch) {
+    const el = [...box.querySelectorAll('.mcard[data-mid]')].find(x => x.dataset.mid === FB.goMatch);
+    FB.goMatch = '';
+    if (el) el.scrollIntoView({ block: 'start' });
+  }
+}
+// re-draw only the strips that changed (new articles, read marks, a story opened, videos found), keeping players alive
+function refreshMatchNews(){
+  if (VIEW !== 'results') return;
+  const d = FB.data[FB.league];
+  if (!d || !d.matches) return;
+  const byId = new Map(d.matches.map(m => [String(m.id), m]));
+  $('#resultsBox').querySelectorAll('.mnwrap[data-mnw]').forEach(w => {
+    const m = byId.get(w.dataset.mnw); if (!m) return;
+    const html = matchNewsStrip(FB.league, m);
+    if (w._html === html) return;
+    const keep = new Map([...w.querySelectorAll('.media[data-key]')].map(x => [x.dataset.key, x]));
+    w.innerHTML = w._html = html;
+    w.querySelectorAll('.media[data-key]').forEach(x => { const old = keep.get(x.dataset.key); if (old && old.dataset.sig === x.dataset.sig) x.replaceWith(old); });
+  });
+}
+function toggleMatchNews(id){
+  const open = !FB.mnOpen.has(id);
+  open ? FB.mnOpen.add(id) : FB.mnOpen.delete(id);
+  refreshMatchNews();
+  if (open) {
+    const idx = matchNewsIndex(FB.league), ss = (idx && idx.byMatch.get(id)) || [];
+    queueExtract(ss.slice(0, 10).flatMap(s => extractTargets(s).slice(0, 2)));
+    ss.filter(s => EXPANDED.has(s.key)).forEach(s => queueExtract(extractTargets(s), true));
+  }
+}
+// the matches a story is about, for its card in the news feed
+function matchLinks(s){
+  if (VIEW === 'results') return '';
+  const ms = matchNewsIndex().byStory.get(s.key) || [];
+  if (!ms.length) return '';
+  return `<div class="mlinks">${ms.slice(0, 3).map(m => {
+    const lg = m.league, where = LEAGUES[lg] ? `${m.round} кръг` : (compOf(lg) || {}).name || '';
+    const score = m.status === 'finished' || m.status === 'live' ? `${m.home_score ?? ''}:${m.away_score ?? ''}` : '–';
+    return `<button class="mlink" data-gomatch="${esc(lg)}|${esc(m.id)}" title="The match on the Results page, with everything written about it">⚽ ${esc(teamName(m.home_name))} <b>${esc(score)}</b> ${esc(teamName(m.away_name))}<span class="muted">· ${esc(where)}</span></button>`;
+  }).join('')}${ms.length > 3 ? `<span class="muted">+${ms.length - 3} more</span>` : ''}</div>`;
+}
+// open the match's round on the Results page, with its stories open
+function openMatch(lg, id){
+  if (!LEAGUES[lg] && !compOf(lg)) return;
+  FB.league = lg; FB.last[sectOf(lg)] = lg; saveJSON('bgRefWatch.fbLeague', lg);
+  FB.open.clear(); FB.mnOpen.add(String(id)); FB.goMatch = String(id); FB.want = '';
+  RES_KEY = '';
+  if (VIEW === 'results') renderResults(true); else go('results');
+}
+// clicks inside story cards (news feed and match panels): open / mark read / look for videos again / upload
+function bindStoryEvents(container, redraw){
+  const onLink = e => { const a = e.target.closest('a[data-aid]'); if (a) setRead([a.dataset.aid], true); };
+  container.addEventListener('click', onLink);
+  container.addEventListener('auxclick', onLink);
+  container.addEventListener('click', e => {
+    const g = e.target.closest('[data-gomatch]');
+    if (g) { const [lg, id] = g.dataset.gomatch.split('|'); openMatch(lg, id); return; }
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const card = b.closest('.card'), s = card && buildStories().find(x => x.key === card.dataset.key); if (!s) return;
+    if (b.dataset.act === 'expand') { EXPANDED.has(s.key) ? EXPANDED.delete(s.key) : EXPANDED.add(s.key); if (EXPANDED.has(s.key)) queueExtract(extractTargets(s), true); redraw(); }
+    if (b.dataset.act === 'read') setRead(s.arts.map(a => a.aid), !storyRead(s));
+    if (b.dataset.act === 'retry') { const t = extractTargets(s); t.forEach(a => delete X[a.aid]); saveX(); queueExtract(t, true); redraw(); }
+    if (b.dataset.act === 'upload') {
+      const mins = new Set(); extractTargets(s).forEach(a => (X[a.aid] ? X[a.aid].minutes : []).forEach(m => mins.add(minLabel(m).replace("'", ''))));
+      PREFILL = { article_key: s.rep.aid, article_url: s.rep.link, storyTitle: s.rep.title, title: '', match: storyMatch(s),
+        match_date: ymd(new Date(s.first)), minutes: [...mins].join(', '), division: s.divs.find(d => d !== 'unk' && d !== 'eur') || '',
+        region: VIEW === 'world' || (VIEW === 'results' && isWorld(FB.league)) ? 'world' : 'bg' };
+      go('videos');
+    }
+  });
+}
+
 /* ======================= EVENTS & INIT ======================= */
 function initUI(){
   window.addEventListener('hashchange', applyView);
   $('#nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) go(b.dataset.view); });
 
-  // "Results & tables" in the World intro opens Results at the section being read
-  $('#intro').addEventListener('click', e => { if (e.target.closest('[data-world-results]')) { FB.want = SEL.world.sect || 'top5'; FB.round = {}; } });
+  // "Results & tables" opens Results at what is being read: the World section, or the Bulgarian leagues
+  $('#newsFilters').addEventListener('click', e => {
+    if (e.target.closest('[data-world-results]')) { FB.want = SEL.world.sect || 'top5'; FB.round = {}; }
+    else if (e.target.closest('[data-bg-results]') && isWorld(FB.league)) FB.league = FB.last.bg || 'efbet';
+  });
+  // the Filters panel (open or closed is remembered on this device)
+  const FOPEN = 'bgRefWatch.fopen';
+  const setPanel = (open, focus) => {
+    $('#fpanel').hidden = !open; $('#ftoggle').setAttribute('aria-expanded', open); saveJSON(FOPEN, open);
+    if (focus) (open ? $('#fpanel').querySelector('button,select,input') : $('#ftoggle')).focus();
+  };
+  setPanel(!!loadJSON(FOPEN));
+  $('#ftoggle').addEventListener('click', () => setPanel($('#fpanel').hidden));
+  $('#fdone').addEventListener('click', () => setPanel(false, true));
+  $('#fpanel').addEventListener('keydown', e => { if (e.key === 'Escape') setPanel(false, true); });
+  $('#pills').addEventListener('click', e => {
+    const b = e.target.closest('[data-pill]'); if (!b) return;
+    const k = b.dataset.pill, sel = SEL[VIEW === 'world' ? 'world' : 'bg'];
+    const off = id => { if (id === 'q') $('#q').value = ''; else if (id === 'sort') $('#sort').value = 'date'; else if ($('#' + id)) $('#' + id).checked = false; };
+    if (k === '*') { sel.group.clear(); sel.cats.clear(); ['q', 'sort', 'onlyNew', 'onlyHot', 'hideRead'].forEach(off); }
+    else if (k.startsWith('group:')) sel.group.delete(k.slice(6));
+    else if (k.startsWith('cats:')) sel.cats.delete(k.slice(5));
+    else off(k);
+    shown = PAGE_SIZE; render();
+  });
   $('#sectChips').addEventListener('click', e => {
     const b = e.target.closest('[data-sect]'); if (!b) return;
     const w = SEL.world;
@@ -2127,24 +2541,7 @@ function initUI(){
   ['#sort', '#onlyNew', '#onlyHot', '#hideRead'].forEach(s => $(s).addEventListener('change', () => { shown = PAGE_SIZE; render(); }));
   $('#more').addEventListener('click', () => { shown += PAGE_SIZE; render(); });
 
-  const feed = $('#feed');
-  const onLink = e => { const a = e.target.closest('a[data-aid]'); if (a) setRead([a.dataset.aid], true); };
-  feed.addEventListener('click', onLink);
-  feed.addEventListener('auxclick', onLink);
-  feed.addEventListener('click', e => {
-    const b = e.target.closest('button[data-act]'); if (!b) return;
-    const card = b.closest('.card'), s = buildStories().find(x => x.key === card.dataset.key); if (!s) return;
-    if (b.dataset.act === 'expand') { EXPANDED.has(s.key) ? EXPANDED.delete(s.key) : EXPANDED.add(s.key); render(); }
-    if (b.dataset.act === 'read') setRead(s.arts.map(a => a.aid), !storyRead(s));
-    if (b.dataset.act === 'retry') { const t = extractTargets(s); t.forEach(a => delete X[a.aid]); saveX(); queueExtract(t, true); render(); }
-    if (b.dataset.act === 'upload') {
-      const mins = new Set(); extractTargets(s).forEach(a => (X[a.aid] ? X[a.aid].minutes : []).forEach(m => mins.add(minLabel(m).replace("'", ''))));
-      PREFILL = { article_key: s.rep.aid, article_url: s.rep.link, storyTitle: s.rep.title, title: '', match: storyMatch(s),
-        match_date: ymd(new Date(s.first)), minutes: [...mins].join(', '), division: s.divs.find(d => d !== 'unk' && d !== 'eur') || '',
-        region: VIEW === 'world' ? 'world' : 'bg' };
-      go('videos');
-    }
-  });
+  bindStoryEvents($('#feed'), render);
 
   initVideosUI();
   $('#accountBox').addEventListener('submit', e => { e.preventDefault(); onAccountSubmit(e.target); });
@@ -2168,7 +2565,7 @@ function initUI(){
 
   $('#btnRefresh').addEventListener('click', () => loadNews(true));
 }
-function autoCheck(){ loadNews(false); }
+function autoCheck(){ loadNews(false); loadMatchIndex(); }
 
 initUI();
 initFootballUI();
@@ -2178,7 +2575,7 @@ setTimeout(autoCheck, 500);
 setInterval(autoCheck, 10 * 60e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
 
-window.BGRW = { loadNews, buildStories, toEmbed, renderAll, compressVideo, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
+window.BGRW = { loadNews, buildStories, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
 })();
 </script>
 </body>
