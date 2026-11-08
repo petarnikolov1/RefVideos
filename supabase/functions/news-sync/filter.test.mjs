@@ -67,6 +67,16 @@ for (const [t, scope, comps] of [
 ok(N.notBulgarian('Сдержал ли Моуринью обещание разоблачить ошибочные решения арбитров', 'Tribuna.com', '') &&
   N.notBulgarian('ВАР, пречки, повреди и драма во 89-та! Баерн и Дортмунд го одиграа мечот', 'sportstation.mk', '') &&
   N.notBulgarian('Судија', 'x', 'https://www.sportklub.rs/a') && !N.notBulgarian('Кабаков ще свири дербито', 'Sportal.bg', 'https://www.sportal.bg/x'), 'Russian / Macedonian / Serbian articles are left out');
+// Russian without the letters Bulgarian lacks, and Russian clubs written about in Bulgarian
+ok(N.notBulgarian('Стала известна бригада арбитров, которая обслужит матч "Краснодар" - ЦСКА', 'x', '') &&
+  N.notBulgarian('Судья матча Спартак - Зенит', 'x', '') && N.notBulgarian('Тренер ЦСКА недоволен судейством', 'x', ''), 'Russian headlines without ы/э/ё are left out');
+const bgOk = ['Никола Попов ще ръководи дербито Левски – ЦСКА', 'Съдийската комисия: Трябваше да има червен картон за Левски', 'Ясно е кой ще свири гостуването на ЦСКА в Атина',
+  'Арбитър от Втора лига спрян от наряд след грешки', 'Мохамед Ал Хаким ще ръководи срещата Панатинайкос – ЦСКА', 'Албанец и иракски швед свирят на Левски и ЦСКА в Европа',
+  'Дисциплинарната комисия наказа футболист на ЦСКА за 3 мача', 'Чужд съдия за последно свири ЦСКА – Левски преди 19 години', 'Съдия от две загуби на Лудогорец свири на ЦСКА в Атина'];
+ok(bgOk.every(t => !N.notBulgarian(t, 'Sportal.bg', 'https://www.sportal.bg/x')), 'Bulgarian headlines are not taken for Russian: ' + bgOk.filter(t => N.notBulgarian(t, 'Sportal.bg', '')).join(' | '));
+ok(!N.analyze('Скандално съдийство в мача Краснодар - ЦСКА, червен картон за домакините', '', bgQ) && !N.analyze('Съдията на ЦСКА Москва - Зенит отмени гол след ВАР', '', bgQ) &&
+  !N.analyze('Червен картон за ЦСКА (Москва) в дербито', '', bgQ), 'CSKA Moscow and other Russian clubs are left out, even in Bulgarian');
+ok(!!N.analyze('Червен картон за ЦСКА в дербито с Левски', '', bgQ) && !!N.analyze('Кабаков ще свири Зенит - Краснодар в Русия', '', bgQ), 'the Bulgarian ЦСКА stays; a Bulgarian referee in Russia stays');
 // World stories about Bulgarian clubs or referees are also shown in the Bulgaria tab (division "eur")
 for (const [t, eur] of [
   ['Албански рефер ще ръководи мача на Левски с Ягелония в Лига Европа', true],

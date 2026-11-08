@@ -144,6 +144,9 @@ export const RX = {
   cup:       rx(`купа(?:та)? на българия|суперкупа(?:та)?(?: на българия)?`),
   bgOrg:     rx(`бфс${E}|български(?:я)? футболен съюз|бпфл${E}|професионалн${W} футболн${W} лига`),
   euro:      rx(`квалификаци${W}`),   // qualifiers of an unknown competition
+  // Russian football: "ЦСКА" next to Краснодар or Зенит is CSKA Moscow, not the Bulgarian club
+  ruFoot:    new RegExp('(?<![\\p{L}])(?:(?:ЦСКА|Спартак|Локомотив|Динамо|Торпедо)\\s*[(,]?\\s*(?:Москва|М)(?![\\p{L}])|Зенит|Краснодар|Ростов|Ахмат|Оренбург|Химки|' +
+    'Крил(?:ия|я) Советов|РПЛ|руск(?:ата|ия|ото)? (?:висша лига|премиер лига|премиър лига|първенство|шампионат|футбол))(?![\\p{L}])', 'u'),
   foreign:   rx(`англи${W}|англичан${W}|испан${W}|итали${W}|герман${W}|франц${W}|френск${W}|португал${W}|холанд${W}|нидерланд${W}|турск${W}|турци${W}|гърц${W}|гръцк${W}|румън${W}|сръбск${W}|сърби${W}|хърват${W}|руск${W}|русия|украин${W}|украйн${W}|шотланд${W}|белги${W}|саудит${W}|млс${E}|mls${E}|бразил${W}|аржентин${W}|мексик${W}|фифа${E}|fifa${E}|уефа${E}|uefa${E}|москва|истанбул|атина|солун|букурещ|белград|загреб|маями|кипър${W}|кипърск${W}|израел${W}|полск${W}|полша|чехи${W}|чешк${W}|австри${W}|швейцар${W}|унгар${W}|европейск${W}`),
   otherSport:rx(`баскетбол${W}|волейбол${W}|хандбал${W}|футзал${W}|плаж${W} футбол${W}|мини-?футбол${W}|хокей${W}|тенис${W}|бокс${W}|mma${E}|формула 1|ръгби|водна топка`),
   court:     rx(`прокурат${W}|съд${E}|съда${E}|съдът|подсъдим${W}|обвиняем${W}|присъд${W}|осъд${W}|дело${E}|делото|адвокат${W}|районн${W} съд|градск${W} съд|апелатив${W}|мярка за неотклонение`),
@@ -213,7 +216,8 @@ export function analyze(title, desc, q) {
   const L1 = RX.league1.test(t), L2 = RX.league2.test(t), L3 = RX.league3.test(t), CUP = RX.cup.test(t);
   const anyLeague = L1 || L2 || L3 || CUP;
   if (RX.otherSport.test(t) && !anyLeague) return null;                       // basketball, volleyball…
-  const clubs = clubsIn(t), refName = REFNAMES.test(t);
+  const ru = RX.ruFoot.test(t);
+  const clubs = clubsIn(t).filter(k => !(ru && k === 'cska')), refName = REFNAMES.test(t);
   const bgSignal = anyLeague || clubs.length > 0 || refName || RX.bgOrg.test(t);
   const comps = WORLD.filter(w => w.lg.test(t) || (w.cl && w.cl.test(t))).map(w => w.k);
 
@@ -222,7 +226,7 @@ export function analyze(title, desc, q) {
   // a Bulgarian club named next to a big league is a Bulgarian story; the European cups and national teams are World
   else if (comps.length) scope = (clubs.length && comps.every(c => TOP5.includes(c))) ? 'bg' : 'world';
   else if (RX.euro.test(t)) return null;                                     // qualifiers of some other competition
-  else if (RX.foreign.test(t) && !clubs.length && !refName) return null;      // other foreign football
+  else if ((RX.foreign.test(t) || ru) && !clubs.length && !refName) return null;      // other foreign football
   else if (bgSignal || (q && q.ctx === 'bg')) scope = 'bg';
   else return null;
 
@@ -271,9 +275,12 @@ export function analyze(title, desc, q) {
 }
 
 // Russian, Ukrainian, Serbian or Macedonian (Google News also gives those for Bulgarian searches): letters Bulgarian
-// doesn't have, or a site from those countries
+// doesn't have, Russian words Bulgarian doesn't have ("которая", "матч", "судья"…), or a site from those countries
 const NOT_BG_LETTERS = /[ыэёіїєґѓќѕџљњјђћ]/iu;
-export const notBulgarian = (title, src, link) => NOT_BG_LETTERS.test(String(title)) ||
+const RU_WORDS = new RegExp('(?<![\\p{L}])(?:котор(?:ый|ая|ое|ые|ого|ой|ому|ым|ых|ую)|матч(?:а|е|у|ем|и|ей|ах)?|суд(?:ья|ьи|ье|ью|ьей|ей)|арбитров|' +
+  'игрок(?:а|и|ов|у)?|сборн(?:ая|ой|ую)|также|только|будет|будут|было|были|стала|чтобы|что|сегодня|очень|тренер(?:а|ы|у|ом)?|' +
+  'чемпионат(?:а|е|у)?|обслуж(?:ит|ат|ивать)|из-за|его|нет|год|году)(?![\\p{L}])', 'iu');
+export const notBulgarian = (title, src, link) => NOT_BG_LETTERS.test(String(title)) || RU_WORDS.test(String(title)) ||
   /\.(?:ru|ua|by|kz|rs|mk|me|ba)$/i.test(String(src || '').trim()) || /^https?:\/\/[^/]*\.(?:ru|ua|by|kz|rs|mk|me|ba)(?:[/:?#]|$)/i.test(String(link || ''));
 
 // one feed item → an article row (or null when it isn't about refereeing / is before the season)
