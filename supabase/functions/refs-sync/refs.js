@@ -159,6 +159,101 @@ export function parseAppointments(html) {
 }
 const tidyName = s => String(s).replace(/[*.]+$/, '').replace(/\s+/g, ' ').trim();
 
+/* ───────── the officials' own lists (bfu-tournaments.com) ───────── */
+// BFU lists every referee by first and last name ("Радослав Гидженов FIFA", role "Ръководещ" or "Асистент", town), and
+// uses the father's name where two would read the same ("Петър Николаев" beside "Петър Николов"). The appointments
+// give three names ("Петър Николаев Николов"), so each official is looked up here to be shown as BFU writes them.
+export const OFFICIAL_LISTS = [['ref', 'first/refrees'], ['ref', 'second/refrees'], ['ref', 'third-sw/refrees'], ['obs', 'first/refcom'], ['obs', 'second/refcom']]
+  .map(([kind, path]) => ({ kind, url: 'https://bfu-tournaments.com/leagues/' + path }));
+const NAME_WORD = /^\p{Lu}[\p{L}'’-]*\p{L}$/u;
+// "Радослав Гидженов FIFA", "Александър Вангелов (Ръководещ)", "Иво Колев – до 12.2026", "Георги Йорданов (СН на УЕФА)" → name, role
+export function parseOfficials(html, kind = 'ref') {
+  const out = [];
+  for (const row of String(html).split(/<tr[\s>]/).slice(1)) {
+    const alt = (row.match(/alt="([^"]+)"\s+class="w-10"/) || [])[1];
+    if (!alt) continue;
+    const raw = decode(alt);
+    const role = ((row.match(/<span class="px-4 font-normal">([^<]*)<\/span>/) || [])[1] || (raw.match(/\((Ръководещ|Асистент)\)/) || [])[1] || '').trim();
+    const w = raw.replace(/\([^)]*\)/g, ' ').split(/\s+/).map(x => x.replace(/[-–*]+$/, '')).filter(Boolean);
+    if (w.length < 2 || !NAME_WORD.test(w[0]) || !NAME_WORD.test(w[1])) continue;     // a typo such as "илип Шекерджиев"
+    out.push({ name: w[0] + ' ' + w[1], role, kind, fifa: /\bFIFA\b/.test(raw) });
+  }
+  return out;
+}
+// the same name written a little differently: "Кристиaн" with a Latin a, "Кристиан" / "Кристиян"
+const nameKey = s => tokens(s).map(w => w.replace(/иан/g, 'иян')).join(' ');
+export function officialsDir(list) {
+  const dir = new Map();
+  for (const o of list) { const k = o.kind + '|' + nameKey(o.name); if (!dir.has(k)) dir.set(k, []); dir.get(k).push(o); }
+  return dir;
+}
+// Which list entry each official on the appointments is. The appointments give three names, the lists two, and
+// “first and last name” isn't always it: BFU writes “Петър Николаев” for Петър Николаев Николов because Петър Милков
+// Николов is “Петър Николов”, and “Пламен Божидаров” for Пламен Божидаров Мехлемов. So everyone seen on the
+// appointments is placed at once, an entry going to one person (two, if BFU lists the name twice):
+//   1. only the first and last name are listed → that entry
+//   2. both are → the one nobody else has taken, else the one whose role (Ръководещ / Асистент) fits, else first and last
+//   3. only the first and father's name are listed → that entry, if it is free and the role fits
+//   4. neither → a free entry with the same last name and a first name one letter off (“Петр”, “Стилян”), if only one
+const KIND = r => r === 'СН' ? 'obs' : /^(?:ДН|ДЕЛЕГАТ)$/.test(String(r)) ? null : 'ref';
+const ROLE_OF = { 'ГС': 'Ръководещ', '4-ТИ': 'Ръководещ', 'ВАР': 'Ръководещ', 'АС1': 'Асистент', 'АС2': 'Асистент' };
+const nameWords = n => String(n || '').replace(/[*.]+$/, '').trim().split(/\s+/).filter(Boolean);
+const personKey = (n, r) => { const k = KIND(r), w = nameWords(n); return k && w.length >= 2 ? k + '|' + nameKey(w.join(' ')) : null; };
+const oneOff = (a, b) => {   // at most one letter added, dropped or changed
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, d = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++d > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return d + (a.length - i) + (b.length - j) <= 1;
+};
+// crew members [{ n, r }] → Map(person → the name as BFU writes it)
+export function officialNames(crew, dir) {
+  const out = new Map();
+  if (!dir || !dir.size) return out;
+  const people = new Map();
+  for (const c of crew) {
+    const k = personKey(c.n, c.r);
+    if (!k) continue;
+    if (!people.has(k)) { const kind = KIND(c.r), w = nameWords(c.n); people.set(k, { kind, w, roles: new Set(), slot: null }); }
+    if (ROLE_OF[c.r]) people.get(k).roles.add(ROLE_OF[c.r]);
+  }
+  const used = new Map(), cap = k => (k && dir.get(k) || []).length;
+  const free = k => (used.get(k) || 0) < cap(k);
+  const fits = (p, k) => !p.roles.size || (dir.get(k) || []).some(e => !e.role || p.roles.has(e.role));
+  const take = (p, k) => { used.set(k, (used.get(k) || 0) + 1); p.slot = k; };
+  const all = [...people.values()];
+  for (const p of all) {
+    const fl = p.kind + '|' + nameKey(p.w[0] + ' ' + p.w[p.w.length - 1]);
+    const fm = p.w.length >= 3 ? p.kind + '|' + nameKey(p.w[0] + ' ' + p.w[1]) : null;
+    p.fl = cap(fl) ? fl : null;
+    p.fm = fm && fm !== fl && cap(fm) ? fm : null;
+  }
+  for (const p of all) if (p.fl && !p.fm) take(p, p.fl);
+  for (const p of all) if (p.fl && p.fm) {
+    const a = free(p.fl), b = free(p.fm), fa = fits(p, p.fl), fb = fits(p, p.fm);
+    take(p, a && !b ? p.fl : b && !a ? p.fm : fa !== fb ? (fa ? p.fl : p.fm) : p.fl);
+  }
+  for (const p of all) if (!p.fl && p.fm && free(p.fm) && fits(p, p.fm)) take(p, p.fm);
+  for (const p of all) if (!p.slot) {
+    const first = nameKey(p.w[0]), last = nameKey(p.w[p.w.length - 1]);
+    const near = [...dir.keys()].filter(k => {
+      const [kind, key] = k.split('|'), t = key.split(' ');
+      return kind === p.kind && t.length >= 2 && t[t.length - 1] === last && t[0] !== first && oneOff(t[0], first) && free(k) && fits(p, k);
+    });
+    if (near.length === 1) take(p, near[0]);
+  }
+  for (const [k, p] of people) if (p.slot) {
+    const list = dir.get(p.slot);
+    out.set(k, (list.find(e => !e.role || !p.roles.size || p.roles.has(e.role)) || list[0]).name);
+  }
+  return out;
+}
+export const officialName = (full, role, names) => (names && names.get(personKey(full, role))) || null;
+
 // each appointment → the match it is for: both clubs' names must fit, the same day and time and round count too
 export function assign(items, matches, round) {
   const pairs = [];
@@ -186,14 +281,28 @@ const TR = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з:
   у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sht', ъ: 'a', ь: 'y', ю: 'yu', я: 'ya' };
 const slug = s => tokens(String(s).replace(/\([^)]*\)/g, ' ')).join('-').replace(/[а-я]/g, c => TR[c] ?? c);
 const keyOf = s => tokens(String(s).replace(/\([^)]*\)/g, ' ')).join(' ');
+// the clubs' crests on bgclubs.eu (media.bgclubs.eu/images/logos/<id>.png), by the bgclubs.eu page the table links to
+// (reserve teams take the club's crest). A club that isn't here gets no logo: the page shows its initials.
+export const BGCLUBS_LOGO = { 'Minyor(Pernik)': 10121, 'Oborishte(Panagyurishte)': 10286, 'Banskotiym(Bansko)': 10148, 'Strumskaslava1927(Radomir)': 10264,
+  'Balkan1929(Botevgrad)': 10139, 'OFKKostinbrod2012(Kostinbrod)': 10263, 'Slivnishkigeroy(Slivnitsa)': 10158, 'Slavia1913(Sofia)': 10113,
+  'Belasitsa(Petrich)': 10102, 'Septemvri(Sofia)': 10187, 'Septemvri(Simitli)': 10128, 'Pirin1941(Razlog)': 10253, 'Etropole(Etropole)': 10147,
+  'Natsional(Sofia)': 11344, 'CSKA(Sofia)': 10104, 'Kyustendil(Kyustendil)': 10922, 'Levski(Sofia)': 10103, 'Botev1937(Ihtiman)': 10257 };
+// a team whose row links to its own site (“Левски II” → levskisofia.info) takes its club's crest by name
+const BGCLUBS_BY_NAME = { 'левски': 10103, 'цска': 10104, 'славия': 10113 };
+export const bgclubsLogo = (attrs, team = '') => {
+  const slug = (String(attrs || '').match(/bgclubs\.eu\/teams\/([^"?#\s]+)/) || [])[1];
+  const id = slug ? BGCLUBS_LOGO[decodeURIComponent(slug)] : BGCLUBS_BY_NAME[tokens(String(team).replace(/\([^)]*\)/g, ' ')).filter(w => !RESERVE(w)).join(' ')];
+  return id ? `https://media.bgclubs.eu/images/logos/${id}.png` : null;
+};
 export function parseSw3(html) {
   const h = String(html).replace(/\s+/g, ' ');
-  // the table: "1. <a …>Миньор (Перник)</a> 16 12 3 1 35:7 39"
+  // the table: "1. <a class="bgclubs" href="https://bgclubs.eu/teams/Minyor(Pernik)?season=227">Миньор (Перник)</a> 16 12 3 1 35:7 39"
   const tStart = h.indexOf('class="standings-'), tEnd = tStart >= 0 ? h.indexOf('</div>', tStart) : -1;
   const table = [];
-  if (tStart >= 0) for (const m of h.slice(tStart, tEnd).matchAll(/(\d+)\.\s*<a[^>]*>([^<]+)<\/a>\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+):(\d+)\s+(-?\d+)/g))
-    table.push({ rank: +m[1], team_name: clean(m[2]), played: +m[3], won: +m[4], drawn: +m[5], lost: +m[6], goals_for: +m[7], goals_against: +m[8], points: +m[9] });
+  if (tStart >= 0) for (const m of h.slice(tStart, tEnd).matchAll(/(\d+)\.\s*<a([^>]*)>([^<]+)<\/a>\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+):(\d+)\s+(-?\d+)/g))
+    table.push({ rank: +m[1], team_name: clean(m[3]), logo: bgclubsLogo(m[2], m[3]), played: +m[4], won: +m[5], drawn: +m[6], lost: +m[7], goals_for: +m[8], goals_against: +m[9], points: +m[10] });
   const canon = new Map(table.map(t => [keyOf(t.team_name), t.team_name]));
+  const logoOf = new Map(table.map(t => [t.team_name, t.logo]));
   const name = s => canon.get(keyOf(s)) || clean(s);
   // the rounds: <a id="k8r1"></a><strong>I кръг</strong> <u>1 август 2026 г., събота, 18:00 ч:</u> <strong>Home - Away 1:3 (0:3) </strong>
   const lStart = h.indexOf('id="k8r1"'), lEnd = h.indexOf('id="grid-v"');
@@ -228,7 +337,8 @@ export function parseSw3(html) {
     const status = e.score ? 'finished' : e.postponed && (!e.date || Date.parse(e.date.iso) < now) ? 'postponed' : 'scheduled';
     return { id: `sw3:${SEASON.replace('/', '-')}:${slug(e.home)}:${slug(e.away)}`, league: 'sw3', season: SEASON, round: e.round,
       kickoff: e.date ? (e.date.time ? e.date.iso : sofiaUtc(e.date.y, e.date.mo, e.date.d, 12, 0).toISOString()) : null, status,
-      home_name: e.home, away_name: e.away, home_score: e.score ? e.score[0] : null, away_score: e.score ? e.score[1] : null,
+      home_name: e.home, away_name: e.away, home_logo: logoOf.get(e.home) ?? null, away_logo: logoOf.get(e.away) ?? null,
+      home_score: e.score ? e.score[0] : null, away_score: e.score ? e.score[1] : null,
       ht_home: e.ht ? e.ht[0] : null, ht_away: e.ht ? e.ht[1] : null, source_url: SW3_PAGE,
       note: [e.date && !e.date.time ? 'час — неуточнен' : '', e.venue ? e.venue : '', e.note].filter(Boolean).join(' · ') || null };
   });

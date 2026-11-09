@@ -123,8 +123,10 @@ Deno.serve(async (req) => {
   // which ones to read: new posts, and the last few days' (the committee sometimes changes an appointment)
   const recent = (x: any) => !x.posted || Date.now() - Date.parse(x.posted) < days * 864e5;
   const seenOff = new Set<string>(), seenDis = new Set<string>();
+  let stored: any[] = [];
   try {
-    for (const r of await rest(`football_officials?select=src_url&season=eq.${encodeURIComponent(R.SEASON)}`)) seenOff.add(r.src_url);
+    stored = await rest(`football_officials?select=match_id,league,season,round,crew,fixture,kickoff_text,src_url,src_title,posted_at&season=eq.${encodeURIComponent(R.SEASON)}&limit=2000`);
+    for (const r of stored) seenOff.add(r.src_url);
     for (const r of await rest(`football_discipline?select=url&season=eq.${encodeURIComponent(R.SEASON)}`)) seenDis.add(r.url);
   } catch (e) { out.readError = String((e as Error).message ?? e); }
   const todo = posts.filter(x => body.all || recent(x) || !(x.kind === 'appointments' ? seenOff : seenDis).has(x.url))
@@ -141,6 +143,14 @@ Deno.serve(async (req) => {
   if (!teams.length) try { teams = (await rest(`football_standings?select=team_name&league=eq.sw3&season=eq.${encodeURIComponent(R.SEASON)}`)).map((t: any) => t.team_name); } catch { /* keep empty */ }
 
   const off: Record<string, any> = out.officials = { posts: 0, matched: 0, unmatched: [] as string[], errors: [] as string[], byLeague: {} as Record<string, number> };
+  // BFU's lists of referees and observers: each official is shown as BFU writes them (first and last name)
+  let dir: Map<string, any[]> | null = null;
+  const names: Record<string, any> = out.names = { listed: 0, people: 0, named: 0, notListed: [] as string[], father: [] as string[], renamed: 0, listErrors: [] as string[] };
+  if (body.officials !== false && todo.some(x => x.kind === 'appointments')) {
+    const lists = await Promise.all(R.OFFICIAL_LISTS.map(async l => { try { return R.parseOfficials(await page(l.url), l.kind); } catch (e) { names.listErrors.push(`${l.url}: ${String((e as Error).message ?? e)}`.slice(0, 120)); return []; } }));
+    names.listed = lists.reduce((n, l) => n + l.length, 0);
+    if (names.listed) dir = R.officialsDir(lists.flat());
+  }
   const dis: Record<string, any> = out.discipline = { posts: 0, players: 0, decisions: 0, errors: [] as string[] };
   const offRows = new Map<string, any>(), disRows: any[] = [];
   const read = todo.filter(x => (x.kind === 'appointments' ? body.officials !== false : body.discipline !== false));
@@ -159,6 +169,28 @@ Deno.serve(async (req) => {
     } catch (e) { off.errors.push(`${x.title}: ${String((e as Error).message ?? e)}`.slice(0, 200)); }
   }
   off.matched = offRows.size;
+  // the names: the whole season's officials are placed on BFU's lists at once (see officialNames), and rows that
+  // weren't read again this time are written again when one of their names changes (not when a list couldn't be read)
+  if (dir) {
+    const bare = (crew: any[]) => (crew ?? []).map(({ s, ...c }: any) => c);
+    const rows = [...stored.filter(r => !offRows.has(r.match_id)), ...offRows.values()];
+    const map = R.officialNames(rows.flatMap(r => bare(r.crew)), dir);
+    names.people = map.size;
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const crew = bare(r.crew).map((c: any) => {
+        const s = R.officialName(c.n, c.r, map), key = `${c.n}|${c.r === 'СН' ? 'СН' : ''}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          if (s) { names.named++; const w = String(c.n).split(/\s+/); if (w.length >= 3 && s.split(' ').pop() !== w[w.length - 1] && names.father.length < 20) names.father.push(`${c.n} → ${s}`); }
+          else if (!/^(?:ДН|ДЕЛЕГАТ)$/.test(c.r) && names.notListed.length < 30) names.notListed.push(c.n);
+        }
+        return s ? { ...c, s } : c;
+      });
+      if (offRows.has(r.match_id)) r.crew = crew;
+      else if (!names.listErrors.length && JSON.stringify(crew) !== JSON.stringify(r.crew)) { offRows.set(r.match_id, { ...r, crew, updated_at: new Date().toISOString() }); names.renamed++; }
+    }
+  }
   await pool(read.filter(x => x.kind === 'discipline'), 3, started, async x => {
     try {
       const doc = R.docLink(await page(x.url));

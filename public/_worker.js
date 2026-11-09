@@ -3,8 +3,8 @@
 //   /feed?url=...                 Google News / Bing News RSS relay (only those hosts).
 //   /extract?url=...&title=&src=  Opens a news article and returns, as JSON only, the videos embedded in it,
 //                                 the match minutes the text mentions, and what was tried (diag).
-//   /logo?u=...                   a team logo from mr-bit.bg (Втора лига), served from this site's own address and
-//                                 cached for 30 days: blockers that filter betting sites would otherwise hide it.
+//   /logo?u=...                   a team crest from mr-bit.bg or bgclubs.eu, served from this site's own address and
+//                                 cached for 30 days (blockers, rate limits).
 //   /config.json                  Supabase URL + key from the Pages environment variables
 //                                 SUPABASE_URL and SUPABASE_ANON_KEY (public by design; data is protected by RLS).
 //   POST /drive/list {url}        the videos in a Google Drive folder shared "anyone with the link" (approved
@@ -63,10 +63,10 @@ async function handleFeed(request, url, ctx) {
 }
 
 /* ---------------- /logo ----------------
-   Втора лига's team logos come from the league sponsor's site (mr-bit.bg). Ad and DNS blockers that filter betting
-   sites block those images, so the cards and the table showed only the teams' initials. The image is fetched here
-   and served from this site's own address. Only raster images from the listed hosts, at most 1 MB. */
-const LOGO_HOSTS = ['mr-bit.bg'];
+   Team crests from mr-bit.bg (blocked by ad and DNS blockers that filter betting sites) and from bgclubs.eu (the
+   Втора лига and Трета лига crests; the site limits how often it is asked): fetched here once, cached for 30 days and
+   served from this site's own address. Only raster images from the listed hosts, at most 1 MB. */
+const LOGO_HOSTS = ['mr-bit.bg', 'media.bgclubs.eu'];
 const LOGO_CACHE_SECONDS = 30 * 86400;
 async function handleLogo(request, url, ctx) {
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405);

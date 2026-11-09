@@ -72,7 +72,8 @@ const sw16 = post('Срещи от 16 кръг на ЮгоЗападна IMPERIA
 ], R3);
 
 // the Third League page: the table and the rounds, as bulgarian-football.com writes them
-const A = n => `<a class="bgclubs" href="https://bgclubs.eu/teams/x?season=227#1-111" target="_blank">${n}</a>`;
+const SLUG = { 'Миньор (Перник)': 'Minyor(Pernik)', 'Пирин 1941 (Разлог)': 'Pirin1941(Razlog)', 'Левски II (София)': 'Levski(Sofia)' };
+const A = n => `<a class="bgclubs" href="https://bgclubs.eu/teams/${SLUG[n] || 'x'}?season=227#1-111" target="_blank">${n}</a>`;
 const TEAMS = ['Миньор (Перник)', 'Оборище (Панагюрище)', 'Банско тийм (Банско)', 'Струмска слава 1927 (Радомир)', 'Балкан 1929 (Ботевград)', 'ОФК Костинброд 2012 (Костинброд)',
   'Сливнишки герой (Сливница)', 'Славия 1913 II (София)', 'Беласица (Петрич)', 'Септември II (София)', 'Септември (Симитли)', 'Пирин 1941 (Разлог)', 'Етрополе (Етрополе)',
   'Национал (София)', 'ЦСКА III (София)', 'Кюстендил (Кюстендил)', 'Левски II (София)', 'Ботев 1937 (Ихтиман)'];
@@ -94,6 +95,8 @@ const sw3html = `<strong>Класиране:</strong> <select id="227-3400000-10
   `<strong>${A('ОФК Костинброд 2012 (Кб)')} - ${A('Струмска слава 1927 (Рад)')} - </strong> ` +
   `<a id="k8r34"></a><strong>XXXIV кръг</strong> <strong>${A('Беласица (Петрич)')} - ${A('Славия 1913 II (София)')} - </strong> <h5><a id="grid-v"></a>Таблица с резултати</h5> 1. Миньор (Перник) XXX`;
 const sw = R.parseSw3(sw3html);
+ok(sw.table[0].logo === 'https://media.bgclubs.eu/images/logos/10121.png' && sw.matches.find(m => m.home_name === 'Пирин 1941 (Разлог)')?.home_logo === 'https://media.bgclubs.eu/images/logos/10253.png'
+  && sw.matches.find(m => m.away_name === 'Левски II (София)')?.away_logo === 'https://media.bgclubs.eu/images/logos/10103.png', 'Third League crests on the table and the matches (Левски II: the club\'s crest)');
 ok(sw.table.length === 18 && sw.table[0].team_name === 'Миньор (Перник)' && sw.table[0].points === 39 && sw.table[0].goals_for === 35 && sw.table[0].goals_against === 7, 'table: 18 teams, Миньор 39 pts 35:7');
 const byP = Object.fromEntries(sw.matches.map(m => [m.home_name + ' - ' + m.away_name, m]));
 ok(byP['Пирин 1941 (Разлог) - Беласица (Петрич)'].home_score === 1 && byP['Пирин 1941 (Разлог) - Беласица (Петрич)'].ht_away === 3 && byP['Пирин 1941 (Разлог) - Беласица (Петрич)'].round === 1
@@ -146,6 +149,51 @@ const mrbit14 = `<p>Срещи от 14 кръг на Mr Bit Втора Лига,
 ok(R.parseAppointments(mrbit14).items[0].crew.map(c => c.r).join(' ') === 'ГС АС1 АС2 4-ТИ СН', 'Втора лига paragraphs: five officials');
 ok(R.splitRoles('Снежана Иванова Петрова').length === 1 && R.parseAppointments(post('Срещи от 1 кръг', [['1 август 2026 г., събота, 18:00 ч.', 'А - Б', 'Снежана Иванова Петрова', 'Варвара Колева Иванова']], ['ГС', 'АС1'])).items[0].crew.map(c => c.r + '=' + c.n).join(', ') === 'ГС=Снежана Иванова Петрова, АС1=Варвара Колева Иванова',
   'names that start like a role ("Снежана", "Варвара") are names');
+
+// BFU's own lists of referees (bfu-tournaments.com/leagues/…/refrees) and observers (…/refcom), as the site writes them
+const row = (alt, role, city) => `<tr> <td>1</td> <td> <div class="flex gap-4 items-center"> <img src="https://bfu-tournaments.com/build/assets/user-DW3yNoDJ.svg" alt="${alt}"\n                                        class="w-10"> ${alt} ` +
+  (role ? `<!--[if BLOCK]><![endif]--> <div class="flex flex-col ml-auto text-right"> <span class="px-4 font-normal">${role}</span> </div> ` : '') + `</div> </td> <td class="text-nowrap hidden md:table-cell">${city || ''}</td> </tr>`;
+const refs1 = '<table class="names-list"><tbody>' + [['Мартин Марков', 'Ръководещ'], ['Радослав Гидженов FIFA', 'Ръководещ'], ['Иво Колев – до 12.2026', 'Асистент'], ['Християна Гутева W FIFA', 'Ръководещ']].map(r => row(...r)).join('') + '</tbody></table>';
+const refs2 = '<table><tbody>' + [['Георги Спасов *', 'Ръководещ'], ['Кристиян Тодоров *', 'Ръководещ'], ['Петър Николов', 'Ръководещ'], ['Петър Николаев НОВ', 'Ръководещ'], ['Мартин Иванов', 'Асистент'],
+  ['Мурад Адем- подготвителна група от Ментори и Таланти', 'Ръководещ']].map(r => row(...r)).join('') + '</tbody></table>';
+const refs3 = '<table><tbody>' + ['Георги Спасов (Асистент)', 'Емин Ал-Джунейд (Ръководещ)', 'илип Шекерджиев (Ръководещ)', 'Мария-Йоанна Василева (Асистент)'].map(a => row(a)).join('') + '</tbody></table>';
+const obs = '<table><tbody>' + ['Георги Йорданов (СН на УЕФА) ', 'Станислав Тодоров СН УЕФА ', 'Ичко Лозев до края на 2026 ', 'Крум Стоилов '].map(a => row(a)).join('') + '</tbody></table>';
+const l1 = R.parseOfficials(refs1, 'ref'), l3 = R.parseOfficials(refs3, 'ref'), lo = R.parseOfficials(obs, 'obs');
+ok(l1.map(o => o.name).join('|') === 'Мартин Марков|Радослав Гидженов|Иво Колев|Християна Гутева' && l1[1].fifa && l1[2].role === 'Асистент', 'referee list: names without FIFA / notes, role, FIFA');
+ok(l3.map(o => o.name + '/' + o.role).join('|') === 'Георги Спасов/Асистент|Емин Ал-Джунейд/Ръководещ|Мария-Йоанна Василева/Асистент', 'Third League list: role in brackets; a misspelt row is left out');
+ok(lo.map(o => o.name).join('|') === 'Георги Йорданов|Станислав Тодоров|Ичко Лозев|Крум Стоилов', 'observers: notes after the name dropped');
+const dir = R.officialsDir([...l1, ...R.parseOfficials(refs2, 'ref'), ...l3, ...lo]);
+// everyone on the appointments is placed at once (as the function does with the whole season's crews)
+const seen = [['Мартин Иванов Марков', 'ВАР'], ['Мартин Иванов Марков', 'АВАР'], ['Мартин Мартинов Иванов', 'АС2'], ['Петър Николаев Николов', 'ГС'], ['Петър Милков Николов', 'АВАР'],
+  ['Георги Георгиев Спасов', '4-ТИ'], ['Кристиaн Младенов Тодоров', 'ГС'], ['Кристиян Младенов Тодоров', '4-ТИ'], ['Крум Добринов Стоилов', 'СН'], ['Иван Петров Неизвестен', 'ГС'], ['Найден Иванов Гатев', 'ДН']]
+  .map(([n, r]) => ({ n, r }));
+const names = R.officialNames(seen, dir), ON = (n, r) => R.officialName(n, r, names);
+ok(ON('Мартин Иванов Марков', 'ВАР') === 'Мартин Марков' && ON('Мартин Иванов Марков', 'АВАР') === 'Мартин Марков' && ON('Мартин Мартинов Иванов', 'АС2') === 'Мартин Иванов',
+  'Мартин Иванов Марков is Мартин Марков, in any role: Мартин Иванов is Мартин Мартинов Иванов');
+ok(ON('Петър Николаев Николов', 'ГС') === 'Петър Николаев' && ON('Петър Милков Николов', 'АВАР') === 'Петър Николов', 'BFU writes the father\'s name where two would read the same: Петър Николаев');
+ok(ON('Георги Георгиев Спасов', '4-ТИ') === 'Георги Спасов' && ON('Кристиaн Младенов Тодоров', 'ГС') === 'Кристиян Тодоров' && ON('Кристиян Младенов Тодоров', 'ГС') === 'Кристиян Тодоров',
+  'the referee Георги Спасов; "Кристиaн" with a Latin a is the same Кристиян Тодоров');
+ok(ON('Крум Добринов Стоилов', 'СН') === 'Крум Стоилов' && ON('Крум Добринов Стоилов', 'ГС') === null, 'observers are looked up among observers only');
+ok(ON('Иван Петров Неизвестен', 'ГС') === null && ON('Найден Иванов Гатев', 'ДН') === null && R.officialName('Мартин Иванов Марков', 'ГС', null) === null, 'not on the lists, a delegate, or no lists: no name from the lists');
+{
+  // the real cases from the season: two people whose names cross
+  const d = R.officialsDir([['Георги Димчев', 'Асистент'], ['Георги Великов', 'Асистент'], ['Мартин Мачев', 'Асистент'], ['Мартин Тодоров', 'Асистент'], ['Димитър Димитров', 'Ръководещ'],
+    ['Димитър Атанасов', 'Асистент'], ['Иван Иванов', 'Ръководещ'], ['Иван Радославов', 'Асистент'], ['Иван Руменов', 'Ръководещ'], ['Петър Балтаджиев', 'Асистент'], ['Стилиян Колев', 'Ръководещ'],
+    ['Кристиян Колев', 'Ръководещ'], ['Марио Донев', 'Асистент']].map(([name, role]) => ({ name, role, kind: 'ref' }))
+    .concat(['Стефан Иванов', 'Стефан Йорданов', 'Пламен Божидаров', 'Веселин Мишев'].map(name => ({ name, role: '', kind: 'obs' }))));
+  const c = [['Георги Димчев Великов', 'АС1'], ['Георги Василев Димчев', 'АС2'], ['Мартин Тодоров Мачев', 'АС2'], ['Мартин Емилов Тодоров', 'АС1'], ['Димитър Атанасов Димитров', 'АС1'],
+    ['Димитър Димитров Димитров', 'ВАР'], ['Иван Радославов Иванов', 'АС1'], ['Иван Стефанов Иванов', 'ГС'], ['Иван Руменов Христов', '4-ТИ'], ['Петр Тодоров Балтаджиев', 'АС2'],
+    ['Стилян Стоянов Колев', 'ГС'], ['Мартин Павлов Донев', 'АС1'], ['Стефан Иванов Йорданов', 'СН'], ['Стефан Спасов Иванов', 'СН'], ['Пламен Божидаров Мехлемов', 'СН']].map(([n, r]) => ({ n, r }));
+  const m = R.officialNames(c, d), got = c.map(x => R.officialName(x.n, x.r, m)).join(', ');
+  ok(got === 'Георги Великов, Георги Димчев, Мартин Мачев, Мартин Тодоров, Димитър Атанасов, Димитър Димитров, Иван Радославов, Иван Иванов, Иван Руменов, Петър Балтаджиев, Стилиян Колев, , Стефан Йорданов, Стефан Иванов, Пламен Божидаров',
+    'crossing names, the father\'s name alone, a first name one letter off; not a different first name (Мартин / Марио): ' + got);
+}
+
+ok(R.bgclubsLogo(' class="bgclubs" href="https://levskisofia.info" target="_blank"', 'Левски II (София)') === 'https://media.bgclubs.eu/images/logos/10103.png'
+  && R.bgclubsLogo(' href="https://example.com"', 'Непознат (Град)') === null, 'a reserve team linking to its own site takes its club\'s crest by name');
+// the Third League table's crests: the bgclubs.eu page each team links to
+ok(R.bgclubsLogo(' class="bgclubs" href="https://bgclubs.eu/teams/Minyor(Pernik)?season=227#1-111" target="_blank"') === 'https://media.bgclubs.eu/images/logos/10121.png'
+  && R.bgclubsLogo(' href="https://bgclubs.eu/teams/Unknown(Town)?season=227"') === null, 'crest from the bgclubs.eu link');
 
 // listings
 const bfuList = `<div class="infoItem__content"><h6><a href="https://bfunion.bg/news/52231/9"> СЪДИЙСКИ НАЗНАЧЕНИЯ MR BIT ВТОРА ЛИГА - XV КРЪГ СЕЗОН 2026/27 </a></h6> <div class="infoItem__content-bottom"> <p class="sm">04 Ноември 2026 18:29</p></div></div>

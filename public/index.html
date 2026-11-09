@@ -1914,7 +1914,15 @@ const chanName = c => /професионална футболна лига/i.te
 const ytWatch = id => 'https://www.youtube.com/watch?v=' + encodeURIComponent(id);
 // Втора лига's logos come from mr-bit.bg, a betting site that ad and DNS blockers filter: they go through the site's
 // own /logo route (Cloudflare worker) so they show for everyone
-const logoSrc = src => /^https:\/\/(?:www\.)?mr-bit\.bg\//.test(src) ? '/logo?u=' + encodeURIComponent(src) : src;
+// mr-bit.bg's own crests are wrong for some clubs (Вихрен, Янтра, Етър): every Втора лига club gets its crest from
+// bgclubs.eu instead (the club database bulgarian-football.com links to; reserve teams take the club's crest)
+const MRBIT_CREST = { 'beroe-857': 10115, 'vihren-5025': 10101, 'etar-veliko-tarnovo-855': 11131, 'pirin-blagoevgrad-1428': 10178, 'yantra-2019-8528': 10182,
+  'spartak-pleven-1418': 10177, 'fratria-21836': 11674, 'chernomorets-1919-burgas-8530': 10171, 'rilski-sportist-8547': 10146, 'hebar-1918-4659': 10157,
+  'sportist-svoge-8550': 10124, 'nesebar-1410': 10135, 'montana-1424': 10116, 'dobrudzha-1427': 10176, 'marek-8543': 10144,
+  'lokomotiv-g-oryahovitsa-1420': 10155, 'cska-sofia-ii-1415': 10104, 'ludogorets-ii-1409': 10228 };
+const crestOf = src => { const k = (String(src).match(/^https:\/\/(?:www\.)?mr-bit\.bg\/static\/teams-logos\/ids\/([\w-]+)\.\w+$/) || [])[1];
+  return k && MRBIT_CREST[k] ? `https://media.bgclubs.eu/images/logos/${MRBIT_CREST[k]}.png` : src; };
+const logoSrc = src => { src = crestOf(src); return /^https:\/\/(?:(?:www\.)?mr-bit\.bg|media\.bgclubs\.eu)\//.test(src) ? '/logo?u=' + encodeURIComponent(src) : src; };
 const logoHtml = (src, name) => src && /^https:\/\//.test(src)
   ? `<img class="tlogo" src="${esc(logoSrc(src))}" alt="" loading="lazy" referrerpolicy="no-referrer" data-init="${esc(initials(name))}">`
   : `<span class="tinit">${esc(initials(name))}</span>`;
@@ -2072,6 +2080,9 @@ const ROLE_BG = { 'ГС': 'Главен съдия', 'АС1': 'Асистент-
 const ROLE_ORDER = ['ГС', 'АС1', 'АС2', '4-ТИ', 'ВАР', 'АВАР', 'СН', 'ДН', 'РЕЗЕРВЕН'];
 // the committee writes first, father's and last name ("Никола Антонов Попов"): the site shows first and last name ("Никола Попов")
 const shortName = n => { const w = String(n || '').replace(/[*.]+$/, '').trim().split(/\s+/); return w.length >= 3 ? `${w[0]} ${w[w.length - 1]}` : w.join(' '); };
+// as BFU's own lists of referees and observers write them (refs-sync puts it in "s": "Петър Николаев" where two would
+// read "Петър Николов"); otherwise first and last name
+const offName = c => c.s || shortName(c.n);
 const noTime = m => /час — неуточнен/.test(m.note || '');
 const venueOf = m => String(m.note || '').split(' · ').filter(x => x && !/час — неуточнен|служебен/.test(x)).join(' · ');
 // players who sit a match out: a ban of N matches is served in the team's next N matches after the decision
@@ -2100,10 +2111,10 @@ function officialsHtml(m){
   const crew = o.crew.filter(c => c && c.n && !/:/.test(c.n)).sort((a, b) => (ROLE_ORDER.indexOf(a.r) + 1 || 99) - (ROLE_ORDER.indexOf(b.r) + 1 || 99));
   if (!crew.length) return '';
   const ref = crew.find(c => c.r === 'ГС'), vr = crew.find(c => c.r === 'ВАР'), open = FB.open.has('crew:' + m.id);
-  const who = c => `<b>${esc(shortName(c.n))}</b>`;
+  const who = c => `<b>${esc(offName(c))}</b>`;
   return `<div class="mref">${WHISTLE}${ref ? `<span class="rl">Съдия</span>${who(ref)}` : ''}${vr ? `<span class="sep" aria-hidden="true">·</span><span class="rl">ВАР</span>${who(vr)}` : ''}
       <button class="crewbtn" data-crew="${esc(m.id)}" aria-expanded="${open}">Бригада <span class="chev">${open ? '▴' : '▾'}</span></button></div>
-    <div class="crew" data-crewbox="${esc(m.id)}"${open ? '' : ' hidden'}><dl>${crew.map(c => `<div><dt>${esc(ROLE_BG[c.r] || c.r)}</dt><dd>${esc(shortName(c.n))}</dd></div>`).join('')}</dl>
+    <div class="crew" data-crewbox="${esc(m.id)}"${open ? '' : ' hidden'}><dl>${crew.map(c => `<div><dt>${esc(ROLE_BG[c.r] || c.r)}</dt><dd>${esc(offName(c))}</dd></div>`).join('')}</dl>
       <a class="src" href="${esc(o.src_url)}" target="_blank" rel="noopener">${esc(/bfunion/.test(o.src_url || '') ? 'Съдийска комисия на БФС' : 'БФС · Трета лига')} — ${esc(o.src_title || 'назначения')}</a></div>`;
 }
 const cardIc = r => `<i class="cardic ${r === 'red' ? 'r' : r === 'yellow' ? 'y' : 'o'}" title="${r === 'red' ? 'червен картон' : r === 'yellow' ? 'жълти картони' : 'по доклад'}"></i>`;
