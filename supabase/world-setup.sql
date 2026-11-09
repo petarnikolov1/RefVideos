@@ -53,6 +53,7 @@ alter table public.football_matches add column if not exists round_name text;   
 alter table public.football_matches add column if not exists note text;         -- group or stage, e.g. "Група C2", "1/8-финал · реванш"
 alter table public.football_standings add column if not exists grp text;
 alter table public.football_standings add column if not exists grp_order int;
+alter table public.football_standings add column if not exists zone text;       -- ESPN's note for the place: "Champions League", "Relegation"…
 
 -- which competitions exist and which are being played now
 create table if not exists public.football_competitions (
@@ -76,13 +77,13 @@ language plpgsql security definer set search_path = '' as $$
 declare n int;
 begin
   if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) < 2 then return 0; end if;
-  insert into public.football_standings as s (league, season, team_name, rank, logo, played, won, drawn, lost, goals_for, goals_against, points, form, grp, grp_order, updated_at)
+  insert into public.football_standings as s (league, season, team_name, rank, logo, played, won, drawn, lost, goals_for, goals_against, points, form, grp, grp_order, zone, updated_at)
   select p_league, p_season, r->>'team_name', (r->>'rank')::int, r->>'logo', (r->>'played')::int, (r->>'won')::int, (r->>'drawn')::int, (r->>'lost')::int,
-         (r->>'goals_for')::int, (r->>'goals_against')::int, (r->>'points')::int, r->>'form', r->>'grp', (r->>'grp_order')::int, now()
+         (r->>'goals_for')::int, (r->>'goals_against')::int, (r->>'points')::int, r->>'form', r->>'grp', (r->>'grp_order')::int, r->>'zone', now()
   from jsonb_array_elements(p_rows) r where coalesce(r->>'team_name', '') <> ''
   on conflict (league, season, team_name) do update set rank = excluded.rank, logo = excluded.logo, played = excluded.played, won = excluded.won,
     drawn = excluded.drawn, lost = excluded.lost, goals_for = excluded.goals_for, goals_against = excluded.goals_against,
-    points = excluded.points, form = excluded.form, grp = excluded.grp, grp_order = excluded.grp_order, updated_at = excluded.updated_at;
+    points = excluded.points, form = excluded.form, grp = excluded.grp, grp_order = excluded.grp_order, zone = excluded.zone, updated_at = excluded.updated_at;
   get diagnostics n = row_count;
   return n;
 end; $$;

@@ -3,8 +3,11 @@
 //   { recent: true }   the last few days (every 30 minutes)
 //   { backfill: true } one older 2-week window of the season per run, newest first; once the whole season has been
 //                      searched it rests for a day, then goes through it again to catch anything published late
+//   + intl: true       the same for the international media of the World sections (English, Spanish, Italian, German,
+//                      French outlets; intl.js), with their own schedule and their own place in the season
 // Articles keep the time they were first found (found_at), so the page can mark what is new since a visit.
 import * as N from './news.js';
+import * as INTL from './intl.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SECRET = (() => { try { return JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}').default; } catch { return undefined; } })();
@@ -22,11 +25,11 @@ const rpc = (fn: string, args: unknown) => rest(`rpc/${fn}`, { method: 'POST', b
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const isFeed = (t: string) => /<(rss|channel)[\s>]/i.test(t);
 
-async function feed(url: string, via: Record<string, number>) {
+async function feed(url: string, via: Record<string, number>, lang = 'bg') {
   const google = url.startsWith('https://news.google.com');
   let err = '';
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': N.UA, 'Accept-Language': 'bg-BG,bg;q=0.9,en;q=0.6',
+    const r = await fetch(url, { headers: { 'User-Agent': N.UA, 'Accept-Language': (INTL.ACCEPT_LANG as Record<string, string>)[lang] ?? 'bg-BG,bg;q=0.9,en;q=0.6',
       Accept: 'application/rss+xml, application/xml;q=0.9, */*;q=0.8', ...(google ? { Cookie: N.GOOGLE_COOKIES } : {}) }, signal: AbortSignal.timeout(15000) });
     const t = await r.text();
     if (r.ok && isFeed(t)) { via.direct = (via.direct ?? 0) + 1; return N.parseRss(t); }
@@ -50,7 +53,7 @@ async function scan(tasks: Task[], started: number) {
     while (i < tasks.length && Date.now() - started < 110000) {
       const t = tasks[i++];
       try {
-        const items = await feed(t.url, st.via);
+        const items = await feed(t.url, st.via, t.q.lang);
         st.worked++; st.items += items.length;
         for (const it of items) {
           const a = N.toArticle(it, t.kind, t.q);
@@ -73,6 +76,8 @@ async function scan(tasks: Task[], started: number) {
   return st;
 }
 const googleTasks = (from: number, to: number): Task[] => N.GOOGLE_QUERIES.map(q => ({ kind: 'google', q, url: N.googleUrl(q.q, from, to) }));
+const intlTasks = (from: number, to: number): Task[] => INTL.INTL_QUERIES.map(q => ({ kind: 'google', q, url: INTL.intlUrl(q, from, to) }));
+const INTL_LANGS = ['en', 'es', 'it', 'de', 'fr'];
 
 Deno.serve(async (req) => {
   const started = Date.now();
@@ -82,12 +87,14 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const out: Record<string, any> = { ok: true, at: new Date().toISOString() };
 
-  if (body.test) {                                  // try one search and show what it gives (no saving)
+  if (body.test) {                                  // try one search and show what it gives (no saving); lang: en / es / it / de / fr
     const via: Record<string, number> = {};
     try {
-      const url = N.googleUrl(String(body.test), started - 7 * 864e5, started + 864e5);
-      const items = await feed(url, via);
-      out.test = { via, items: items.length, sample: items.slice(0, 8).map(it => ({ title: it.title, kept: !!N.toArticle(it, 'google', { ctx: 'loose' }) })) };
+      const q = body.lang ? { q: String(body.test), ctx: 'intl', lang: String(body.lang) } : { q: String(body.test), ctx: 'loose' };
+      const url = body.lang ? INTL.intlUrl(q, started - 7 * 864e5, started + 864e5) : N.googleUrl(String(body.test), started - 7 * 864e5, started + 864e5);
+      const items = await feed(url, via, body.lang);
+      out.test = { via, items: items.length, sample: items.slice(0, Number(body.n ?? 8)).map(it => ({ title: it.title, src: it.source, srcUrl: it.srcUrl,
+        kept: !!N.toArticle(it, 'google', q), outlet: body.lang ? INTL.topOutlet(String(body.lang), it.srcUrl, it.source) : undefined })) };
     } catch (e) { out.test = { via, error: String((e as Error).message ?? e) }; }
     return Response.json(out);
   }
@@ -96,13 +103,14 @@ Deno.serve(async (req) => {
     out.mode = 'reclassify';                        // passes, and move the rest to their current section / competitions
     const rows: any[] = [];
     for (let from = 0; ; from += 1000) {
-      const page = await rest(`news_articles?select=aid,title,descr,src,link,scope,divs,comps&order=aid&offset=${from}&limit=1000`);
+      const page = await rest(`news_articles?select=aid,title,descr,src,link,scope,divs,comps,lang&order=aid&offset=${from}&limit=1000`);
       rows.push(...page);
       if (page.length < 1000) break;
     }
     const drop: any[] = [], move: any[] = [];
     for (const r of rows) {
-      const a = N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
+      const a = INTL_LANGS.includes(r.lang) ? INTL.analyzeIntl(r.title, r.descr, r.lang)
+        : N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
       if (!a) { drop.push(r); continue; }
       const same = a.scope === r.scope && [...a.comps].sort().join() === [...(r.comps ?? [])].sort().join() &&
         (a.scope !== 'world' || [...a.divs].sort().join() === [...(r.divs ?? [])].sort().join());
@@ -123,23 +131,24 @@ Deno.serve(async (req) => {
     out.sample = drop.slice(0, 25).map(r => r.title);
     out.movedSample = move.slice(0, 40).map(m => `${m.from} → ${m.to} | ${m.title}`);
   } else if (body.recent) {
-    out.mode = 'recent';
-    const tasks = [...googleTasks(started - 3 * 864e5, started + 864e5),
+    out.mode = body.intl ? 'intl-recent' : 'recent';
+    const tasks = body.intl ? intlTasks(started - 3 * 864e5, started + 864e5) : [...googleTasks(started - 3 * 864e5, started + 864e5),
       ...N.BING_QUERIES.map(q => ({ kind: 'bing' as const, q, url: N.bingUrl(q.q) }))];
     Object.assign(out, await scan(tasks, started));
   } else if (body.backfill) {
-    out.mode = 'backfill';
-    const state = (await rpc('news_state_get', { p_k: 'backfill' }).catch(() => null)) ?? {};
+    out.mode = body.intl ? 'intl-backfill' : 'backfill';
+    const SK = body.intl ? 'backfill-intl' : 'backfill';
+    const state = (await rpc('news_state_get', { p_k: SK }).catch(() => null)) ?? {};
     const idx = Number(state.idx ?? 0);
     if (idx === 0 && state.done_at && started - Date.parse(state.done_at) < 20 * 3600e3)
       return Response.json({ ...out, skipped: 'season searched recently', done_at: state.done_at });
     const wins = N.windows(started);
     const [from, to] = wins[Math.min(idx, wins.length - 1)];
     out.window = [new Date(from).toISOString().slice(0, 10), new Date(to).toISOString().slice(0, 10), `${Math.min(idx, wins.length - 1) + 1}/${wins.length}`];
-    Object.assign(out, await scan(googleTasks(from, to), started));
+    Object.assign(out, await scan(body.intl ? intlTasks(from, to) : googleTasks(from, to), started));
     // move on only when most searches worked; otherwise the same window is tried again next run
     const next = out.worked >= out.searches * 0.6 ? idx + 1 : idx;
-    await rpc('news_state_set', { p_k: 'backfill', p_v: next >= wins.length
+    await rpc('news_state_set', { p_k: SK, p_v: next >= wins.length
       ? { idx: 0, done_at: new Date().toISOString(), cycles: Number(state.cycles ?? 0) + 1 }
       : { ...state, idx: next } });
   } else return Response.json({ ok: false, error: 'say recent or backfill' }, { status: 400 });

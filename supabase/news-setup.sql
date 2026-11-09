@@ -7,6 +7,9 @@
 --   news-recent    at :07 and :37 every hour — the last few days
 --   news-backfill  every 6 minutes — one older 2-week window of the season per run; after the whole season it
 --                  rests a day and then goes through it again, to pick up stories published or indexed late
+--   news-intl-recent / news-intl-backfill — the same for the international media of the World sections (BBC, Sky,
+--                  ESPN, The Guardian, Marca, AS, Gazzetta, kicker, L'Équipe…; supabase/functions/news-sync/intl.js),
+--                  at :22 and :52, and every 6 minutes from :03; lang says the article's language (bg, en, es, it, de, fr)
 -- found_at keeps the time a story was first found: the page marks stories found since a visitor's last visit as NEW.
 -- Google refuses some Supabase server regions, so the jobs pin the function to London / N. Virginia (x-region).
 
@@ -38,6 +41,9 @@ create schema if not exists private;
 create table if not exists private.news_state (k text primary key, v jsonb not null, updated_at timestamptz not null default now());
 create table if not exists private.news_sync_log (id bigint generated always as identity primary key, at timestamptz not null default now(), details jsonb);
 
+-- the language of an article: bg, or en / es / it / de / fr for the international media
+alter table public.news_articles add column if not exists lang text;
+
 -- add found articles; an article already saved keeps its first-found time and gains any new information
 create or replace function public.news_upsert(p_rows jsonb) returns int
 language plpgsql security definer set search_path = '' as $$
@@ -51,13 +57,14 @@ begin
       array(select jsonb_array_elements_text(coalesce(r->'comps', '[]'))) comps,
       array(select jsonb_array_elements_text(coalesce(r->'cats', '[]'))) cats,
       array(select jsonb_array_elements_text(coalesce(r->'clubs', '[]'))) clubs,
-      coalesce((r->>'score')::int, 1) score, coalesce((r->>'hinted')::boolean, false) hinted, coalesce((r->>'vh')::boolean, false) vh
+      coalesce((r->>'score')::int, 1) score, coalesce((r->>'hinted')::boolean, false) hinted, coalesce((r->>'vh')::boolean, false) vh,
+      nullif(r->>'lang', '') lang
     from jsonb_array_elements(p_rows) r
     where coalesce(r->>'aid', '') <> '' and coalesce(r->>'title', '') <> '' and r->>'scope' in ('bg', 'world')
     order by r->>'aid', (r->>'published_at')::timestamptz
   ), ins as (
-    insert into public.news_articles as a (aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh)
-    select aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh from src
+    insert into public.news_articles as a (aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh, lang)
+    select aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh, lang from src
     on conflict (aid) do update set
       descr = case when a.descr = '' then excluded.descr else a.descr end,
       published_at = least(a.published_at, excluded.published_at),
@@ -71,6 +78,7 @@ begin
       clubs = array(select distinct x from unnest(a.clubs || excluded.clubs) x),
       score = greatest(a.score, excluded.score),
       vh = a.vh or excluded.vh,
+      lang = coalesce(a.lang, excluded.lang),
       updated_at = now()
     returning (xmax = 0) as inserted
   )
@@ -110,5 +118,20 @@ select cron.schedule('news-backfill', '*/6 * * * *', $job$
     url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/news-sync',
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-region', 'us-east-1', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
     body := '{"backfill": true}'::jsonb,
+    timeout_milliseconds := 150000);
+$job$);
+-- the international media of the World sections
+select cron.schedule('news-intl-recent', '22,52 * * * *', $job$
+  select net.http_post(
+    url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/news-sync',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-region', 'eu-west-2', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
+    body := '{"recent": true, "intl": true}'::jsonb,
+    timeout_milliseconds := 150000);
+$job$);
+select cron.schedule('news-intl-backfill', '3-59/6 * * * *', $job$
+  select net.http_post(
+    url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/news-sync',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-region', 'us-east-1', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
+    body := '{"backfill": true, "intl": true}'::jsonb,
     timeout_milliseconds := 150000);
 $job$);

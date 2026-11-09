@@ -115,6 +115,7 @@
   .rel li{font-size:13.5px;line-height:1.35;padding:2px 0}
   .rel a{text-decoration:none;color:var(--text)} .rel a:hover{text-decoration:underline}
   .rel .rs{color:var(--muted);font-size:12px;margin-right:5px;white-space:nowrap}
+  .lng{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;line-height:1;padding:2px 4px;border-radius:3px;border:1px solid var(--line);color:var(--muted);vertical-align:1px;margin-right:4px}
   .rel .more{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-size:12.5px;cursor:pointer}
   .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
   .tag{font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--chip)}
@@ -244,6 +245,15 @@
   table.stand td.t span{display:inline-flex;align-items:center;gap:8px}
   table.stand .tlogo,table.stand .tinit{width:24px;height:24px;flex-basis:24px;font-size:10px}
   table.stand td.p{font-weight:700}
+  /* what a place in the table leads to: a coloured rank and a bar on the left, explained under the table */
+  table.stand td.rk{padding-left:0;width:42px}
+  .rkn{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 4px;border-radius:6px;font-weight:600;font-size:13px}
+  table.stand tr.z td.rk{box-shadow:inset 4px 0 0 var(--zc)}
+  table.stand tr.z .rkn{background:var(--zc);color:var(--zi)}
+  .zlegend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:4px 2px 0;font-size:13px;color:var(--muted)}
+  .zlegend span{display:inline-flex;align-items:center;gap:6px}
+  .zlegend i{width:12px;height:12px;border-radius:3px;background:var(--zc);flex:none}
+  .znote{font-size:12.5px;color:var(--muted);margin:4px 2px 0}
   /* "Обзор на кръга": the round's review show, above the round's matches */
   .rreview{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-left:4px solid #e00;border-radius:14px;padding:12px 14px;margin:10px 0 14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .rreview .rrbadge{width:46px;height:46px;border-radius:12px;background:#e00;display:flex;align-items:center;justify-content:center}
@@ -528,10 +538,10 @@ function loadScript(src){
 
 /* ======================= NEWS (saved by the server) ======================= */
 const NEWS = { loading: false, at: 0, err: '', count: 0, newest: 0 };
-const NEWS_COLS = 'aid,title,link,descr,src,published_at,found_at,scope,divs,comps,cats,score,hinted,clubs,vh';
+const NEWS_COLS = 'aid,title,link,descr,src,published_at,found_at,scope,divs,comps,cats,score,hinted,clubs,vh,lang';
 const fromRow = r => ({ aid: r.aid, title: r.title, link: r.link || '', desc: r.descr || '', src: r.src || '',
   date: Date.parse(r.published_at), found: Date.parse(r.found_at), scope: r.scope, divs: r.divs || ['unk'], comps: r.comps || [],
-  cats: (r.cats && r.cats.length) ? r.cats : ['other'], score: r.score || 1, hinted: !!r.hinted, clubs: r.clubs || [], vh: !!r.vh });
+  cats: (r.cats && r.cats.length) ? r.cats : ['other'], score: r.score || 1, hinted: !!r.hinted, clubs: r.clubs || [], vh: !!r.vh, lang: r.lang || '' });
 function useArticles(list){
   S.articles = Object.fromEntries(list.map(a => [a.aid, a]));
   NEWS.count = list.length;
@@ -576,7 +586,15 @@ const stem = w => w.slice(0, 5);
 const STOP = new Set(('като след срещу между което които която който това този тази така също може вече само беше бяха няма преди около ' +
   'какво както когато заради днес вчера утре футбол футболен футболна мача мачът мачове лига лигата efbet ефбет кръг кръга отбор отбора ' +
   'видео снимки гледайте вижте сезон първа втора трета минута новини подробности коментар излезе позиция официална официално заяви стана ' +
-  'бесен бесни избухна изригна скочи ядоса').split(' ').map(stem));
+  'бесен бесни избухна изригна скочи ядоса ' +
+  // English, Spanish, Italian, German, French
+  'after with from that this their there about says said will have been were what when where which while into over under than then them they your just more most only also ' +
+  'still even being because before during against between through would could should might ahead first second third last week time year season match game games league ' +
+  'premier players player team teams club clubs fans manager boss coach football soccer watch video live news report reports reveals explains ' +
+  'para como pero tras ante sobre entre desde hasta este esta estos estas todo todos cuando donde porque partido equipo jugador jugadores liga temporada contra según ' +
+  'della dello degli delle dopo anche come contro sono stato stata questo questa quando dove perché partita squadra giocatore campionato stagione ' +
+  'nach gegen eine einen einem einer nicht noch auch wird wurde werden sind sein seine über unter beim dass diese dieser spiel spieler mannschaft saison trainer ' +
+  'pour avec dans après contre sont cette leur leurs mais plus tout tous quand équipe joueur joueurs saison entraîneur selon').split(' ').map(stem));
 const STORY_SIM = 0.27;               // average similarity two groups need to become one story
 const FEAT = new Map();
 function feat(a){
@@ -637,6 +655,8 @@ function clusterArticles(arts){
 // story (the most typical headline), then the earliest. The other articles are listed under it.
 const MEDIA = [
   [3, /sportal|gong|blitz|блиц|topsport|btv|бтв|nova\b|nova\.bg|нова|бнт|bnt|24\s?chasa|24 часа|dnevnik|дневник/i],
+  [3, /^(?:BBC|Sky Sports|ESPN|The Guardian|The Athletic|The New York Times|Reuters|AP News|MARCA|Marca|Diario AS|AS|Mundo Deportivo|La Gazzetta dello Sport|Gazzetta|Corriere dello Sport|kicker|BILD|Bild|sportschau|L'[ÉE]quipe|RMC Sport)\b/],
+  [2, /^(?:The Telegraph|The Independent|The Times|Mirror|Daily Mail|talkSPORT|GOAL|Evening Standard|SPORT|Sport|EL PAÍS|El País|Relevo|Tuttosport|Sky Sport|Corriere della Sera|SPORT1|Sport1|DER SPIEGEL|Der Spiegel|Le Parisien|Le Figaro|France Football|Foot Mercato|So Foot|Eurosport)\b/],
   [2, /dsport|7dnisport|dnes\.bg|днес|fakti|факти|mediapool|offnews|actualno|football24|sportlive|\bgol\b|gol\.bg|novsport|bfunion|футболен съюз|бнр|bnr|бта|\bbta\b|dir\.bg|webcafe|telegraph|телеграф|trud|труд|standart|стандарт|bgonair|arena\s?sport|арена спорт|fokus|фокус|plovdiv24|marica|марица/i],
   [0, /facebook|novini247|topnovini|winbet|vbox7|youtube|unknown/i],
 ];
@@ -1072,11 +1092,14 @@ function relatedArts(s){
   return first.concat(rest);
 }
 const REL_SHOWN = 3;
+// an article from an international outlet says its language (EN, ES, IT, DE, FR)
+const LANG_NAME = { en: 'English', es: 'Spanish', it: 'Italian', de: 'German', fr: 'French' };
+const langTag = a => a.lang && LANG_NAME[a.lang] ? `<span class="lng" title="${LANG_NAME[a.lang]}">${a.lang.toUpperCase()}</span>` : '';
 function storyCard(s){
   const read = storyRead(s), r = s.rep;
-  const srcLine = esc(r.src) + (s.sources > 1 ? ` <span class="muted">· ${s.sources} sources</span>` : '');
+  const srcLine = langTag(r) + esc(r.src) + (s.sources > 1 ? ` <span class="muted">· ${s.sources} sources</span>` : '');
   const rel = relatedArts(s), more = s.arts.length - 1 - Math.min(REL_SHOWN, rel.length);
-  const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}${
+  const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${langTag(a)}${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}${
     more > 0 ? `<li><button class="more" data-act="expand">+${more} more article${more > 1 ? 's' : ''}</button></li>` : ''}</ul>` : '';
   const compTags = s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`);
   const worldTags = VIEW === 'world' || (VIEW === 'results' && isWorld(FB.league));
@@ -1091,7 +1114,7 @@ function storyCard(s){
     const media = mediaHtml(s);
     panel = `<div class="panel">
       <h3>${s.arts.length} article${s.arts.length > 1 ? 's' : ''} from ${s.sources} source${s.sources > 1 ? 's' : ''}</h3>
-      <ul class="arts">${s.arts.map(a => `<li><div class="m">${esc(fmtDate(a.date))} · ${esc(a.src)}${isNewArt(a) ? ' · <b>new</b>' : ''}</div>
+      <ul class="arts">${s.arts.map(a => `<li><div class="m">${esc(fmtDate(a.date))} · ${langTag(a)}${esc(a.src)}${isNewArt(a) ? ' · <b>new</b>' : ''}</div>
         <a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${DUP.has(a.aid) ? '<span class="dup">Duplicate</span>' : ''}${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}</ul>
       <h3>Video</h3>
       <div class="media" data-key="${esc(s.key)}" data-sig="${esc(media.sig)}">${media.html}</div>
@@ -2178,9 +2201,111 @@ function roundReviewHtml(lg, r, list, d){
     ${action}${player}</section>`;
 }
 // the league's table, shown under the round's results (world competitions: one table per group)
-function standTable(rows, form){
+/* ---- table zones: what each place leads to (European places, groups after the regular season, promotion, play-offs, relegation) ---- */
+// [colour, text colour on it, label]
+const ZONE = {
+  cl:      ['#1d4ed8', '#fff', 'Шампионска лига'],
+  clq:     ['#60a5fa', '#0b1b33', 'Квалификации за Шампионската лига'],
+  el:      ['#ea580c', '#fff', 'Лига Европа'],
+  elq:     ['#fdba74', '#3a1a05', 'Квалификации за Лига Европа'],
+  ecl:     ['#059669', '#fff', 'Лига на конференциите'],
+  eclq:    ['#34d399', '#052e1f', 'Квалификации за Лигата на конференциите'],
+  champ:   ['#1d4ed8', '#fff', 'Шампионска група (1–4)'],
+  confg:   ['#059669', '#fff', 'Група за Лигата на конференциите (5–8)'],
+  relg:    ['#f87171', '#3b0a0a', 'Група за оставане (9–14)'],
+  promo:   ['#16a34a', '#fff', 'Промоция'],
+  promopo: ['#a3e635', '#1a2e05', 'Бараж за промоция'],
+  relpo:   ['#fb923c', '#3a1a05', 'Бараж за оставане'],
+  maybe:   ['#fca5a5', '#3b0a0a', 'Възможно изпадане'],
+  rel:     ['#dc2626', '#fff', 'Изпадане'],
+  r16:     ['#1d4ed8', '#fff', 'Директно на осминафинал'],
+  kpo:     ['#f59e0b', '#2e1a02', 'Бараж за осминафинал'],
+  out:     ['#dc2626', '#fff', 'Отпада'],
+  wc:      ['#1d4ed8', '#fff', 'Класира се за Световното'],
+  wcpo:    ['#f59e0b', '#2e1a02', 'Бараж за Световното'],
+  qf:      ['#1d4ed8', '#fff', 'Четвъртфинали'],
+  adv:     ['#1d4ed8', '#fff', 'Продължава напред'],
+};
+const isReserve = n => /\s(?:II|III)(?:\s*\(|$)/.test(String(n || ''));
+// ESPN's note for a row ("Champions League", "Relegation playoff", "A: Qualifies for QFs; B-D: Promotion"…) → a zone
+function espnZone(note, grp){
+  let d = String(note || '').trim();
+  if (!d) return null;
+  // the Nations League writes one note for all four leagues: take the part for this group's league (Група B2 → B)
+  if (/^[A-D](?:\s*[-,]\s*[A-D])*\s*:/.test(d)) {
+    const L = (String(grp || '').match(/([A-D])\d/) || [])[1];
+    const parts = d.split(/\s*;\s*/).map(p => { const m = p.match(/^([A-D](?:\s*[-,]\s*[A-D])*)\s*:\s*(.*)$/); if (!m) return null;
+      const set = new Set(); m[1].split(/\s*,\s*/).forEach(x => { const r = x.split(/\s*-\s*/); for (let c = r[0].charCodeAt(0); c <= (r[1] || r[0]).charCodeAt(0); c++) set.add(String.fromCharCode(c)); });
+      return { set, text: m[2] }; }).filter(Boolean);
+    const part = (L && parts.find(p => p.set.has(L))) || (!L && parts[0]);
+    if (!part) return null;
+    d = part.text;
+  }
+  const x = d.toLowerCase();
+  if (/round of 16/.test(x)) return 'r16';
+  if (/knockout|playoff round|play-off round/.test(x) && !/relegat|promot/.test(x)) return 'kpo';
+  if (/eliminat/.test(x)) return 'out';
+  if (/world cup play/.test(x)) return 'wcpo';
+  if (/world cup/.test(x)) return 'wc';
+  if (/champions league/.test(x)) return /qualif/.test(x) ? 'clq' : 'cl';
+  if (/europa league/.test(x)) return /qualif/.test(x) ? 'elq' : 'el';
+  if (/conference league/.test(x)) return /qualif/.test(x) ? 'eclq' : 'ecl';
+  if (/relegation play|relegation or play/.test(x)) return 'relpo';
+  if (/relegat/.test(x)) return 'rel';
+  if (/promotion play/.test(x)) return 'promopo';
+  if (/promot/.test(x)) return 'promo';
+  if (/qfs|quarter/.test(x)) return 'qf';
+  if (/qualif|advance|knockout|round of/.test(x)) return 'adv';
+  return null;
+}
+// the Bulgarian leagues, by the rules of the 2026/27 season (БФС регламент):
+//   efbet Лига (14 teams): after 26 rounds 1–4 play the championship group, 5–8 the Conference League group, 9–14 the
+//     relegation group; at the end 1st → Champions League qualifiers, 2nd–3rd → Conference League qualifiers,
+//     12th–13th → play-off against the 2nd League's 2nd–3rd, 14th relegated
+//   Втора лига (18): 1st promoted, 2nd–3rd promotion play-off, 13th relegation play-off, 14th–18th relegated;
+//     the reserve teams (II) cannot go up, so the places go to the next teams
+//   Трета лига Югозапад (18): 1st promoted (not a reserve team), 12th–16th may go down (how many depends on the clubs
+//     relegated from the 2nd League), 17th–18th relegated
+function bgZones(lg, rows){
+  const z = {}, byRank = rows.slice().sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+  const eligible = byRank.filter(r => !isReserve(r.team_name));
+  if (lg === 'efbet') {
+    const split = Math.min(...byRank.map(r => r.played ?? 0)) < 26 || byRank.length !== 14;
+    for (const r of byRank) {
+      const p = r.rank;
+      z[r.team_name] = split ? (p <= 4 ? 'champ' : p <= 8 ? 'confg' : 'relg')
+        : p === 1 ? 'clq' : p <= 3 ? 'eclq' : p === 14 ? 'rel' : p >= 12 ? 'relpo' : null;
+    }
+  } else if (lg === 'mrbit') {
+    eligible.forEach((r, i) => { if (i === 0) z[r.team_name] = 'promo'; else if (i <= 2) z[r.team_name] = 'promopo'; });
+    for (const r of byRank) { if (r.rank === 13) z[r.team_name] = 'relpo'; else if (r.rank >= 14) z[r.team_name] = 'rel'; }
+  } else if (lg === 'sw3') {
+    if (eligible[0]) z[eligible[0].team_name] = 'promo';
+    for (const r of byRank) { if (r.rank >= 17) z[r.team_name] = 'rel'; else if (r.rank >= 12) z[r.team_name] = 'maybe'; }
+  }
+  return z;
+}
+function zonesOf(lg, rows){
+  if (LEAGUES[lg]) return bgZones(lg, rows);
+  const z = {};
+  for (const r of rows) { const k = espnZone(r.zone, r.grp); if (k) z[(r.grp || '') + '|' + r.team_name] = k; }
+  return z;
+}
+const zoneKey = (lg, r) => LEAGUES[lg] ? r.team_name : (r.grp || '') + '|' + r.team_name;
+function zoneLegend(lg, zones){
+  const used = new Set(Object.values(zones));
+  if (!used.size) return '';
+  const order = Object.keys(ZONE).filter(k => used.has(k));
+  const note = lg === 'efbet' ? (used.has('champ') ? 'След 26-ия кръг отборите играят в три групи. В края на сезона: 1-вият — квалификации за Шампионската лига, 2-рият и 3-тият — за Лигата на конференциите, 12-ият и 13-ият — бараж с 2-рия и 3-тия от Втора лига, 14-ият изпада.' : '')
+    : lg === 'mrbit' ? 'Вторите отбори (II) не могат да влизат в Първа лига — промоцията и баражът отиват при следващите. 13-ият играе бараж с първенците на Северозападна и Североизточна Трета лига.'
+    : lg === 'sw3' ? 'Първият отбор, който не е втори или трети отбор на клуб, влиза във Втора лига. От 12-о до 16-о място изпадат толкова отбора, колкото е нужно според изпадащите от Втора лига.' : '';
+  return `<div class="zlegend">${order.map(k => `<span style="--zc:${ZONE[k][0]}"><i></i>${esc(ZONE[k][2])}</span>`).join('')}</div>${note ? `<p class="znote">${esc(note)}</p>` : ''}`;
+}
+function standTable(rows, form, zones, lg){
   return `<div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
-    ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0), f = r.form || (form && form[r.team_name]) || ''; return `<tr><td>${r.rank ?? ''}</td>
+    ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0), f = r.form || (form && form[r.team_name]) || '';
+      const zk = zones && zones[zoneKey(lg, r)], zc = zk && ZONE[zk];
+      return `<tr${zc ? ` class="z" style="--zc:${zc[0]};--zi:${zc[1]}" title="${esc(zc[2])}"` : ''}><td class="rk"><span class="rkn">${r.rank ?? ''}</span></td>
       <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}</span></td><td>${r.played ?? ''}</td>
       <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
       <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
@@ -2202,13 +2327,15 @@ function standingsHtml(lg){
   const upd = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
   const world = isWorld(lg), comp = compOf(lg), d = FB.data[lg];
   const title = world ? `${comp ? comp.name : lg} ${seasonLabel(comp && comp.season)}` : `${LEAGUES[lg]} ${FB_SEASON}`;
+  const zones = zonesOf(lg, rows);
   let body;
   if (world && rows.some(r => r.grp)) {
     const groups = new Map();
     for (const r of rows) { const g = r.grp || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
     const form = d ? formFrom(d.matches) : null;
-    body = `<div class="standgrid">${[...groups].map(([g, rs]) => `<div><h3 class="grphead">${esc(g)}</h3>${standTable(rs, form)}</div>`).join('')}</div>`;
-  } else body = standTable(rows, (world || lg === 'sw3') && d ? formFrom(d.matches) : null);
+    body = `<div class="standgrid">${[...groups].map(([g, rs]) => `<div><h3 class="grphead">${esc(g)}</h3>${standTable(rs, form, zones, lg)}</div>`).join('')}</div>`;
+  } else body = standTable(rows, (world || lg === 'sw3') && d ? formFrom(d.matches) : null, zones, lg);
+  body += zoneLegend(lg, zones);
   return `<div class="standhead" id="standings"><h2>Класиране — ${esc(title)}</h2>${upd ? `<span class="muted">обновено ${esc(bgDate(upd))}</span>` : ''}</div>
     ${body}
     <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : world || lg === 'sw3' ? ' · форма — изчислена от резултатите' : ''}</p>`;
@@ -2395,6 +2522,33 @@ const WORLD_TEAMS = {
   'Romania': ['Румъния'], 'San Marino': ['Сан Марино'], 'Scotland': ['Шотландия'], 'Serbia': ['Сърбия'], 'Slovakia': ['Словакия'], 'Slovenia': ['Словения'], 'Spain': ['Испания'],
   'Sweden': ['Швеция'], 'Switzerland': ['Швейцария'], 'Türkiye': ['Турция'], 'Ukraine': ['Украйна'], 'Wales': ['Уелс'],
 };
+// …and how the international media write them (English, Spanish, Italian, German, French): ESPN's own name, plus these
+const WORLD_LATIN = {
+  'AFC Bournemouth': ['Bournemouth'], 'Brighton & Hove Albion': ['Brighton'], 'Manchester City': ['Man(?:chester)? City'], 'Manchester United': ['Man(?:chester)? United', 'Man Utd'],
+  'Tottenham Hotspur': ['Tottenham', 'Spurs'], 'Newcastle United': ['Newcastle'], 'Leeds United': ['Leeds'], 'Hull City': ['Hull'], 'Ipswich Town': ['Ipswich'], 'Coventry City': ['Coventry'],
+  'Nottingham Forest': ['Nottingham Forest', 'Forest'], 'West Ham United': ['West Ham'], 'Wolverhampton Wanderers': ['Wolves', 'Wolverhampton'], 'Crystal Palace': ['Crystal Palace', 'Palace'],
+  'Atlético Madrid': ['Atl[ée]tico(?: de)? Madrid', 'Atleti', 'Atl[ée]tico(?! (?:Mineiro|Nacional|Paranaense))'], 'Athletic Club': ['Athletic(?: Club| Bilbao)?'], 'Barcelona': ['Barcelona', 'Barça', 'Barca'],
+  'Celta Vigo': ['Celta'], 'Real Betis': ['Betis'], 'Rayo Vallecano': ['Rayo'], 'Racing Santander': ['Racing(?: de)? Santander'], 'Deportivo': ['Deportivo(?: de)? La Coruña', 'Depor'],
+  'Alavés': ['Alav[ée]s'], 'Málaga': ['M[áa]laga'], 'Real Madrid': ['Real Madrid'],
+  'Internazionale': ['Internazionale', 'Inter(?: Milan)?(?! Miami)'], 'AC Milan': ['(?<!Inter )Milan(?!o)'], 'AS Roma': ['Roma'], 'Juventus': ['Juventus', 'Juve'],
+  'Bayern Munich': ['Bayern'], 'Borussia Dortmund': ['Dortmund', 'BVB'], 'Bayer Leverkusen': ['Leverkusen'], 'RB Leipzig': ['Leipzig'], 'SC Freiburg': ['Freiburg'], 'VfB Stuttgart': ['Stuttgart'],
+  'Eintracht Frankfurt': ['Eintracht(?: Frankfurt)?', 'Frankfurt'], 'Werder Bremen': ['Werder(?: Bremen)?', 'Bremen'], 'Hamburg SV': ['Hamburg(?:er SV)?', 'HSV'], 'FC Cologne': ['K[öo]ln', 'Cologne'],
+  '1. FC Union Berlin': ['Union Berlin'], 'Borussia Mönchengladbach': ['M[öo]nchengladbach', 'Gladbach'], 'TSG Hoffenheim': ['Hoffenheim'], 'FC Augsburg': ['Augsburg'], 'SC Paderborn 07': ['Paderborn'],
+  'SV Elversberg': ['Elversberg'], 'Schalke 04': ['Schalke'],
+  'Paris Saint-Germain': ['Paris Saint-Germain', 'PSG', 'Paris SG'], 'Marseille': ['Marseille', 'OM'], 'Lyon': ['Lyon', 'OL'], 'AS Monaco': ['(?<!Bayern )Monaco'], 'Stade Rennais': ['Rennes', 'Stade Rennais'],
+  'Lille': ['Lille', 'LOSC'], 'Le Havre AC': ['Le Havre'], 'AJ Auxerre': ['Auxerre'], 'Nice': ['OGC Nice'], 'Lens': ['RC Lens'], 'Angers': ['Angers SCO'],
+  // national teams in the five languages
+  'Spain': ['Spain', 'España', 'Spagna', 'Spanien', 'Espagne'], 'Italy': ['Italy', 'Italia', 'Italien', 'Italie'], 'Germany': ['Germany', 'Alemania', 'Germania', 'Deutschland', 'Allemagne'],
+  'France': ['France', 'Francia', 'Frankreich'], 'England': ['England', 'Inglaterra', 'Inghilterra', 'Angleterre'], 'Portugal': ['Portugal', 'Portogallo'],
+  'Netherlands': ['Netherlands', 'Holland', 'Países Bajos', 'Holanda', 'Olanda', 'Paesi Bassi', 'Niederlande', 'Pays-Bas'], 'Belgium': ['Belgium', 'Bélgica', 'Belgio', 'Belgien', 'Belgique'],
+  'Croatia': ['Croatia', 'Croacia', 'Croazia', 'Kroatien', 'Croatie'], 'Switzerland': ['Switzerland', 'Suiza', 'Svizzera', 'Schweiz', 'Suisse'], 'Austria': ['Austria', 'Österreich', 'Autriche'],
+  'Poland': ['Poland', 'Polonia', 'Polen', 'Pologne'], 'Denmark': ['Denmark', 'Dinamarca', 'Danimarca', 'Dänemark', 'Danemark'], 'Scotland': ['Scotland', 'Escocia', 'Scozia', 'Schottland', 'Écosse'],
+  'Türkiye': ['Türkiye', 'Turkey', 'Turquía', 'Turchia', 'Türkei', 'Turquie'], 'Bulgaria': ['Bulgaria', 'Bulgarien', 'Bulgarie'],
+};
+// the Bulgarian clubs as the international media write them (Levski in the Europa League)
+const BG_LATIN = { levski: 'Levski(?: Sofia)?', cska: 'CSKA Sofia|CSKA-Sofia', ludo: 'Ludogorets?(?: Razgrad)?', cska48: 'CSKA 1948', lokpd: 'Lokomotiv Plovdiv',
+  chm: 'Cherno More(?: Varna)?', arda: 'Arda Kardzhali', botpd: 'Botev Plovdiv', slavia: 'Slavia Sofia' };
+const latinOf = n => WORLD_LATIN[n] || [String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')];
 // One lean list of every match of the season (all competitions) is loaded for this, so a story is matched across
 // competitions: "ЦСКА" two days after a Conference League away game is about that game, not the league match before it.
 const MIDX = { at: 0, loading: false, matches: [] };
@@ -2412,6 +2566,7 @@ async function loadMatchIndex(force){
       if (!data || data.length < 1000) break;
     }
     MIDX.matches = all; MIDX.at = Date.now();
+    WORLD_NAMES = new Set(all.filter(m => !LEAGUES[m.league]).flatMap(m => [m.home_name, m.away_name]));
   } catch (e) { log('The match list for the news could not be loaded: ' + (e.message || e)); MIDX.at = Date.now() - 25 * 60e3; }
   MIDX.loading = false;
   scheduleRender();
@@ -2419,16 +2574,23 @@ async function loadMatchIndex(force){
 const COMP_LG = { eng: 'eng.1', esp: 'esp.1', ita: 'ita.1', ger: 'ger.1', fra: 'fra.1', ucl: 'uefa.champions', uel: 'uefa.europa', uecl: 'uefa.europa.conf' };
 const EURO_LG = ['uefa.champions', 'uefa.europa', 'uefa.europa.conf'];
 const lgGroup = lg => LEAGUES[lg] ? 'bg' : EURO_LG.includes(lg) ? 'euro' : Object.values(COMP_LG).includes(lg) ? 'top5' : 'nat';
-const RX_EURO = /УЕФА|Европ|Шампионск|Лига на конференциите|Конферентна лига|Лига Европа/u, RX_CUP = /(?<![\p{L}])Куп(?:а|ата)(?![\p{L}])/u;
+const RX_EURO = /УЕФА|Европ|Шампионск|Лига на конференциите|Конферентна лига|Лига Европа|Champions League|Europa League|Conference League|UEFA|Liga de Campeones|Ligue des champions|Königsklasse|Ligue Europa/u;
+const RX_CUP = /(?<![\p{L}])Куп(?:а|ата)(?![\p{L}])|FA Cup|Carabao Cup|League Cup|EFL Cup|Copa del Rey|Coppa Italia|DFB-Pokal|Coupe de France|Supercopa|Supercoppa|Community Shield|Trophée des Champions/u;
 const RX_RIVALS = /съперни\p{L}*\s+на\s+[„"]?\p{Lu}\p{L}*(?:\s+\p{Lu}\p{L}*)?/gu;   // "between two of Levski's rivals" is not Levski's match
-const RX_SEP = /\s+-\s+|\s*[–—]\s*|\s+срещу\s+/gu;                                  // "Левски – ЦСКА", "Ботев срещу Дунав"
+const RX_SEP = /\s+-\s+|\s*[–—]\s*|\s+(?:срещу|v\.?|vs\.?|contra|contro|gegen|contre)\s+/gu;  // "Левски – ЦСКА", "Ботев срещу Дунав", "Arsenal v Chelsea"
 // a referee appointment (about the next match), also when the news analysis tagged it only "other"
-const RX_APPOINT = /ще (?:ръководи|свири|води|бъде главен)|главен съдия на|(?<![\p{L}])свир(?:и|ят) (?:на|мача|дербито|срещата|гостуването)|наряд|назначи|определи|бригад|кой ще свири|ясни са съдиите|ясен е съдията|обявиха съдиите|(?<![\p{L}])съдии от/iu;
+const RX_APPOINT = /ще (?:ръководи|свири|води|бъде главен)|главен съдия на|(?<![\p{L}])свир(?:и|ят) (?:на|мача|дербито|срещата|гостуването)|наряд|назначи|определи|бригад|кой ще свири|ясни са съдиите|ясен е съдията|обявиха съдиите|(?<![\p{L}])съдии от|to referee|will referee|named (?:as )?referee|appointed (?:as |to )|in charge of|referee for|arbitrar[áa]|designad[oa]|dirigir[áa]|arbitrer[àa]|designat[oa]|dirigerà|leitet|pfeift|angesetzt|arbitrera|désigné/iu;
+// a team of the world competitions: one the list knows, or any team of an ESPN competition (its own name is enough
+// for the international media)
+const isWorldName = n => !!(WORLD_TEAMS[teamName(n)] || WORLD_LATIN[teamName(n)] || (WORLD_NAMES && WORLD_NAMES.has(n)));
+let WORLD_NAMES = null;
 function teamMatcher(name){
   const n = teamName(name), k = TEAM_KEY[n];
   let t = null;
-  if (k) { const c = CLUBS.find(x => x.k === k); if (c) t = { k, re: c.re, bg: true, loose: c.label.includes(' ') ? CS([c.label.split(' ')[0]]) : null }; }
-  else if (WORLD_TEAMS[n]) t = { k: 'w:' + n, re: CS(WORLD_TEAMS[n]) };
+  if (k) { const c = CLUBS.find(x => x.k === k);
+    if (c) t = { k, re: BG_LATIN[k] ? new RegExp('(?:' + c.re.source + '|' + CS([BG_LATIN[k]]).source + ')', 'u') : c.re, bg: true, cyr: true,
+      loose: c.label.includes(' ') ? CS([c.label.split(' ')[0]]) : null }; }
+  else if (isWorldName(name)) t = { k: 'w:' + n, re: CS((WORLD_TEAMS[n] || []).concat(latinOf(n))), cyr: !!WORLD_TEAMS[n] };
   if (t) { t.endRe = new RegExp(t.re.source + '[)"“”»\\s]*$', 'u'); t.startRe = new RegExp('^[„"“«(\\s]*' + t.re.source, 'u');
     if (t.loose) { t.lEnd = new RegExp(t.loose.source + '[)"“”»\\s]*$', 'u'); t.lStart = new RegExp('^[„"“«(\\s]*' + t.loose.source, 'u'); } }
   return t;
@@ -2450,6 +2612,7 @@ function matchNewsIndex(){
     if (m._g === 'nat') m._k.forEach(k => k && natKeys.add(k));
   }
   const matchers = [...new Map([...teams.values()].filter(Boolean).map(t => [t.k, t])).values()];
+  const mByKey = new Map(matchers.map(t => [t.k, t]));
   const bgM = matchers.filter(t => t.bg);
   // the matches one headline is about. x: what is known about it — its tab, competitions, topics and when it was published
   function hitsOf(text, x){
@@ -2487,7 +2650,7 @@ function matchNewsIndex(){
     const foreign = new Set();
     for (const y of title.matchAll(RX_SEP)) {
       const L = title.slice(Math.max(0, y.index - 40), y.index), R = title.slice(y.index + y[0].length, y.index + y[0].length + 40);
-      if (!/[А-ЯЁ][\p{L}.]*[)"“”»]?$/u.test(L) || !/^[„"“«(]?[А-ЯЁ]/u.test(R)) continue;
+      if (!/\p{Lu}[\p{L}.]*[)"“”»']?$/u.test(L) || !/^[„"“«(']?\p{Lu}/u.test(R)) continue;
       const lk = cand.filter(t => t.endRe.test(L) || (t.lEnd && t.lEnd.test(L))), rk = cand.filter(t => t.startRe.test(R) || (t.lStart && t.lStart.test(R)));
       if (lk.length && rk.length) { if (![...lk, ...rk].some(t => paired.has(t.k))) named = true; }
       else (lk.length ? lk : rk).forEach(t => foreign.add(t.k));
@@ -2498,7 +2661,10 @@ function matchNewsIndex(){
     const back = (x.cats.includes('discipline') || x.cats.includes('committee') ? 5 : 3) * DAY;
     for (const k of strict) {
       if (paired.has(k) || (natKeys.has(k) && !x.comps.includes('nat'))) continue;   // "България" alone is not about the national team
-      const list = (byTeam.get(k) || []).filter(m => ok(m) && (!foreign.has(k) || !m._k[m._k[0] === k ? 1 : 0]));
+      // "Панатинайкос – ЦСКА": the other side is a club the headline names in a way the list can't read (a foreign club
+      // in Cyrillic): only a match against such a club, not ЦСКА's league match against Левски
+      const unnamed = m => { const o = m._k[m._k[0] === k ? 1 : 0], t = o && mByKey.get(o); return !t || (!t.cyr && /[\u0400-\u04ff]/.test(title)); };
+      const list = (byTeam.get(k) || []).filter(m => ok(m) && (!foreign.has(k) || unnamed(m)));
       const last = list.filter(m => m._t <= t0 + 90 * 60e3 && t0 - m._t < (post ? back : 3 * DAY)).pop();   // kickoff and publishing times are not exact
       const next = list.find(m => m._t > t0 + (pre ? -2 * 3600e3 : 90 * 60e3) && m._t - t0 < (pre ? 5 : 3) * DAY);
       const m = post ? last : pre ? next : !last ? next : !next ? last : (t0 - last._t <= next._t - t0 ? last : next);
@@ -2594,7 +2760,7 @@ function matchLinks(s){
   return `<div class="mlinks">${ms.slice(0, 3).map(m => {
     const lg = m.league, where = LEAGUES[lg] ? `${m.round} кръг` : (compOf(lg) || {}).name || '';
     const score = m.status === 'finished' || m.status === 'live' ? `${m.home_score ?? ''}:${m.away_score ?? ''}` : '–';
-    return `<button class="mlink" data-gomatch="${esc(lg)}|${esc(m.id)}" title="The match on the Results page, with everything written about it">⚽ ${esc(teamName(m.home_name))} <b>${esc(score)}</b> ${esc(teamName(m.away_name))}<span class="muted">· ${esc(where)}</span></button>`;
+    return `<button class="mlink" data-gomatch="${esc(lg)}|${esc(m.id)}" title="The match on the Results page, with everything written about it">${esc(teamName(m.home_name))} <b>${esc(score)}</b> ${esc(teamName(m.away_name))}<span class="muted">· ${esc(where)}</span></button>`;
   }).join('')}${ms.length > 3 ? `<span class="muted">+${ms.length - 3} more</span>` : ''}</div>`;
 }
 // open the match's round on the Results page, with its stories open

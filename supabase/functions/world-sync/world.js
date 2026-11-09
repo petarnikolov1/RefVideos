@@ -120,7 +120,9 @@ export function parseStandings(json) {
       out.push({ team_name: t.displayName || t.name, logo: (t.logos && t.logos[0] && t.logos[0].href) || null,
         rank: num(st.rank), played: num(st.gamesPlayed), won: num(st.wins), drawn: num(st.ties), lost: num(st.losses),
         goals_for: num(st.pointsFor), goals_against: num(st.pointsAgainst), points: num(st.points), form: null,
-        grp, grp_order: kids.length > 1 ? gi : null });
+        grp, grp_order: kids.length > 1 ? gi : null,
+        // what the place leads to, as ESPN writes it: "Champions League", "Relegation playoff", "Qualifies for round of 16"…
+        zone: (e.note && String(e.note.description || '').trim()) || null });
     }
   });
   return { edition, rows: out.filter(r => r.team_name) };

@@ -1,5 +1,7 @@
 // News search for BG Referee Watch: the searches, feed parsing and the refereeing filter.
 // Plain JS so it runs in the Supabase Edge Function and can be tested with Node.
+// The international media for the World sections (English, Spanish, Italian, German, French) are in intl.js.
+import { analyzeIntl, topOutlet, leagueHint } from './intl.js';
 
 export const SEASON_START = '2026-07-01';               // 2026/27 season
 export const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
@@ -103,8 +105,9 @@ export function parseRss(xml) {
   for (const m of String(xml).matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
     const it = m[1];
     const get = tag => { const r = it.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')); return r ? cdata(r[1]).trim() : ''; };
+    const su = it.match(/<source\b[^>]*\burl="([^"]*)"/i);
     out.push({ title: htmlToText(get('title')), link: decode(get('link')), date: new Date(get('pubDate')),
-      desc: htmlToText(decode(get('description'))), source: htmlToText(get('source') || get('News:Source')) });
+      desc: htmlToText(decode(get('description'))), source: htmlToText(get('source') || get('News:Source')), srcUrl: su ? decode(su[1]) : '' });
   }
   return out;
 }
@@ -284,7 +287,9 @@ export const notBulgarian = (title, src, link) => NOT_BG_LETTERS.test(String(tit
   /\.(?:ru|ua|by|kz|rs|mk|me|ba)$/i.test(String(src || '').trim()) || /^https?:\/\/[^/]*\.(?:ru|ua|by|kz|rs|mk|me|ba)(?:[/:?#]|$)/i.test(String(link || ''));
 
 // one feed item → an article row (or null when it isn't about refereeing / is before the season)
+// q.ctx 'intl': an international outlet's article for the World sections (q.lang en / es / it / de / fr)
 export function toArticle(raw, kind, q, now = Date.now()) {
+  if (q && q.ctx === 'intl') return toIntlArticle(raw, q, now);
   let title = String(raw.title || '').replace(/\s+/g, ' ').trim();
   if (!title) return null;
   let src = String(raw.source || '').trim(), link = raw.link || '';
@@ -307,8 +312,31 @@ export function toArticle(raw, kind, q, now = Date.now()) {
   const base = norm(title).slice(0, 90);
   if (base.length < 8) return null;
   return { aid: base + '|' + norm(src || 'unknown').slice(0, 30), title, link, descr: desc, src, published_at: new Date(d).toISOString(),
-    scope: a.scope, divs: a.divs, comps: a.comps, cats: a.cats, score: a.score, hinted: a.hinted, clubs: a.clubs, vh: a.vh };
+    scope: a.scope, divs: a.divs, comps: a.comps, cats: a.cats, score: a.score, hinted: a.hinted, clubs: a.clubs, vh: a.vh, lang: 'bg' };
 }
+
+function toIntlArticle(raw, q, now) {
+  let title = String(raw.title || '').replace(/\s+/g, ' ').trim(), src = String(raw.source || '').trim();
+  const i = title.lastIndexOf(' - ');
+  if (i > 15) { if (!src) src = title.slice(i + 3).trim(); title = title.slice(0, i).trim(); }
+  if (!title || !topOutlet(q.lang, raw.srcUrl, src)) return null;            // the big outlets only
+  if (/[Ѐ-ӿ]/.test(title)) return null;                            // not in the edition's language
+  let desc = String(raw.desc || '').trim();
+  const bare = src && desc.endsWith(src) ? desc.slice(0, -src.length).trim() : desc;
+  if (desc && (norm(bare).startsWith(norm(title).slice(0, 40)) || norm(title).startsWith(norm(bare)))) desc = '';
+  if (desc.length > 300) desc = desc.slice(0, 297) + '…';
+  const hint = leagueHint(raw.srcUrl);                                        // premierleague.com → "Premier League"
+  const a = analyzeIntl(title, [desc, hint].filter(Boolean).join(' · '), q.lang);
+  if (!a) return null;
+  let d = raw.date instanceof Date ? raw.date.getTime() : NaN;
+  if (!isFinite(d) || d > now + 864e5) d = now;
+  if (d < Date.parse(SEASON_START + 'T00:00:00Z')) return null;
+  const base = norm(title).slice(0, 90);
+  if (base.length < 8) return null;
+  return { aid: base + '|' + norm(src || 'unknown').slice(0, 30), title, link: raw.link || '', descr: desc, src, published_at: new Date(d).toISOString(),
+    scope: a.scope, divs: a.divs, comps: a.comps, cats: a.cats, score: a.score, hinted: false, clubs: a.clubs, vh: a.vh, lang: q.lang };
+}
+export { analyzeIntl };
 
 // 2-week search windows from the season start up to now, newest first
 export function windows(now = Date.now(), days = 14) {
