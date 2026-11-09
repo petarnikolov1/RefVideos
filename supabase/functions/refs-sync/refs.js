@@ -118,10 +118,24 @@ export function cells(html) {
     .replace(/<[^>]+>|\|/g, '\u0001'))
     .split('\u0001').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
 }
-const ROLE = /^(ГС|АС\s*1|АС\s*2|4\s*-?\s*ТИ|ВАР|АВАР|СН|ДН|ДЕЛЕГАТ|НАБЛЮДАТЕЛ|РЕЗЕРВЕН)\s*:?\s*(.*)$/i;
+// the roles: ГС главен съдия, АС1/АС2 асистент-съдии, 4-ТИ четвърти съдия, ВАР видеосъдия, АВАР асистент на ВАР, СН съдийски наблюдател,
+// ДН (Трета лига) делегат. "АВАР" is not "ВАР", and a name such as "Снежана" or "Варвара" is not a role.
+const ROLES = 'ГС|АС\\s*1|АС\\s*2|4\\s*-?\\s*ТИ|АВАР|ВАР|СН|ДН|ДЕЛЕГАТ|НАБЛЮДАТЕЛ|РЕЗЕРВЕН';
+const ROLE = new RegExp(`^(${ROLES})(?![\\p{L}\\d])\\s*:?\\s*(.*)$`, 'iu');
+const LABEL = new RegExp(`(?<![\\p{L}\\d])(?:${ROLES})\\s*:`, 'giu');
+// bfunion.bg sometimes writes a crew as paragraphs, several roles to a line:
+// "ГС: Мартин Иванов Марков   АС1: Мартин Емилов Венев   АС2: Радостин Николов Бодуров" → one cell per role and one per name
+export function splitRoles(x) {
+  const at = [...String(x).matchAll(LABEL)];
+  if (!at.length || (at.length === 1 && at[0].index === 0)) return [x];
+  const out = [];
+  if (at[0].index > 0) out.push(x.slice(0, at[0].index));
+  at.forEach((m, i) => { out.push(m[0]); out.push(x.slice(m.index + m[0].length, i + 1 < at.length ? at[i + 1].index : undefined)); });
+  return out.map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
 // { round, items: [{ date, fixture, crew: [{ r, n }] }] }
 export function parseAppointments(html) {
-  let c = cells(html);
+  let c = cells(html).flatMap(splitRoles);
   const start = c.findIndex(x => /^Срещи от/i.test(x));
   if (start >= 0) c = c.slice(start);
   const end = c.findIndex(x => /запазва правото/i.test(x));

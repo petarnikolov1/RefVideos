@@ -542,7 +542,10 @@ const NEWS_COLS = 'aid,title,link,descr,src,published_at,found_at,scope,divs,com
 const fromRow = r => ({ aid: r.aid, title: r.title, link: r.link || '', desc: r.descr || '', src: r.src || '',
   date: Date.parse(r.published_at), found: Date.parse(r.found_at), scope: r.scope, divs: r.divs || ['unk'], comps: r.comps || [],
   cats: (r.cats && r.cats.length) ? r.cats : ['other'], score: r.score || 1, hinted: !!r.hinted, clubs: r.clubs || [], vh: !!r.vh, lang: r.lang || '' });
+// the international media are shown in English only (articles saved earlier in Spanish, Italian, German or French are left out)
+const HIDDEN_LANGS = ['es', 'it', 'de', 'fr'];
 function useArticles(list){
+  list = list.filter(a => !HIDDEN_LANGS.includes(a.lang));
   S.articles = Object.fromEntries(list.map(a => [a.aid, a]));
   NEWS.count = list.length;
   NEWS.newest = list.reduce((m, a) => Math.max(m, a.found || 0), 0);
@@ -2062,9 +2065,10 @@ function defaultRound(ms){
 }
 /* ── referee appointments and the Third League's punishments ── */
 const WHISTLE = '<svg class="whistle" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5a6 6 0 1 0 11.6-2.2L21 8V4.5h-9A6 6 0 0 0 3.5 12.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="9.5" cy="12.5" r="2" fill="currentColor"/></svg>';
-const ROLE_BG = { 'ГС': 'Главен съдия', 'АС1': 'Асистент 1', 'АС2': 'Асистент 2', '4-ТИ': 'Четвърти съдия', 'ВАР': 'ВАР', 'АВАР': 'АВАР', 'СН': 'Съдийски наблюдател', 'ДН': 'Делегат', 'РЕЗЕРВЕН': 'Резервен' };
-// "Никола Антонов Попов" → "Никола Попов" (the full name stays in the list and on hover)
-const shortName = n => { const w = String(n || '').trim().split(/\s+/); return w.length >= 3 ? `${w[0]} ${w[w.length - 1]}` : String(n || ''); };
+const ROLE_BG = { 'ГС': 'Главен съдия', 'АС1': 'Асистент-съдия 1', 'АС2': 'Асистент-съдия 2', '4-ТИ': 'Четвърти съдия', 'ВАР': 'ВАР', 'АВАР': 'Асистент-ВАР (АВАР)', 'СН': 'Съдийски наблюдател', 'ДН': 'Делегат', 'РЕЗЕРВЕН': 'Резервен' };
+const ROLE_ORDER = ['ГС', 'АС1', 'АС2', '4-ТИ', 'ВАР', 'АВАР', 'СН', 'ДН', 'РЕЗЕРВЕН'];
+// the committee writes first, father's and last name ("Никола Антонов Попов"): the site shows first and last name ("Никола Попов")
+const shortName = n => { const w = String(n || '').replace(/[*.]+$/, '').trim().split(/\s+/); return w.length >= 3 ? `${w[0]} ${w[w.length - 1]}` : w.join(' '); };
 const noTime = m => /час — неуточнен/.test(m.note || '');
 const venueOf = m => String(m.note || '').split(' · ').filter(x => x && !/час — неуточнен|служебен/.test(x)).join(' · ');
 // players who sit a match out: a ban of N matches is served in the team's next N matches after the decision
@@ -2090,11 +2094,13 @@ function officialsHtml(m){
     const t = m.kickoff ? Date.parse(m.kickoff) : 0;
     return m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? '<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>' : '';
   }
-  const ref = o.crew.find(c => c.r === 'ГС'), vr = o.crew.find(c => c.r === 'ВАР'), open = FB.open.has('crew:' + m.id);
-  const who = c => `<b title="${esc(c.n)}">${esc(shortName(c.n))}</b>`;
+  const crew = o.crew.filter(c => c && c.n && !/:/.test(c.n)).sort((a, b) => (ROLE_ORDER.indexOf(a.r) + 1 || 99) - (ROLE_ORDER.indexOf(b.r) + 1 || 99));
+  if (!crew.length) return '';
+  const ref = crew.find(c => c.r === 'ГС'), vr = crew.find(c => c.r === 'ВАР'), open = FB.open.has('crew:' + m.id);
+  const who = c => `<b>${esc(shortName(c.n))}</b>`;
   return `<div class="mref">${WHISTLE}${ref ? `<span class="rl">Съдия</span>${who(ref)}` : ''}${vr ? `<span class="sep" aria-hidden="true">·</span><span class="rl">ВАР</span>${who(vr)}` : ''}
       <button class="crewbtn" data-crew="${esc(m.id)}" aria-expanded="${open}">Бригада <span class="chev">${open ? '▴' : '▾'}</span></button></div>
-    <div class="crew" data-crewbox="${esc(m.id)}"${open ? '' : ' hidden'}><dl>${o.crew.map(c => `<div><dt>${esc(ROLE_BG[c.r] || c.r)}</dt><dd>${esc(c.n)}</dd></div>`).join('')}</dl>
+    <div class="crew" data-crewbox="${esc(m.id)}"${open ? '' : ' hidden'}><dl>${crew.map(c => `<div><dt>${esc(ROLE_BG[c.r] || c.r)}</dt><dd>${esc(shortName(c.n))}</dd></div>`).join('')}</dl>
       <a class="src" href="${esc(o.src_url)}" target="_blank" rel="noopener">${esc(/bfunion/.test(o.src_url || '') ? 'Съдийска комисия на БФС' : 'БФС · Трета лига')} — ${esc(o.src_title || 'назначения')}</a></div>`;
 }
 const cardIc = r => `<i class="cardic ${r === 'red' ? 'r' : r === 'yellow' ? 'y' : 'o'}" title="${r === 'red' ? 'червен картон' : r === 'yellow' ? 'жълти картони' : 'по доклад'}"></i>`;

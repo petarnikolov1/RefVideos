@@ -1,5 +1,5 @@
 // Tests for the international media filter (intl.js): node intl.test.mjs
-import { analyzeIntl, topOutlet, INTL_QUERIES, intlUrl } from './intl.js';
+import { analyzeIntl, topOutlet, INTL_QUERIES, intlUrl, looksEnglish } from './intl.js';
 import { parseRss, toArticle } from './news.js';
 
 let fails = 0;
@@ -79,14 +79,32 @@ keep('Ligue 1 : le but refusé de Lens pour hors-jeu fait débat', 'fr', ['fra']
 drop('Ligue 2 : carton rouge et penalty pour Saint-Étienne', 'fr');
 drop('Mercato : le PSG prolonge son défenseur, contrat jusqu\'en 2030', 'fr');
 
-// outlets
-ok(topOutlet('en', 'https://www.bbc.co.uk', 'BBC') && topOutlet('en', 'https://www.skysports.com', 'Sky Sports') && topOutlet('es', 'https://www.marca.com', 'MARCA')
-  && topOutlet('it', 'https://www.gazzetta.it', 'La Gazzetta dello Sport') && topOutlet('de', 'https://www.kicker.de', 'kicker') && topOutlet('fr', 'https://www.lequipe.fr', "L'Équipe"), 'the big outlets are kept');
-ok(!topOutlet('en', 'https://www.someblog.co.uk', 'Some Blog') && !topOutlet('es', 'https://www.bbc.co.uk', 'BBC') && topOutlet('en', '', 'Sky Sports') && !topOutlet('en', '', 'Random FC News'),
-  'other sites are left out (an outlet counts for its own language only)');
-// searches
-ok(INTL_QUERIES.length >= 25 && ['en', 'es', 'it', 'de', 'fr'].every(l => INTL_QUERIES.some(q => q.lang === l)), `${INTL_QUERIES.length} searches in five languages`);
-ok(intlUrl(INTL_QUERIES[12], Date.parse('2026-11-01'), Date.parse('2026-11-08')).endsWith('&hl=es&gl=ES&ceid=ES:es'), 'each search uses its country\'s Google News edition');
+// English only
+for (const t of ['Arsenal denied penalty as VAR fails to intervene in Chelsea draw', 'Referee for El Clasico named as Gil Manzano', 'Les Bleus denied penalty against Spain',
+  "N'Golo Kanté sent off in Nations League", 'Gyökeres penalty: why VAR did not intervene', 'Lens vs Como VAR decision', 'Iñaki Williams red card: Athletic to appeal',
+  'Sunderland stun Chelsea as Le Fée’s penalty breathes life into Black Cats', 'Orsato: “The referee must disappear, as Massa did in Roma-Inter”'])
+  ok(looksEnglish(t), 'English: ' + t);
+for (const t of ['El Real Madrid denuncia el arbitraje de Gil Manzano ante el Barcelona', 'Moviola Inter-Juventus: il rigore era netto, sbaglia l\'arbitro',
+  'Bayern: Elfmeter-Ärger nach Videobeweis gegen Dortmund', "PSG : l'arbitrage de Marseille fait polémique après le carton rouge", '¿Fue penalti? El VAR del Clásico',
+  'Zufferli in totale confusione, dà rigore al Bologna ma il fallo è chiaramente fuori area', 'Ligue 1 : le but refusé de Lens pour hors-jeu fait débat'])
+  ok(!looksEnglish(t), 'not English: ' + t);
+ok(!looksEnglish('BVB-Dusel: Schiedsrichter gesteht Fehlentscheidung', true) && looksEnglish('Real Madrid furious: Vinicius red card', true), 'a site in several languages needs an English word');
+
+// outlets: English-language ones and the English editions of foreign ones
+ok(topOutlet('en', 'https://www.bbc.co.uk', 'BBC') && topOutlet('en', 'https://www.skysports.com', 'Sky Sports') && topOutlet('en', 'https://en.as.com', 'AS USA')
+  && topOutlet('en', 'https://www.marca.com', 'MARCA in English') && topOutlet('en', 'https://www.football-italia.net', 'Football Italia') && topOutlet('en', 'https://www.dw.com', 'DW'), 'the big outlets and English editions are kept');
+ok(!topOutlet('en', 'https://www.someblog.co.uk', 'Some Blog') && !topOutlet('es', 'https://www.marca.com', 'MARCA') && !topOutlet('it', 'https://www.gazzetta.it', 'Gazzetta')
+  && !topOutlet('en', 'https://www.gazzetta.it', 'La Gazzetta dello Sport') && !topOutlet('en', 'https://www.kicker.de', 'kicker') && topOutlet('en', '', 'Sky Sports') && !topOutlet('en', '', 'Random FC News'),
+  'other sites, and outlets with no English edition, are left out');
+// searches: English only
+ok(INTL_QUERIES.length >= 15 && INTL_QUERIES.every(q => q.lang === 'en'), `${INTL_QUERIES.length} searches, all in English`);
+ok(intlUrl(INTL_QUERIES[0], Date.parse('2026-11-01'), Date.parse('2026-11-08')).endsWith('&hl=en-GB&gl=GB&ceid=GB:en') && INTL_QUERIES.some(q => intlUrl(q, 0, 0).endsWith('ceid=US:en')),
+  'UK and US English editions of Google News');
+const marcaEs = toArticle({ title: 'Polémica en el Metropolitano: el VAR anula un gol al Atlético - MARCA', link: 'https://news.google.com/m', date: new Date('2026-11-07'), source: 'MARCA', srcUrl: 'https://www.marca.com' },
+  'google', { ctx: 'intl', lang: 'en' }, Date.parse('2026-11-08'));
+const marcaEn = toArticle({ title: 'Atletico furious as VAR rules out goal against Real Madrid - MARCA in English', link: 'https://news.google.com/n', date: new Date('2026-11-07'), source: 'MARCA in English', srcUrl: 'https://www.marca.com' },
+  'google', { ctx: 'intl', lang: 'en' }, Date.parse('2026-11-08'));
+ok(!marcaEs && marcaEn && marcaEn.lang === 'en' && marcaEn.comps.includes('esp'), 'marca.com: the English edition is kept, the Spanish one is not');
 
 // a Google News item from an international outlet
 const xml = `<rss><channel><item><title>Arsenal denied penalty as VAR fails to intervene - BBC Sport</title><link>https://news.google.com/rss/articles/abc</link>

@@ -3,8 +3,8 @@
 //   { recent: true }   the last few days (every 30 minutes)
 //   { backfill: true } one older 2-week window of the season per run, newest first; once the whole season has been
 //                      searched it rests for a day, then goes through it again to catch anything published late
-//   + intl: true       the same for the international media of the World sections (English, Spanish, Italian, German,
-//                      French outlets; intl.js), with their own schedule and their own place in the season
+//   + intl: true       the same for the international media of the World sections (English-language outlets and the
+//                      English editions of foreign ones; intl.js), with their own schedule and their own place in the season
 // Articles keep the time they were first found (found_at), so the page can mark what is new since a visit.
 import * as N from './news.js';
 import * as INTL from './intl.js';
@@ -77,7 +77,8 @@ async function scan(tasks: Task[], started: number) {
 }
 const googleTasks = (from: number, to: number): Task[] => N.GOOGLE_QUERIES.map(q => ({ kind: 'google', q, url: N.googleUrl(q.q, from, to) }));
 const intlTasks = (from: number, to: number): Task[] => INTL.INTL_QUERIES.map(q => ({ kind: 'google', q, url: INTL.intlUrl(q, from, to) }));
-const INTL_LANGS = ['en', 'es', 'it', 'de', 'fr'];
+const INTL_LANGS = INTL.LANGS as string[];                 // English only
+const OLD_LANGS = ['es', 'it', 'de', 'fr'];                 // the languages searched before: their articles are removed
 
 Deno.serve(async (req) => {
   const started = Date.now();
@@ -87,14 +88,15 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const out: Record<string, any> = { ok: true, at: new Date().toISOString() };
 
-  if (body.test) {                                  // try one search and show what it gives (no saving); lang: en / es / it / de / fr
+  if (body.test) {                                  // try one search and show what it gives (no saving); lang: en (ed: en / us)
     const via: Record<string, number> = {};
     try {
-      const q = body.lang ? { q: String(body.test), ctx: 'intl', lang: String(body.lang) } : { q: String(body.test), ctx: 'loose' };
+      const q = body.lang ? { q: String(body.test), ctx: 'intl', lang: String(body.lang), ed: String(body.ed ?? 'en') } : { q: String(body.test), ctx: 'loose' };
       const url = body.lang ? INTL.intlUrl(q, started - 7 * 864e5, started + 864e5) : N.googleUrl(String(body.test), started - 7 * 864e5, started + 864e5);
       const items = await feed(url, via, body.lang);
       out.test = { via, items: items.length, sample: items.slice(0, Number(body.n ?? 8)).map(it => ({ title: it.title, src: it.source, srcUrl: it.srcUrl,
-        kept: !!N.toArticle(it, 'google', q), outlet: body.lang ? INTL.topOutlet(String(body.lang), it.srcUrl, it.source) : undefined })) };
+        kept: !!N.toArticle(it, 'google', q), outlet: body.lang ? INTL.topOutlet(String(body.lang), it.srcUrl, it.source) : undefined,
+        english: body.lang ? INTL.looksEnglish(it.title.replace(/ - [^-]+$/, ''), INTL.bilingual(it.srcUrl)) : undefined })) };
     } catch (e) { out.test = { via, error: String((e as Error).message ?? e) }; }
     return Response.json(out);
   }
@@ -109,7 +111,9 @@ Deno.serve(async (req) => {
     }
     const drop: any[] = [], move: any[] = [];
     for (const r of rows) {
-      const a = INTL_LANGS.includes(r.lang) ? INTL.analyzeIntl(r.title, r.descr, r.lang)
+      const a = OLD_LANGS.includes(r.lang) ? null
+        // the outlet's name stands in for its address: "Premier League", "Bundesliga | official website" say the league
+        : INTL_LANGS.includes(r.lang) ? (INTL.looksEnglish(r.title) ? INTL.analyzeIntl(r.title, [r.descr, r.src].filter(Boolean).join(' · '), r.lang) : null)
         : N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
       if (!a) { drop.push(r); continue; }
       const same = a.scope === r.scope && [...a.comps].sort().join() === [...(r.comps ?? [])].sort().join() &&
@@ -128,7 +132,8 @@ Deno.serve(async (req) => {
         await rest(`news_articles?aid=eq.${encodeURIComponent(m.aid)}`, { method: 'PATCH', body: JSON.stringify({ ...m.patch, updated_at: new Date().toISOString() }), headers: { Prefer: 'return=minimal' } }); } }));
     }
     out.checked = rows.length; out.removed = drop.length; out.moved = move.length; out.dry = !!body.dry;
-    out.sample = drop.slice(0, 25).map(r => r.title);
+    out.removedByLang = drop.reduce((o: Record<string, number>, r) => { o[r.lang ?? 'null'] = (o[r.lang ?? 'null'] ?? 0) + 1; return o; }, {});
+    out.sample = [...drop.filter(r => !OLD_LANGS.includes(r.lang)), ...drop.filter(r => OLD_LANGS.includes(r.lang))].slice(0, 40).map(r => `${r.lang ?? '-'} | ${r.title}`);
     out.movedSample = move.slice(0, 40).map(m => `${m.from} → ${m.to} | ${m.title}`);
   } else if (body.recent) {
     out.mode = body.intl ? 'intl-recent' : 'recent';

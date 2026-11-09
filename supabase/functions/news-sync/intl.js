@@ -1,15 +1,18 @@
-// International media for the World sections: the refereeing stories of the five big leagues, the European cups and
-// the national teams as the big outlets of those countries write them — in English (BBC, Sky Sports, ESPN, The Guardian,
-// The Athletic…), Spanish (Marca, AS, Mundo Deportivo…), Italian (Gazzetta, Corriere dello Sport…), German (kicker,
-// Bild, Sportschau…) and French (L'Équipe, RMC Sport…).
-// Searched on Google News in each country's edition; only articles from the outlets listed in MEDIA are kept.
+// International media for the World sections, in English only: the refereeing stories of the five big leagues, the
+// European cups and the national teams as the big English-language outlets write them (BBC, Sky Sports, ESPN, The Guardian,
+// The Athletic…), and the English editions of the big outlets of Spain, Italy, Germany and France (AS English, MARCA in
+// English, SPORT English, Football Italia, DW, France 24…) and of the leagues' own sites.
+// Searched on Google News in its UK and US English editions; only English headlines from the outlets in MEDIA are kept.
+// (The filters below still know the other languages' words: some English headlines quote them.)
 // Plain JS so it runs in the Edge Function and can be tested with Node.
 
 /* ───────────── searches ───────────── */
-const ED = { en: 'hl=en-GB&gl=GB&ceid=GB:en', es: 'hl=es&gl=ES&ceid=ES:es', it: 'hl=it&gl=IT&ceid=IT:it', de: 'hl=de&gl=DE&ceid=DE:de', fr: 'hl=fr&gl=FR&ceid=FR:fr' };
-export const ACCEPT_LANG = { en: 'en-GB,en;q=0.9', es: 'es-ES,es;q=0.9', it: 'it-IT,it;q=0.9', de: 'de-DE,de;q=0.9', fr: 'fr-FR,fr;q=0.9' };
-const Q = (lang, q) => ({ q, ctx: 'intl', lang });
+const ED = { en: 'hl=en-GB&gl=GB&ceid=GB:en', us: 'hl=en-US&gl=US&ceid=US:en' };
+export const ACCEPT_LANG = { en: 'en-GB,en;q=0.9' };
+export const LANGS = ['en'];
+const Q = (lang, q, ed = 'en') => ({ q, ctx: 'intl', lang, ed });
 const EN = '(referee OR VAR OR "red card" OR penalty)';
+const EN2 = '(referee OR refereeing OR VAR OR "red card" OR penalty OR "sent off")';
 export const INTL_QUERIES = [
   Q('en', `${EN} "Premier League"`),
   Q('en', `${EN} (Arsenal OR Liverpool OR Chelsea OR "Manchester City" OR "Manchester United" OR Tottenham)`),
@@ -23,55 +26,75 @@ export const INTL_QUERIES = [
   Q('en', `(referee OR VAR) (Bundesliga OR "Bayern Munich" OR Dortmund OR Leverkusen)`),
   Q('en', `(referee OR VAR) ("Ligue 1" OR PSG OR Marseille OR Lyon)`),
   Q('en', `("VAR controversy" OR "refereeing decision" OR "referee error" OR "VAR error" OR "VAR blunder" OR "penalty decision")`),
-  Q('es', `(árbitro OR arbitraje OR VAR OR penalti OR "tarjeta roja") LaLiga`),
-  Q('es', `(árbitro OR arbitraje OR VAR OR penalti OR expulsión) ("Real Madrid" OR Barcelona OR Atlético)`),
-  Q('es', `(árbitro OR VAR OR penalti OR expulsión) (Sevilla OR Betis OR Villarreal OR Athletic OR "Real Sociedad" OR Valencia OR Osasuna OR Celta OR Espanyol)`),
-  Q('es', `("Comité Técnico de Árbitros" OR CTA OR Negreira OR "Tiempo de revisión" OR "audios del VAR" OR colegiado)`),
-  Q('es', `(árbitro OR VAR OR penalti) ("Champions League" OR "Liga de Campeones" OR "Europa League" OR "Conference League" OR "selección española")`),
-  Q('it', `(arbitro OR arbitraggio OR VAR OR rigore OR espulsione OR moviola) "Serie A"`),
-  Q('it', `(arbitro OR VAR OR rigore OR moviola) (Juventus OR Inter OR Milan OR Napoli OR Roma OR Lazio OR Atalanta OR Fiorentina OR Bologna)`),
-  Q('it', `(AIA OR Rocchi OR "Open VAR" OR designazioni OR "sala VAR" OR "errore arbitrale")`),
-  Q('it', `(arbitro OR VAR OR rigore) ("Champions League" OR "Europa League" OR "Conference League" OR Nazionale)`),
-  Q('de', `(Schiedsrichter OR VAR OR Videobeweis OR Elfmeter OR "Rote Karte" OR Platzverweis) Bundesliga`),
-  Q('de', `(Schiedsrichter OR Schiri OR VAR OR Elfmeter) (Bayern OR Dortmund OR BVB OR Leverkusen OR Leipzig OR Stuttgart OR Frankfurt OR Bremen)`),
-  Q('de', `("Kölner Keller" OR Schiedsrichterchef OR "Knut Kircher" OR "DFB-Schiedsrichter" OR Fehlentscheidung OR Schiedsrichter-Ansetzung)`),
-  Q('de', `(Schiedsrichter OR VAR OR Elfmeter) ("Champions League" OR "Europa League" OR "Conference League" OR Nationalmannschaft)`),
-  Q('fr', `(arbitre OR arbitrage OR VAR OR penalty OR "carton rouge" OR expulsion) "Ligue 1"`),
-  Q('fr', `(arbitre OR arbitrage OR VAR OR penalty) (PSG OR OM OR Marseille OR Monaco OR Lyon OR Lille OR Lens OR Nice OR Rennes)`),
-  Q('fr', `(arbitre OR arbitrage OR VAR OR penalty) ("Ligue des champions" OR "Ligue Europa" OR "Ligue Conférence" OR "équipe de France")`),
-  Q('fr', `("Direction technique de l'arbitrage" OR DTNA OR "Antony Gautier" OR "erreur d'arbitrage" OR "arbitrage vidéo")`),
+  // the US edition: ESPN, CBS, Fox, NBC, SI, The Athletic, AS USA on the European leagues and cups
+  Q('en', `${EN} ("Premier League" OR "Champions League" OR "La Liga" OR "Serie A" OR Bundesliga OR "Ligue 1")`, 'us'),
+  Q('en', `(referee OR VAR) ("Real Madrid" OR Barcelona OR Atletico OR Sevilla OR Betis OR Villarreal OR "Athletic Club" OR "Real Sociedad")`, 'us'),
+  // the English editions of the big outlets of Spain, Italy, Germany and France, and the leagues' own English sites
+  Q('en', `${EN2} (site:en.as.com OR site:marca.com OR site:sport.es OR site:mundodeportivo.com OR site:laliga.com)`),
+  Q('en', `${EN2} (site:football-italia.net OR site:legaseriea.it OR site:calciomercato.com OR site:ansa.it OR site:corrieredellosport.it)`),
+  Q('en', `${EN2} (site:dw.com OR site:bundesliga.com OR site:france24.com OR site:rfi.fr OR site:ligue1.com OR site:beinsports.com)`),
 ];
 const ymd = d => new Date(d).toISOString().slice(0, 10);
 export const intlUrl = (q, from, to) => 'https://news.google.com/rss/search?q=' +
-  encodeURIComponent(`${q.q} after:${ymd(from)} before:${ymd(to)}`) + '&' + ED[q.lang];
+  encodeURIComponent(`${q.q} after:${ymd(from)} before:${ymd(to)}`) + '&' + (ED[q.ed] || ED.en);
 
 /* ───────────── the outlets ───────────── */
-// the big outlets of each language (by web address); everything else the searches find is left out
+// the big English-language outlets, and the foreign outlets and league sites that publish an official English edition
+// (by web address); everything else the searches find is left out. A site with several languages (marca.com, sport.es,
+// mundodeportivo.com…) counts only for its English headlines: see looksEnglish.
 export const MEDIA = {
   en: ['bbc.co.uk', 'bbc.com', 'skysports.com', 'espn.com', 'espn.co.uk', 'espnfc.com', 'theguardian.com', 'nytimes.com', 'theathletic.com',
     'telegraph.co.uk', 'independent.co.uk', 'thetimes.co.uk', 'thetimes.com', 'reuters.com', 'apnews.com', 'mirror.co.uk', 'dailymail.co.uk',
     'standard.co.uk', 'talksport.com', 'goal.com', 'cbssports.com', 'nbcsports.com', 'foxsports.com', 'eurosport.com', 'eurosport.co.uk',
-    'uefa.com', 'fifa.com', 'premierleague.com', 'football-italia.net', 'inews.co.uk', 'thesun.co.uk', 'football365.com', 'si.com', 'cnn.com', 'tntsports.co.uk'],
-  es: ['marca.com', 'as.com', 'mundodeportivo.com', 'sport.es', 'elpais.com', 'elmundo.es', 'relevo.com', 'abc.es', 'cope.es', 'cadenaser.com',
-    'elconfidencial.com', 'rtve.es', 'lavanguardia.com', 'eldesmarque.com', 'estadiodeportivo.com', 'superdeporte.es', 'laliga.com', 'larazon.es', '20minutos.es'],
-  it: ['gazzetta.it', 'corrieredellosport.it', 'tuttosport.com', 'sport.sky.it', 'skysport.it', 'corriere.it', 'repubblica.it', 'sportmediaset.mediaset.it',
-    'mediaset.it', 'rainews.it', 'rai.it', 'ilmessaggero.it', 'calciomercato.com', 'tuttomercatoweb.com', 'lastampa.it', 'ilfattoquotidiano.it', 'fanpage.it', 'legaseriea.it', 'dazn.com'],
-  de: ['kicker.de', 'bild.de', 'sport1.de', 'sportschau.de', 'spiegel.de', 'faz.net', 'sueddeutsche.de', 'zeit.de', 'welt.de', 'sport.de', 'ran.de',
-    'skysport.de', 't-online.de', 'n-tv.de', 'zdf.de', '11freunde.de', 'transfermarkt.de', 'bundesliga.com', 'tagesschau.de', 'fr.de', 'tz.de', 'merkur.de', 'abendzeitung-muenchen.de'],
-  fr: ['lequipe.fr', 'bfmtv.com', 'rmcsport.bfmtv.com', 'leparisien.fr', 'lefigaro.fr', 'francefootball.fr', 'footmercato.net', 'beinsports.com', 'ouest-france.fr',
-    'sofoot.com', 'eurosport.fr', '20minutes.fr', 'lemonde.fr', 'francetvinfo.fr', 'laprovence.com', 'leprogres.fr', 'ligue1.com', 'rmc.bfmtv.com', 'lavoixdunord.fr', 'nicematin.com'],
+    'uefa.com', 'fifa.com', 'premierleague.com', 'inews.co.uk', 'thesun.co.uk', 'football365.com', 'si.com', 'cnn.com', 'tntsports.co.uk',
+    // English editions of Spanish, Italian, German and French outlets, and the leagues' English sites
+    'en.as.com', 'marca.com', 'sport.es', 'mundodeportivo.com', 'laliga.com', 'football-italia.net', 'legaseriea.it', 'calciomercato.com', 'ansa.it',
+    'corrieredellosport.it', 'dw.com', 'bundesliga.com', 'france24.com', 'rfi.fr', 'ligue1.com', 'beinsports.com'],
 };
 // the same outlets by the name Google gives them, for when no address comes with the item
-const MEDIA_NAMES = /^(?:BBC(?: Sport| News)?|Sky Sports|ESPN(?: FC| UK)?|The Guardian|The New York Times|The Athletic|The Telegraph|The Independent|The Times|Reuters|AP News|Associated Press|Mirror|Daily Mail|Evening Standard|talkSPORT|GOAL|Goal\.com|CBS Sports|NBC Sports|FOX Sports|Eurosport|UEFA(?:\.com)?|FIFA|Premier League|Football Italia|inews|The Sun|Football365|TNT Sports|Sports Illustrated|CNN|MARCA|Marca|Diario AS|AS(?: \.com)?|Mundo Deportivo|SPORT|Sport|EL PAÍS|El País|EL MUNDO|El Mundo|Relevo|ABC|COPE|Cadena SER|El Confidencial|RTVE|La Vanguardia|ElDesmarque|Estadio Deportivo|Superdeporte|LaLiga|La Razón|20minutos|La Gazzetta dello Sport|Gazzetta|Corriere dello Sport|Tuttosport|Sky Sport|Corriere della Sera|la Repubblica|Sport Mediaset|Mediaset|Rai News|RaiNews|Il Messaggero|Calciomercato\.com|TUTTOmercatoWEB(?:\.com)?|La Stampa|Il Fatto Quotidiano|Fanpage|Lega Serie A|DAZN|kicker|BILD|Bild|SPORT1|Sport1|sportschau(?:\.de)?|DER SPIEGEL|Der Spiegel|FAZ|Frankfurter Allgemeine(?: Zeitung)?|Süddeutsche Zeitung|ZEIT ONLINE|Die Zeit|WELT|Welt|sport\.de|ran\.de|ran|Sky Sport Deutschland|t-online|n-tv(?:\.de)?|ZDF|ZDFheute|11FREUNDE|11 Freunde|Transfermarkt|Bundesliga|tagesschau(?:\.de)?|Frankfurter Rundschau|tz|Merkur|Abendzeitung München|L'Équipe|L'Equipe|RMC Sport|BFMTV|Le Parisien|Le Figaro|France Football|Foot Mercato|beIN SPORTS|Ouest-France|So Foot|SO FOOT|Eurosport France|20 Minutes|Le Monde|Franceinfo|franceinfo|La Provence|Le Progrès|Ligue 1|La Voix du Nord|Nice-Matin)$/;
+const MEDIA_NAMES = /^(?:BBC(?: Sport| News)?|Sky Sports|ESPN(?: FC| UK)?|The Guardian|The New York Times|The Athletic|The Telegraph|The Independent|The Times|Reuters|AP News|Associated Press|(?:The |Daily )?Mirror|Daily Mail|(?:London )?Evening Standard|talkSPORT|GOAL|Goal\.com|CBS Sports|NBC Sports|FOX Sports|Eurosport|UEFA(?:\.com)?|FIFA|Premier League|Football Italia|inews|The Sun|Football365|TNT Sports|Sports Illustrated|CNN|AS USA|AS English|Diario AS|MARCA(?: in English)?|Marca(?: in English)?|SPORT(?: English)?|Mundo Deportivo|LALIGA|LaLiga|Lega Serie A|Calciomercato(?:\.com)?|ANSA(?: English)?|Corriere dello Sport|DW(?: \(English\))?|Deutsche Welle|Bundesliga(?: \| official website)?|FRANCE 24(?: English)?|France 24|RFI(?: English)?|ligue1\.com|Ligue 1|beIN SPORTS)$/;
 const hostOf = u => { try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; } };
 // a league's own site is about that league even when the headline doesn't say so
 export const LEAGUE_SITE = { 'premierleague.com': 'Premier League', 'laliga.com': 'LaLiga', 'legaseriea.it': 'Serie A', 'bundesliga.com': 'Bundesliga', 'ligue1.com': 'Ligue 1', 'uefa.com': 'UEFA' };
 export const leagueHint = srcUrl => { const h = hostOf(srcUrl); const k = Object.keys(LEAGUE_SITE).find(d => h === d || h.endsWith('.' + d)); return k ? LEAGUE_SITE[k] : ''; };
 export function topOutlet(lang, srcUrl, srcName) {
+  if (!MEDIA[lang]) return false;
   const h = hostOf(srcUrl);
-  if (h) return (MEDIA[lang] || []).some(d => h === d || h.endsWith('.' + d));
+  if (h) return MEDIA[lang].some(d => h === d || h.endsWith('.' + d));
   return MEDIA_NAMES.test(String(srcName || '').trim());
 }
+// Is this headline written in English? Counts the little words (and a few football words) of English and of Spanish,
+// Italian, German and French. Words that are also names or English are not counted ("El Clasico", "La Liga", "De Bruyne",
+// "Les Bleus", "Al-Nassr", "Como", "Arsenal face…"), and no letter alone decides (Gyökeres, Iñaki Williams, Jürgen Klopp).
+// strict (a site that also publishes in other languages): at least one English word is needed as well.
+const EN_WORDS = new Set(['the', 'an', 'and', 'of', 'to', 'for', 'with', 'after', 'as', 'is', 'are', 'on', 'at', 'by', 'from', 'his', 'her',
+  'their', 'was', 'were', 'be', 'been', 'has', 'have', 'had', 'over', 'against', 'why', 'how', 'what', 'who', 'not', 'but', 'into', 'out', 'up', 'should',
+  'would', 'could', 'will', 'says', 'said', 'it', 'this', 'that', 'they', 'he', 'she', 'we', 'you', 'denied', 'off', 'than', 'about', 'despite', 'amid', 'vs',
+  'referee', 'referees', 'refereeing', 'penalty', 'penalties', 'red', 'card', 'sent', 'disallowed', 'goal', 'handball', 'offside', 'explained', 'controversy',
+  'decision', 'decisions', 'officials', 'review', 'awarded', 'ruled', 'ban', 'banned', 'appeal']);
+const FOREIGN_WORDS = new Set([
+  'los', 'las', 'del', 'que', 'por', 'para', 'una', 'y', 'tras', 'ante', 'sobre', 'pero', 'muy', 'más', 'está', 'es', 'un', 'lo', 'su', 'sus', 'se', 'ha', 'contra', 'sin',
+  'il', 'gli', 'della', 'dello', 'dei', 'delle', 'che', 'nel', 'nella', 'sul', 'sulla', 'alla', 'agli', 'è', 'ma', 'tra', 'dopo', 'questo', 'anche', 'contro',
+  'der', 'das', 'und', 'mit', 'nach', 'gegen', 'für', 'ist', 'nicht', 'ein', 'eine', 'einen', 'dem', 'beim', 'vom', 'zum', 'zur', 'auf', 'bei', 'wie', 'auch', 'noch',
+  'des', 'du', 'avec', 'pour', 'une', 'après', 'est', 'pas', 'sur', 'dans', 'et', 'aux', 'ce', 'cette', 'qui', 'mais', 'été', 'à', 'où',
+  'árbitro', 'árbitros', 'arbitro', 'arbitri', 'arbitre', 'arbitres', 'arbitrage', 'arbitraggio', 'arbitraje', 'schiedsrichter', 'schiri', 'rigore', 'rigori',
+  'penalti', 'penaltis', 'elfmeter', 'moviola', 'polémica', 'polemica', 'polémique', 'fehlentscheidung', 'videobeweis', 'abseits', 'fuorigioco', 'hors',
+  'tarjeta', 'roja', 'cartellino', 'rosso', 'carton', 'rouge', 'expulsión', 'expulsado', 'espulsione', 'espulso', 'gol', 'jornada', 'giornata', 'spieltag', 'journée',
+  'partido', 'partita', 'spiel']);
+export function looksEnglish(title, strict = false) {
+  const t = String(title || '');
+  // Spanish question and exclamation marks; French and Italian elisions ("l'arbitre", "dell'arbitro", "c'è"), names like N'Golo or D'Ambrosio apart
+  if (/[¿¡]/.test(t) || /(?:^|[^\p{L}])(?:l|d|qu|c|s|n|j|dell|nell|sull|all|dall|un)['’]\p{L}/u.test(t)) return false;
+  const words = t.toLowerCase().match(/\p{L}+/gu) || [];
+  let en = 0, other = 0;
+  for (const w of words) { if (EN_WORDS.has(w)) en++; else if (FOREIGN_WORDS.has(w)) other++; }
+  if (strict && !en) return false;
+  return other === 0 || en > other;
+}
+// sites that publish in English and in another language: their headlines are checked more strictly
+export const BILINGUAL = ['en.as.com', 'marca.com', 'sport.es', 'mundodeportivo.com', 'laliga.com', 'legaseriea.it', 'calciomercato.com', 'ansa.it', 'corrieredellosport.it',
+  'dw.com', 'bundesliga.com', 'france24.com', 'rfi.fr', 'ligue1.com', 'beinsports.com'];
+export const bilingual = srcUrl => { const h = hostOf(srcUrl); return !!h && BILINGUAL.some(d => h === d || h.endsWith('.' + d)); };
 
 /* ───────────── refereeing filter ───────────── */
 const W = '\\p{L}*';
@@ -193,7 +216,7 @@ const BG_CLUBS = [['ludo', 'Ludogorets?(?: Razgrad)?'], ['levski', 'Levski(?: So
 const BG_REF = new RegExp(CSx('Kabakov|Gidzhenov|Gidjenov|Chinkov|Trenchev|Mitrev|Draganov|Kabakow|Gidschenow').source + '|' +
   I(`bulgarian referee|bulgarian official|árbitro búlgaro|arbitro bulgaro|bulgarische[rn]? schiedsrichter${W}|arbitre bulgare|bulgarisch${W} unparteiisch${W}`).source, 'iu');
 
-// Is this headline (in one of the five languages) about refereeing in the World sections? → classification, or null
+// Is this headline about refereeing in the World sections? → classification, or null
 export function analyzeIntl(title, desc, lang) {
   title = String(title || ''); desc = String(desc || '');
   const t = title + ' \n ' + desc;
