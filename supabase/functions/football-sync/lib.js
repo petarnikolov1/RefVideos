@@ -30,12 +30,8 @@ export function decodeRsc(html) {
   for (const m of html.matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g)) { try { out += JSON.parse(m[1]); } catch { /* skip */ } }
   return out;
 }
-// the JSON value after "key": (array or object), found with bracket counting that respects strings
-export function jsonAfter(text, key, from = 0) {
-  const i = text.indexOf(`"${key}":`, from);
-  if (i < 0) return null;
-  let j = i + key.length + 3;
-  while (text[j] === ' ') j++;
+// the JSON value (list or object) that starts at text[j], found with bracket counting that respects strings
+function valueAt(text, j) {
   const open = text[j], close = open === '[' ? ']' : open === '{' ? '}' : null;
   if (!close) return { value: undefined, end: j };          // not a list/object here: the caller can look further
   let depth = 0, inStr = false;
@@ -48,11 +44,33 @@ export function jsonAfter(text, key, from = 0) {
   }
   return null;
 }
+// the JSON value after "key": (array or object)
+export function jsonAfter(text, key, from = 0) {
+  const i = text.indexOf(`"${key}":`, from);
+  if (i < 0) return null;
+  let j = i + key.length + 3;
+  while (text[j] === ' ') j++;
+  return valueAt(text, j);
+}
 const efbetStatus = t => { t = String(t || '').toUpperCase(); return t === 'FINISHED' ? 'finished' : /LIVE|PROGRESS|HALF|PERIOD/.test(t) ? 'live' : /POSTPON|CANCEL|ABANDON|SUSPEND|INTERRUPT/.test(t) ? 'postponed' : 'scheduled'; };
 const assetLogo = c => (c && c.assets && c.assets.logo && c.assets.logo !== '$undefined') ? c.assets.logo : (c && c.logo && c.logo !== '$undefined' ? c.logo : null);
 
+// the page lists each team once: {"id":"fb:t:821","name":"Спартак Варна",…,"assets":{"logo":"…"}}. Since November 2026 a
+// match names its teams only by id ("competitorOne":{"id":"fb:t:821"}), so names and logos are looked up here.
+export function efbetTeams(rsc) {
+  const out = new Map();
+  for (const m of rsc.matchAll(/\{"id":"(fb:t:\d+)","name":"/g)) {
+    if (out.has(m[1])) continue;
+    const v = valueAt(rsc, m.index);
+    if (v && v.value && v.value.name) out.set(m[1], { name: v.value.name, logo: assetLogo(v.value) });
+  }
+  return out;
+}
+
 export function parseEfbetMatches(html) {
   const rsc = decodeRsc(html);
+  const teams = efbetTeams(rsc);
+  const side = c => (c && c.name ? c : { ...(c || {}), ...(teams.get(c && c.id) || {}) });
   let rounds = null, from = 0;
   for (let tries = 0; tries < 10 && !rounds; tries++) {   // the first "rounds" list that actually holds matches
     const hit = jsonAfter(rsc, 'rounds', from);
@@ -63,6 +81,8 @@ export function parseEfbetMatches(html) {
   const out = [];
   for (const r of rounds || []) for (const m of r.matches || []) {
     if (!m || !m.competitorOne || !m.competitorTwo) continue;
+    const one = side(m.competitorOne), two = side(m.competitorTwo);
+    if (!one.name || !two.name) continue;     // a team the page doesn't name is left out: a nameless row would stop the whole save
     const status = efbetStatus(m.status && m.status.type);
     const played = status === 'finished' || status === 'live';
     const sc = m.score || {}, ht = (sc.breakdown && sc.breakdown.halfTime) || {};
@@ -72,8 +92,8 @@ export function parseEfbetMatches(html) {
       round: num(m.round && m.round.name) ?? num(r.name),
       kickoff: String((m.timing && m.timing.kickoffTime) || '').replace(/^\$D/, '') || null,
       status,
-      home_name: m.competitorOne.name, away_name: m.competitorTwo.name,
-      home_logo: assetLogo(m.competitorOne), away_logo: assetLogo(m.competitorTwo),
+      home_name: one.name, away_name: two.name,
+      home_logo: assetLogo(one), away_logo: assetLogo(two),
       home_score: played ? num(sc.competitorOne) : null, away_score: played ? num(sc.competitorTwo) : null,
       ht_home: played ? num(ht.competitorOne) : null, ht_away: played ? num(ht.competitorTwo) : null,
       source_url: 'https://efbetleague.com/match/' + fid.replace(/:/g, '-'),
@@ -93,8 +113,10 @@ export function parseEfbetStandings(html) {
   }
   const st = stages.find(s => s && s.standings && Array.isArray(s.standings.entries) && s.standings.entries.length);
   if (!st) return [];
+  const teams = efbetTeams(rsc);
   return st.standings.entries.map(e => {
     const s = e.stats || {};
+    if (e.competitor && !e.competitor.name && teams.has(e.competitor.id)) e = { ...e, competitor: { ...e.competitor, ...teams.get(e.competitor.id) } };
     const form = ((e.form && e.form.results) || []).map(x => String(x.result || '').charAt(0).toUpperCase()).filter(x => /[WDL]/.test(x)).reverse().join('');   // oldest → newest
     return { rank: num(e.rank), team_name: e.competitor && e.competitor.name, logo: assetLogo(e.competitor),
       played: num(s.played), won: num(s.won), drawn: num(s.drawn), lost: num(s.lost),

@@ -40,7 +40,7 @@ A news site for refereeing in Bulgarian football — efbet Liga (1st League), 2n
 | File | What it does |
 |---|---|
 | `public/index.html` | The whole site: page, styles and logic. |
-| `public/_worker.js` | Runs on Cloudflare: article video/minute finder (`/extract`), feed relay (`/feed`, a fallback for the news search), Google Drive folder lister for members (`/drive/list`), Supabase settings (`/config.json`). |
+| `public/_worker.js` | Runs on Cloudflare: article video/minute finder (`/extract`), feed relay (`/feed`, a fallback for the news search), Google Drive folder lister for members (`/drive/list`), Втора лига team logos from mr-bit.bg served from the site's own address (`/logo`, so blockers that filter betting sites don't hide them), Supabase settings (`/config.json`). |
 | `supabase-setup.sql` | Creates the database tables (members, videos, video categories, comments, read marks), security rules and the private video storage bucket in Supabase. |
 | `supabase/football-setup.sql` | Results and tables: the match, table and round-review tables, helper functions and the two scheduled sync jobs. |
 | `supabase/news-setup.sql` | Saved news: the news table, merge function and the two scheduled search jobs. |
@@ -49,6 +49,7 @@ A news site for refereeing in Bulgarian football — efbet Liga (1st League), 2n
 | `supabase/world-setup.sql` | World competitions: the competition list, the extra match and table columns, and the two scheduled world-sync jobs. |
 | `supabase/functions/world-sync/` | Supabase Edge Function that reads the world competitions' results, fixtures and tables from ESPN (`world.js` lists the competitions). |
 | `supabase/refs-setup.sql` | Referee appointments and the Third League: the appointments and punishments tables and the scheduled refs-sync job. |
+| `supabase/functions/football-sync/football.test.mjs` | Tests of the efbetleague.com parser on the page's current layout (teams listed once, matches naming them by id). |
 | `supabase/functions/refs-sync/` | Supabase Edge Function that reads the referee appointments (bfunion.bg, bfu-tournaments.com), the Third League South-West's results and table (bulgarian-football.com) and its punishments PDFs (`refs.js` has the parsers, `refs.test.mjs` their tests). |
 
 ## Results and Table — how they stay current

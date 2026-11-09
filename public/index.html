@@ -1912,8 +1912,11 @@ function otherVids(m){
 }
 const chanName = c => /професионална футболна лига/i.test(c || '') ? 'БПФЛ' : String(c || 'YouTube').trim();
 const ytWatch = id => 'https://www.youtube.com/watch?v=' + encodeURIComponent(id);
+// Втора лига's logos come from mr-bit.bg, a betting site that ad and DNS blockers filter: they go through the site's
+// own /logo route (Cloudflare worker) so they show for everyone
+const logoSrc = src => /^https:\/\/(?:www\.)?mr-bit\.bg\//.test(src) ? '/logo?u=' + encodeURIComponent(src) : src;
 const logoHtml = (src, name) => src && /^https:\/\//.test(src)
-  ? `<img class="tlogo" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-init="${esc(initials(name))}">`
+  ? `<img class="tlogo" src="${esc(logoSrc(src))}" alt="" loading="lazy" referrerpolicy="no-referrer" data-init="${esc(initials(name))}">`
   : `<span class="tinit">${esc(initials(name))}</span>`;
 
 // World competitions on the Results page: ESPN gives no matchday, so the rounds are worked out from the fixture list.
