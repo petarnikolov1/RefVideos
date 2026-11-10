@@ -135,3 +135,12 @@ select cron.schedule('news-intl-backfill', '3-59/6 * * * *', $job$
     body := '{"backfill": true, "intl": true}'::jsonb,
     timeout_milliseconds := 150000);
 $job$);
+-- the articles' own addresses for the ones found through Google News (Google's links can't be opened from a server):
+-- news-links finds each headline in its outlet's RSS feed or news sitemap while it is still there (a day or two)
+select cron.schedule('news-links', '1-59/10 * * * *', $job$
+  select net.http_post(
+    url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/news-links',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 150000);
+$job$);

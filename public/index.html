@@ -221,6 +221,8 @@
   a.vbtn{color:inherit;text-decoration:none}
   .vbtn.yt:hover{background:var(--line)}
   .mplayer .player{margin:10px 0 2px}
+  .mvids{margin:10px 0}
+  .mvids .olist{margin:6px 0 10px}
   .olist{display:flex;flex-direction:column;gap:4px;margin-top:10px;max-height:320px;overflow-y:auto}
   .orow{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:var(--chip);color:inherit;border:1px solid transparent;border-radius:10px;padding:8px 10px;font:inherit;text-decoration:none;cursor:pointer}
   .orow:hover{border-color:var(--line)}
@@ -744,21 +746,24 @@ async function syncReads(){
 let EXTRACT = HOSTED ? 'unknown' : 'off';      // 'on' once /extract answers, 'off' if not on Cloudflare
 const XQ = [], XQSET = new Set();
 let xActive = 0;
-const xFresh = a => { const c = X[a.aid]; return c && Date.now() - c.t < (c.ok ? 3 * 864e5 : 6 * 3600e3); };
+// a result counts only while it came from this finder version (5: nothing from the rest of the page) and the same address
+// (a Google News link that news-links later replaced with the article's own address is looked at again)
+const XV = 5;
+const xFresh = a => { const c = X[a.aid]; return c && c.v === XV && c.link === a.link && Date.now() - c.t < (c.ok ? 3 * 864e5 : 6 * 3600e3); };
 
-const xFail = err => ({ t: Date.now(), ok: false, url: '', videos: [], minutes: [], err, diag: [] });
+const xFail = (err, a) => ({ t: Date.now(), v: XV, link: a.link, ok: false, url: '', videos: [], minutes: [], err, diag: [] });
 async function extractArticle(a){
   let r;
   try {
     r = await fetch('/extract?url=' + encodeURIComponent(a.link) + '&title=' + encodeURIComponent(a.title) + '&src=' + encodeURIComponent(a.src || ''));
-  } catch (e) { X[a.aid] = xFail('network error'); return; }
+  } catch (e) { X[a.aid] = xFail('network error', a); return; }
   const type = r.headers.get('content-type') || '';
   // a plain page instead of JSON means the site isn't running the Cloudflare worker (e.g. opened as a local file)
   if (!type.includes('json') && (r.ok || r.status === 404)) { EXTRACT = 'off'; XQ.length = 0; XQSET.clear(); log('Video finder is not available on this host'); return; }
   let j;
-  try { j = await r.json(); } catch (e) { X[a.aid] = xFail('server error ' + r.status); saveX(); return; }   // one failure never switches the feature off
+  try { j = await r.json(); } catch (e) { X[a.aid] = xFail('server error ' + r.status, a); saveX(); return; }   // one failure never switches the feature off
   EXTRACT = 'on';
-  X[a.aid] = { t: Date.now(), ok: !!j.ok, url: j.url || '', videos: (j.videos || []).slice(0, 10), minutes: (j.minutes || []).slice(0, 20),
+  X[a.aid] = { t: Date.now(), v: XV, link: a.link, ok: !!j.ok, url: j.url || '', videos: (j.videos || []).slice(0, 10), minutes: (j.minutes || []).slice(0, 20),
     err: j.error || '', diag: (j.diag || []).slice(0, 12) };
   if (!j.ok) log(`Couldn't open "${a.title.slice(0, 50)}" (${a.src}): ${j.error}${j.diag && j.diag.length ? ' — ' + j.diag.join(' → ') : ''}`);
   saveX();
@@ -791,7 +796,7 @@ function toEmbed(u, kind){
   if (id && /^[\w-]{11}$/.test(id)) return { kind:'YouTube', key:'yt:' + id, src:`https://www.youtube-nocookie.com/embed/${id}` };
   if ((h === 'drive.google.com' || h === 'docs.google.com') && (id = driveId(u))) return { kind:'Google Drive', key:'gd:' + id, src:`https://drive.google.com/file/d/${id}/preview` };
   if (h === 'vimeo.com' || h === 'player.vimeo.com') { id = (url.pathname.match(/(\d{6,})/) || [])[1]; if (id) return { kind:'Vimeo', key:'vm:' + id, src:`https://player.vimeo.com/video/${id}` }; }
-  if (h.endsWith('dailymotion.com') || h === 'dai.ly') { id = (url.pathname.match(/(?:video\/|^\/)([a-z0-9]{6,})/i) || [])[1]; if (id) return { kind:'Dailymotion', key:'dm:' + id, src:`https://www.dailymotion.com/embed/video/${id}` }; }
+  if (h.endsWith('dailymotion.com') || h === 'dai.ly') { id = url.searchParams.get('video') || (url.pathname.match(/(?:video\/|^\/(?!player\b|embed\b))([a-z0-9]{6,})/i) || [])[1]; if (id && /^[a-z0-9]{5,}$/i.test(id)) return { kind:'Dailymotion', key:'dm:' + id, src:`https://www.dailymotion.com/embed/video/${id}` }; }
   if (h.endsWith('vbox7.com')) { id = url.searchParams.get('vid') || (url.pathname.match(/play:(\w+)/) || [])[1]; if (id && /^\w+$/.test(id)) return { kind:'Vbox7', key:'vb:' + id, src:`https://www.vbox7.com/emb/external.php?vid=${id}` }; }
   if (h === 'streamable.com') { id = (url.pathname.match(/^\/(?:e\/)?(\w{4,})/) || [])[1]; if (id) return { kind:'Streamable', key:'st:' + id, src:`https://streamable.com/e/${id}` }; }
   if (h === 'instagram.com' && (m = url.pathname.match(/^\/(p|reel|tv)\/([\w-]+)/))) return { kind:'Instagram', key:'ig:' + m[2], src:`https://www.instagram.com/${m[1] === 'tv' ? 'p' : m[1]}/${m[2]}/embed` };
@@ -834,7 +839,7 @@ function storyMedia(s){
   const vids = new Map(), files = new Map(), links = new Map(), mins = new Map(), failed = [];
   let done = 0;
   for (const a of targets) {
-    const r = X[a.aid]; if (!r) continue;
+    const r = X[a.aid]; if (!r || r.v !== XV) continue;   // results of an older finder may hold videos from the rest of the page
     done++;
     if (!r.ok) { failed.push({ a, r }); continue; }
     for (const v of r.videos || []) {
@@ -876,23 +881,82 @@ function mediaHtml(s){
   players.forEach(e => out.push(playerHtml(e) + `<div class="muted">${esc(e.kind)} from ${esc(e.from)}${e.page ? ' (found on the article page)' : ''}</div>`));
   M.files.slice(0, 2).forEach(f => out.push(fileHtml(f) + `<div class="muted">Video from ${esc(f.from)} · <a href="${esc(safeUrl(f.src))}" target="_blank" rel="noopener noreferrer">open the file</a></div>`));
   if (M.links.length) out.push('<div class="msg">' + M.links.slice(0, 4).map(l => `<a class="btn small" href="${esc(safeUrl(l.href))}" target="_blank" rel="noopener noreferrer">▶ ${esc(l.label)} (${esc(l.from)})</a>`).join(' ') + '</div>');
+  const MM = storyMatchMedia(s);
+  if (MM.need.length) loadMatchVids(MM.need);
+  out.push(matchMediaHtml(s, MM));
   if (M.mins.length) out.push('<h3>Minutes mentioned</h3><div class="mins">' + M.mins.map(m =>
     `<div class="minrow"><span class="min">${minLabel(m)}</span>${m.tags.length ? '<b>' + esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) + '</b> · ' : ''}<span class="muted">…${esc(m.ctx || '')}… (${esc(m.from)})</span></div>`).join('') + '</div>');
   if (s.bgOnly) out.push(ebfuHtml(s, M.mins));
   if (EXTRACT === 'off') out.push('<div class="muted">Finding videos inside articles works on the Cloudflare-hosted site.</div>');
   else if (M.pending) out.push(`<div class="muted">Looking for videos in ${M.targets.length} article${M.targets.length > 1 ? 's' : ''}…</div>`);
-  else if (!players.length && !M.files.length && !M.links.length && !uploads.length) out.push('<div class="muted">No video found in the articles.</div>');
+  else if (!players.length && !M.files.length && !M.links.length && !uploads.length) out.push(`<div class="muted">No video found in the articles${MM.items.length ? ' (the match videos are above)' : ''}.</div>`);
   if (M.failed.length) out.push(`<details class="muted"><summary>Couldn't open ${M.failed.length} of ${M.targets.length} articles</summary>${M.failed.map(({ a, r }) =>
     `<div>• ${esc(a.src)}: ${esc(r.err)}${r.diag && r.diag.length ? ' (' + esc(r.diag.join(' → ')) + ')' : ''}</div>`).join('')}</details>`);
   if (EXTRACT !== 'off' && !M.pending) out.push('<div class="actions"><button class="small" data-act="retry">↻ Look for videos again</button></div>');
   const sig = [uploads.map(v => v.id + ':' + (COMMENTS[v.id] || []).length), players.map(p => p.key), M.files.map(f => f.key), M.links.map(l => l.href),
-    M.mins.map(m => m.m + '+' + m.plus), M.failed.length, M.pending, EXTRACT].join('|');
+    M.mins.map(m => m.m + '+' + m.plus), M.failed.length, M.pending, EXTRACT, MM.items.map(x => x.v.id), MSEL[s.key] || '', MM.need.length].join('|');
   return { html: out.join(''), sig };
 }
 function storyHasVideo(s, M){
   if (VIDEOS.some(v => v.article_key && s.aidSet.has(v.article_key))) return true;
   M = M || storyMedia(s);
-  return M.players.length > 0 || M.files.length > 0 || M.links.length > 0;
+  return M.players.length > 0 || M.files.length > 0 || M.links.length > 0 || storyMatchMedia(s).items.length > 0;
+}
+
+// The videos of the match a story is about (Gong's Репортаж/Разширен and other channels' reports): the situations the
+// articles write about are in them. Taken from the Results page's data when that league is loaded, else asked for
+// (a few matches at a time). In the news feed only: on the Results page the match card above already has them.
+const MV = new Map(), MV_WAIT = new Set(), MSEL = {};
+function matchVids(id){
+  for (const d of Object.values(FB.data)) {
+    const m = d && !d.world && d.matches && d.matches.find(x => String(x.id) === id);
+    if (m) return m;
+  }
+  return MV.get(id);
+}
+async function loadMatchVids(ids){
+  ids = ids.filter(id => !MV.has(id) && !MV_WAIT.has(id));
+  if (!SB || !ids.length) return;
+  ids.forEach(id => MV_WAIT.add(id));
+  const { data, error } = await SB.from('football_matches').select('id,short_video,long_video,other_videos').in('id', ids);
+  ids.forEach(id => MV_WAIT.delete(id));
+  if (error) { log('Could not load the match videos: ' + error.message); ids.forEach(id => MV.set(id, {})); }
+  else { const got = new Map((data || []).map(m => [String(m.id), m])); ids.forEach(id => MV.set(id, got.get(id) || {})); }
+  scheduleRender();
+}
+function storyMatchMedia(s){
+  if (VIEW === 'results') return { items: [], need: [] };
+  const ms = (matchNewsIndex().byStory.get(s.key) || []).filter(m => m.status === 'finished' || m.status === 'live').slice(-2);
+  const items = [], need = [], seen = new Set();
+  for (const m of ms) {
+    const id = String(m.id), v = matchVids(id);
+    if (!v) { need.push(id); continue; }
+    const add = (x, label) => { if (x && x.id && !seen.has(x.id)) { seen.add(x.id); items.push({ m, v: x, label }); } };
+    add(isGongVid(v.short_video) ? v.short_video : null, 'Репортаж');
+    add(isGongVid(v.long_video) ? v.long_video : null, 'Разширен репортаж');
+    otherVids(v).slice(0, 4).forEach(x => add(x, chanName(x.channel)));
+  }
+  return { items, need };
+}
+function matchMediaHtml(s, MM){
+  if (!MM.items.length) return '';
+  const sel = MM.items.find(x => x.v.id === MSEL[s.key]);
+  const byMatch = new Map();
+  MM.items.forEach(x => { const k = String(x.m.id); if (!byMatch.has(k)) byMatch.set(k, []); byMatch.get(k).push(x); });
+  const rows = [...byMatch.values()].map(list => {
+    const m = list[0].m, score = m.home_score != null ? `${m.home_score}:${m.away_score}` : '–';
+    return `<div class="muted">Видео от мача <b>${esc(teamName(m.home_name))} ${esc(score)} ${esc(teamName(m.away_name))}</b></div>
+      <div class="olist">${list.map(x => {
+        const inner = `<span class="ic">▶</span><span class="ot"><b>${esc(x.v.title || x.label)}</b><span class="muted">${esc(x.label)}${x.v.length ? ' · ' + esc(x.v.length) : ''}</span></span>`;
+        return x.v.embed === false
+          ? `<a class="orow" href="${ytWatch(x.v.id)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+          : `<button class="orow${sel === x ? ' on' : ''}" data-act="mvid" data-vid="${esc(x.v.id)}">${inner}</button>`;
+      }).join('')}</div>`;
+  }).join('');
+  const player = sel ? `<div class="mplayer">${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(sel.v.id)}?autoplay=1&rel=0` })}
+      <div class="mfoot"><span class="mnote">${esc(sel.v.title || '')} · ${esc(sel.v.channel || '')}</span>
+      <a class="ytbtn" href="${ytWatch(sel.v.id)}" target="_blank" rel="noopener noreferrer"><span class="yti" aria-hidden="true"></span>Гледай в YouTube</a></div></div>` : '';
+  return `<div class="mvids">${rows}${player}</div>`;
 }
 
 /* ======================= SUPABASE: ACCOUNTS, VIDEOS, ADMIN ======================= */
@@ -1208,6 +1272,7 @@ function render(){
   // look for videos in the stories on screen (first article of each), and all articles of opened stories
   queueExtract(list.slice(0, 30).flatMap(s => extractTargets(s).slice(0, 2)));
   list.filter(s => EXPANDED.has(s.key)).forEach(s => queueExtract(extractTargets(s), true));
+  loadMatchVids([...new Set(list.slice(0, shown).flatMap(s => storyMatchMedia(s).need))].slice(0, 80));
 }
 
 /* ======================= UI: FORMS KEEP WHAT YOU TYPE ======================= */
@@ -2844,6 +2909,7 @@ function bindStoryEvents(container, redraw){
     const card = b.closest('.card'), s = card && buildStories().find(x => x.key === card.dataset.key); if (!s) return;
     if (b.dataset.act === 'expand') { EXPANDED.has(s.key) ? EXPANDED.delete(s.key) : EXPANDED.add(s.key); if (EXPANDED.has(s.key)) queueExtract(extractTargets(s), true); redraw(); }
     if (b.dataset.act === 'read') setRead(s.arts.map(a => a.aid), !storyRead(s));
+    if (b.dataset.act === 'mvid') { MSEL[s.key] = MSEL[s.key] === b.dataset.vid ? '' : b.dataset.vid; redraw(); }
     if (b.dataset.act === 'retry') { const t = extractTargets(s); t.forEach(a => delete X[a.aid]); saveX(); queueExtract(t, true); redraw(); }
     if (b.dataset.act === 'upload') {
       const mins = new Set(); extractTargets(s).forEach(a => (X[a.aid] ? X[a.aid].minutes : []).forEach(m => mins.add(minLabel(m).replace("'", ''))));

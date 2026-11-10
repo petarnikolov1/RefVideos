@@ -16,7 +16,7 @@
 
 const FEED_HOSTS = ['news.google.com', 'www.bing.com', 'bing.com'];
 const FEED_CACHE_SECONDS = 900;
-const EXTRACT_VERSION = 4;   // bump to ignore results cached by older versions
+const EXTRACT_VERSION = 5;   // bump to ignore results cached by older versions
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 const BROWSER_HEADERS = { 'User-Agent': UA, 'Accept-Language': 'bg-BG,bg;q=0.9,en;q=0.6' };
 // Google shows a cookie-consent page to EU servers unless consent cookies are present
@@ -313,7 +313,11 @@ const VIDEO_HOSTS = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.
 const PLAYER_HINT = /player|embed|video|vod|stream|media|tv|clip/i;
 const baseDomain = h => h.toLowerCase().replace(/^www\./, '').split('.').slice(-2).join('.');
 
-function extractFromHtml(html, pageUrl) {
+// Only the article's own videos: those in the article body (cut before its "related news" part), the ones the page
+// declares as its video (JSON-LD, og:video), and a player elsewhere on the page only when it is titled like the
+// article. Players in sidebars, "watch also" widgets, the site's own TV and the preview clips of other articles' cards
+// (data-video-preview) are left out: they have nothing to do with the story.
+export function extractFromHtml(html, pageUrl) {
   html = String(html).slice(0, MAX_BYTES);
   let pageHost = ''; try { pageHost = new URL(pageUrl).hostname; } catch {}
   const meta = prop => {
@@ -322,7 +326,7 @@ function extractFromHtml(html, pageUrl) {
     return decodeEntities((tag.match(/content=["']([^"']*)["']/i) || [])[1] || '');
   };
   const title = meta('og:title') || decodeEntities(((html.match(/<title[^>]*>([^<]*)/i) || [])[1] || '').trim());
-  const region = articleRegion(html);
+  const region = trimRelated(articleRegion(html));
 
   const cands = [];
   const add = (u, how, iframe) => {
@@ -345,17 +349,19 @@ function extractFromHtml(html, pageUrl) {
     if (/(^|\.)tiktok\.com$/i.test(p.hostname) && !/\/video\/\d+|\/embed\//.test(p.pathname)) return;
     if (!cands.some(c => c.url === p.href)) cands.push({ url: p.href, how, kind });
   };
-  const scanEmbeds = (src, how) => {
-    for (const m of src.matchAll(/<iframe\b[^>]*?\s(?:data-src|data-lazy-src|data-original|data-url|src)=["']([^"']+)["']/gi)) add(m[1], how, true);
-    for (const m of src.matchAll(/<(?:video|source)\b[^>]*?\s(?:data-src|src)=["']([^"']+)["']/gi)) add(m[1], how);
-    for (const m of src.matchAll(/(?:videoid|data-video-?id|data-youtube-?id|data-yt-?id|data-ytid|data-embed-id)=["']([\w-]{11})["']/gi)) add('https://www.youtube.com/watch?v=' + m[1], how);
-    for (const m of src.matchAll(/(?:https?:)?\/\/(?:www\.|m\.)?(?:youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)[\w-]{11}/gi)) add(m[0], how);
-    for (const m of src.matchAll(/https?:\/\/(?:www\.)?(?:twitter|x)\.com\/\w+\/status\/\d+/gi)) add(m[0], how);
-    for (const m of src.matchAll(/https?:\/\/(?:www\.|m\.)?(?:facebook\.com\/(?:[^"'\s<>]+\/videos\/[^"'\s<>]+|watch\/?\?v=\d+|reel\/\d+|share\/v\/[\w-]+)|fb\.watch\/[\w-]+)/gi)) add(m[0], how);
-    for (const m of src.matchAll(/https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel|tv)\/[\w-]+/gi)) add(m[0], how);
-    for (const m of src.matchAll(/https?:\/\/(?:www\.)?tiktok\.com\/@[\w.-]+\/video\/\d+/gi)) add(m[0], how);
-    for (const m of src.matchAll(/https?:\/\/(?:www\.)?vbox7\.com\/(?:play:\w+|emb\/external\.php\?vid=\w+)/gi)) add(m[0], how);
-    for (const m of src.matchAll(/https?:\/\/(?:www\.)?(?:vimeo\.com\/\d{6,}|player\.vimeo\.com\/video\/\d{6,}|dailymotion\.com\/(?:video|embed\/video)\/\w+|dai\.ly\/\w+|streamable\.com\/(?:e\/)?\w+)/gi)) add(m[0], how);
+  // keep(i): whether the match at i counts (outside the article: only a player titled like the article)
+  const scanEmbeds = (src, how, keep = () => true) => {
+    const put = (u, h, iframe, i) => { if (keep(i)) add(u, h, iframe); };
+    for (const m of src.matchAll(/<iframe\b[^>]*?\s(?:data-src|data-lazy-src|data-original|data-url|src)=["']([^"']+)["']/gi)) put(m[1], how, true, m.index);
+    for (const m of src.matchAll(/<(?:video|source)\b[^>]*?\s(?:data-src|src)=["']([^"']+)["']/gi)) put(m[1], how, false, m.index);
+    for (const m of src.matchAll(/(?:videoid|data-video-?id|data-youtube-?id|data-yt-?id|data-ytid|data-embed-id)=["']([\w-]{11})["']/gi)) put('https://www.youtube.com/watch?v=' + m[1], how, false, m.index);
+    for (const m of src.matchAll(/(?:https?:)?\/\/(?:www\.|m\.)?(?:youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)[\w-]{11}/gi)) put(m[0], how, false, m.index);
+    for (const m of src.matchAll(/https?:\/\/(?:www\.)?(?:twitter|x)\.com\/\w+\/status\/\d+/gi)) put(m[0], how, false, m.index);
+    for (const m of src.matchAll(/https?:\/\/(?:www\.|m\.)?(?:facebook\.com\/(?:[^"'\s<>]+\/videos\/[^"'\s<>]+|watch\/?\?v=\d+|reel\/\d+|share\/v\/[\w-]+)|fb\.watch\/[\w-]+)/gi)) put(m[0], how, false, m.index);
+    for (const m of src.matchAll(/https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel|tv)\/[\w-]+/gi)) put(m[0], how, false, m.index);
+    for (const m of src.matchAll(/https?:\/\/(?:www\.)?tiktok\.com\/@[\w.-]+\/video\/\d+/gi)) put(m[0], how, false, m.index);
+    for (const m of src.matchAll(/https?:\/\/(?:www\.)?vbox7\.com\/(?:play:\w+|emb\/external\.php\?vid=\w+)/gi)) put(m[0], how, false, m.index);
+    for (const m of src.matchAll(/https?:\/\/(?:www\.)?(?:vimeo\.com\/\d{6,}|player\.vimeo\.com\/video\/\d{6,}|dailymotion\.com\/(?:video|embed\/video)\/\w+|dai\.ly\/\w+|streamable\.com\/(?:e\/)?\w+)/gi)) put(m[0], how, false, m.index);
   };
 
   // 1. structured data and page-level video tags describe the article's own video
@@ -365,11 +371,11 @@ function extractFromHtml(html, pageUrl) {
   ['og:video:secure_url', 'og:video:url', 'og:video', 'twitter:player:stream', 'twitter:player'].forEach(p => add(meta(p), 'meta'));
   // 2. players and links inside the article body
   scanEmbeds(region, 'article');
-  // 3. nothing in the body: look at the rest of the page (minus sidebars and footers) for players
-  if (!cands.length) scanEmbeds(stripBlocks(html.slice(0, 400000), ['aside', 'footer', 'nav']), 'page');
-  // 4. video files referenced by the page's own player script
-  if (!cands.some(c => c.kind !== 'player')) {
-    for (const m of html.slice(0, 400000).matchAll(/https?:\\?\/\\?\/[^"'\s<>()]+?\.(?:mp4|m3u8)(?:\?[^"'\s<>()]*)?/gi)) { add(m[0].replace(/\\\//g, '/'), 'script'); if (cands.length >= 6) break; }
+  // 3. nothing in the body: a player elsewhere on the page counts only when its own title is the article's
+  //    (dsport.bg puts the article's video above the text: <iframe id="video.frame" title="<the headline>">)
+  if (!cands.length) {
+    const page = stripBlocks(html.slice(0, 400000), ['aside', 'footer', 'nav']);
+    scanEmbeds(page, 'page', i => titledLike(page, i, title));
   }
 
   const text = htmlToText(region.slice(0, 150000)).slice(0, 100000);
@@ -387,6 +393,21 @@ function stripBlocks(h, tags) {
   return h.replace(new RegExp(`<(${tags.join('|')})\\b[\\s\\S]*?<\\/\\1>`, 'gi'), ' ');
 }
 
+// the attributes of the tag around position i: does its title (or aria-label, data-title, alt) read like the headline?
+function titledLike(h, i, title) {
+  const a = h.lastIndexOf('<', i), b = h.indexOf('>', i);
+  if (a < 0 || b < 0 || i - a > 3000) return false;
+  const tag = h.slice(a, b + 1);
+  const t = (tag.match(/\s(?:title|aria-label|data-title|alt)=["']([^"']{8,})["']/i) || [])[1];
+  return !!t && similarity(decodeEntities(t), title) >= 0.5;
+}
+// the article body ends where its "related news" / "read also" / comments part begins
+const RELATED_RE = /<(?:div|section|ul|aside|h\d)[^>]+(?:class|id)=["'][^"']*(?:related|recommend|read-?also|also-?read|more-?news|more-?articles|similar|popular|most-?read|latest-?news|other-?news|comments?-|disqus|taboola|outbrain)[^"']*["']|>\s*(?:Още по темата|Свързани новини|Свързани статии|Прочетете още|Прочети още|Още от категорията|Най-четени|Последни новини|Още новини|Related (?:articles|stories|news)|More (?:from|stories|on this))\s*</i;
+function trimRelated(region) {
+  const re = new RegExp(RELATED_RE.source, 'gi');
+  for (const m of region.matchAll(re)) if (htmlToText(region.slice(0, m.index)).length >= 400) return region.slice(0, m.index);
+  return region;
+}
 function articleRegion(html) {
   const blocks = [...html.matchAll(/<article\b[\s\S]*?<\/article>/gi)].map(m => m[0]).sort((a, b) => b.length - a.length);
   if (blocks.length && blocks[0].length > 300) return blocks[0];
