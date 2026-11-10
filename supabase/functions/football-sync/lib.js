@@ -348,6 +348,51 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
   return { short: pack(shorts[0]), long: pack(longs[0]), shorts: shorts.slice(0, 6).map(pack), longs: longs.slice(0, 6).map(pack), all: all.slice(0, 15).map(pack) };
 }
 
+/* ───────────── referee clips: the situations, the referee, and what was said after the match ───────────── */
+// a refereeing word: decisions (penalty, cards, VAR, offside, a disallowed goal, fouls, handball), the referee, a scandal,
+// a brawl. Not "червените" (ЦСКА's nickname) and not "Варна": the words are whole-word or followed by their endings.
+const REF_CLIP = /(?<![\p{L}])(?:съди[яиейщ]\p{L}*|съдийск\p{L}*|съдийств\p{L}*|рефер\p{L}*|арбит\p{L}*|дузп\p{L}*|наказателн\p{L}* удар|картон\p{L}*|изгон\p{L}*|(?:вар|var)(?:а|ът)?(?![\p{L}])|засад\p{L}*|офсайд\p{L}*|отмен\p{L}*|неправилно|фаул\p{L}*|фал(?:а|ът|ове)?(?![\p{L}])|игра с ръка|ръка в наказателното|симулац\p{L}*|скандал\p{L}*|протест\p{L}*|ограб\p{L}*|откраднат\p{L}*|кражб\p{L}*|меле(?:то|та)?(?![\p{L}])|сбиван\p{L}*|бой(?:ът)?(?![\p{L}])|инцидент\p{L}*|грозни сцени|наказан\p{L}*)/iu;
+// an interview, a press conference or a reaction after the match
+const TALK_CLIP = /(?<![\p{L}])(?:след (?:мача|срещата|дербито|двубоя|победата|загубата|равенството|успеха|поражението|триумфа|разгрома)|пресконференц\p{L}*|интервю\p{L}*|коментира\p{L}*|коментар\p{L}*|реакци\p{L}*|изявлени\p{L}*|заяви\p{L}*|сподели\p{L}*|разкри\p{L}*|призна\p{L}*|недоволен|недоволни|бесен|бесни|гневен)(?![\p{L}])/iu;
+const YOUTH = /(?<![\p{L}])(?:юноши|юношеска|жени|девойки|момчета|деца|дублиращ\p{L}*)(?![\p{L}])|(?<![\p{L}\p{N}])u ?(?:1\d|2[0-3])(?![\p{N}])/iu;
+// YouTube's "преди 3 дни" as a range of days: [at least, less than]
+const ageRange = pub => {
+  const a = ageDays(pub), s = String(pub || '').toLowerCase();
+  return [a, a + (/год|г\.|year/.test(s) ? 365 : /мес|м\.|month/.test(s) ? 31 : /седм|week/.test(s) ? 7 : 1)];
+};
+// The referee clips of a played match among search results: the title names this match's teams (no other team of the league)
+// and either a refereeing word ("ref") or an interview / reaction ("talk"). A clip naming only one of the two teams must be
+// from a known channel (Gong, the league, the TV channels, the clubs' own) and from the days right after the match.
+// Clips of other matches (another round, season or score in the title), youth matches, streams and anything older than the
+// match are left out, and so are the videos the match already has (have: their ids). Best first, up to 8.
+export function pickRefClips(match, vids, aliasList, have = new Set(), now = Date.now()) {
+  const days = (now - Date.parse(match.kickoff)) / 864e5, out = [], seen = new Set(have);
+  for (const v of vids) {
+    if (!v.id || seen.has(v.id) || !v.seconds || v.seconds < 15 || v.seconds > 4200) continue;
+    if (/поточно|stream/i.test(v.published || '') || YOUTH.test(v.title) || /на живо|live/i.test(v.title)) continue;
+    const [lo, hi] = ageRange(v.published);
+    if (lo > days + 1) continue;                                                  // older than the match
+    const ms = mentions(v.title, aliasList);
+    const h = ms.find(x => x.name === match.home_name), a = ms.find(x => x.name === match.away_name);
+    if (!h && !a) continue;
+    if (ms.some(x => x.name !== match.home_name && x.name !== match.away_name)) continue;   // another team: another match
+    if ((h && cityConflict(v.title, h, match.home_name)) || (a && cityConflict(v.title, a, match.away_name))) continue;
+    const rd = roundIn(v.title); if (rd && rd !== match.round) continue;
+    const sn = seasonIn(v.title); if (sn && sn !== SEASON) continue;
+    const scores = scoresIn(v.title);
+    if (scores.length && !scores.some(([x, y]) => (x === match.home_score && y === match.away_score) || (x === match.away_score && y === match.home_score))) continue;
+    const ref = REF_CLIP.test(v.title), talk = !ref && TALK_CLIP.test(v.title);
+    if (!ref && !talk) continue;
+    const ch = channelRank(v.channel, match), both = !!(h && a);
+    if (!both && (!ch || hi < days - 6)) continue;                               // one team only: a known channel, right after the match
+    if (!ch && !(both && ref)) continue;                                         // unknown channels: both teams and a refereeing word
+    seen.add(v.id);
+    out.push({ v, ref, ch, both, scoreOk: scores.length > 0 });
+  }
+  out.sort((x, y) => (y.ref - x.ref) || (y.both - x.both) || (y.ch - x.ch) || (y.scoreOk - x.scoreOk));
+  return out.slice(0, 8).map(({ v, ref }) => ({ id: v.id, title: v.title.slice(0, 200), channel: String(v.channel || '').slice(0, 80), length: v.length, seconds: v.seconds, kind: ref ? 'ref' : 'talk' }));
+}
+
 /* ───────────── round reviews: Gong.bg's "Обзор на кръга" show ───────────── */
 // "Обзор на кръга в efbet Лига (14 кръг, 3.11.2026)", "Обзор на кръга в Mr Bit Втора лига (14 кръг, 04.11.2026)",
 // sometimes only a date ("Обзор на кръга в efbet Лига (3.11.2026)") or no league ("Обзор на кръга (7 кръг, 1.09.2026)")

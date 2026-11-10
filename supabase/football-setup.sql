@@ -7,9 +7,10 @@
 --   football_standings  the league tables (readable by everyone)
 --   football_rounds     each round's "Обзор на кръга" (Diema's round review, uploaded by Gong.bg to YouTube)
 --   private.football_sync_log   what each sync run did
---   two scheduled jobs that call the Edge Function "football-sync" (supabase/functions/football-sync):
+--   three scheduled jobs that call the Edge Function "football-sync" (supabase/functions/football-sync):
 --     football-results  at :02 and :32 every hour — results, fixtures, tables, and up to 3 round-review searches
 --     football-videos   every 5 minutes — looks for the reports of up to 10 played matches
+--     football-refclips every 10 minutes — looks for the referee clips (situations, interviews) of up to 6 played matches
 --
 -- Deploy the Edge Function with JWT verification OFF; it checks its own key instead
 -- (the vault secret "football_sync_key", created below and sent by the jobs as x-sync-key).
@@ -42,6 +43,12 @@ create table if not exists public.football_matches (
   updated_at        timestamptz not null default now()
 );
 alter table public.football_matches add column if not exists other_videos jsonb;
+-- referee clips: YouTube clips about the refereeing of the match (penalties, cards, VAR, offsides, fights, the referee) and
+-- the interviews and reactions after it, up to 8 [{id, title, channel, length, seconds, kind: 'ref' | 'talk', embed}];
+-- null = not looked for yet. Searched a few hours after the match, again after a day and after three (older matches once).
+alter table public.football_matches add column if not exists ref_videos jsonb;
+alter table public.football_matches add column if not exists ref_tries int not null default 0;
+alter table public.football_matches add column if not exists ref_checked_at timestamptz;
 create index if not exists football_matches_round_idx on public.football_matches (league, season, round);
 create index if not exists football_matches_queue_idx on public.football_matches (status, videos_checked_at);
 alter table public.football_matches enable row level security;
@@ -92,6 +99,7 @@ language plpgsql set search_path = '' as $$
 begin
   if (old.home_score is not null and (new.home_score is distinct from old.home_score or new.away_score is distinct from old.away_score)) then
     new.short_video := null; new.long_video := null; new.other_videos := null; new.video_tries := 0; new.videos_checked_at := null;
+    new.ref_videos := null; new.ref_tries := 0; new.ref_checked_at := null;
   end if;
   new.updated_at := now();
   return new;
@@ -174,16 +182,27 @@ language sql security definer set search_path = '' as $$
   insert into private.football_sync_log (details) values (details);
 $$;
 
+create or replace function public.football_ref_queue(n int) returns setof public.football_matches
+language sql stable security definer set search_path = '' as $$
+  select * from public.football_matches m
+  where m.league in ('efbet', 'mrbit') and m.status = 'finished' and m.kickoff >= '2026-07-01' and m.kickoff < now() - interval '3 hours'
+    and m.ref_tries < case when m.kickoff < now() - interval '10 days' then 1 else 3 end
+    and (m.ref_checked_at is null or m.ref_checked_at < now() - case m.ref_tries when 0 then interval '0' when 1 then interval '20 hours' else interval '2 days' end)
+  order by (m.kickoff > now() - interval '10 days') desc, m.ref_checked_at nulls first, m.kickoff desc
+  limit greatest(0, least(n, 40));
+$$;
 revoke execute on function public.football_sync_key_ok(text) from public, anon, authenticated;
 revoke execute on function public.football_video_queue(int) from public, anon, authenticated;
 revoke execute on function public.football_replace_standings(text, text, jsonb) from public, anon, authenticated;
 revoke execute on function public.football_log(jsonb) from public, anon, authenticated;
 revoke execute on function public.football_round_info(text) from public, anon, authenticated;
+revoke execute on function public.football_ref_queue(int) from public, anon, authenticated;
 grant execute on function public.football_sync_key_ok(text) to service_role;
 grant execute on function public.football_video_queue(int) to service_role;
 grant execute on function public.football_replace_standings(text, text, jsonb) to service_role;
 grant execute on function public.football_log(jsonb) to service_role;
 grant execute on function public.football_round_info(text) to service_role;
+grant execute on function public.football_ref_queue(int) to service_role;
 
 -- ───────────────────────── schedule ─────────────────────────
 -- For another project, change the address to https://<project-ref>.supabase.co/functions/v1/football-sync
@@ -200,5 +219,13 @@ select cron.schedule('football-videos', '*/5 * * * *', $job$
     url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/football-sync',
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
     body := '{"results": false, "videos": 10}'::jsonb,
+    timeout_milliseconds := 150000);
+$job$);
+
+select cron.schedule('football-refclips', '3-59/10 * * * *', $job$
+  select net.http_post(
+    url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/football-sync',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
+    body := '{"results": false, "videos": 0, "refclips": 6}'::jsonb,
     timeout_milliseconds := 150000);
 $job$);

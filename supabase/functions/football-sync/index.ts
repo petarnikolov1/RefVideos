@@ -4,8 +4,9 @@
 // Репортаж (short) and Разширен (long) are always Gong.bg's; every other channel's report of the match goes to other_videos.
 // Each video is checked with YouTube's oEmbed: embed:false means its owner only allows playing it on YouTube.
 // It also finds each played round's "Обзор на кръга" (Diema's round review, uploaded by Gong.bg) for public.football_rounds.
-// Body (JSON, all optional): { results: true, leagues: ["efbet", "mrbit"] (whose results to read), rounds: 0, videos: 10, dry: false,
-//   live: false, ytTest: "search words" }. While matches are played, pg_cron calls it every few minutes for results only, with
+// Body (JSON, all optional): { results: true, leagues: ["efbet", "mrbit"] (whose results to read), rounds: 0, videos: 10, refclips: 0,
+//   dry: false, live: false, ytTest: "search words" }. refclips: how many played matches to look up referee clips for
+//   (situations, the referee, the interviews after the match), every 10 minutes from pg_cron (football-setup.sql). While matches are played, pg_cron calls it every few minutes for results only, with
 //   live: true (live-setup.sql).
 import * as L from './lib.js';
 
@@ -260,6 +261,47 @@ Deno.serve(async (req) => {
       v.found = v.found.slice(0, 40);
     } catch (e) { out.videosError = String((e as Error).message ?? e); }
   }
+  // 4. referee clips of played matches: the situations, the referee, and the interviews after the match (ref_videos).
+  //    One search per match ("<home> <away> съдия"): a few hours after the match, again after a day and after three days;
+  //    older matches once. The match's own reports are not repeated.
+  const nr4 = Math.max(0, Math.min(Number(body.refclips ?? 0), 10));
+  if (nr4 && !dry) {
+    const rc: Record<string, any> = out.refclips = { checked: 0, searches: 0, withClips: 0, errors: [] as string[], found: [] as string[] };
+    try {
+      const queue: any[] = await rpc('football_ref_queue', { n: nr4 });
+      const teamRows: any[] = await rest(`football_standings?select=league,team_name&season=eq.${encodeURIComponent(L.SEASON)}`);
+      const teams: Record<string, Set<string>> = { efbet: new Set(), mrbit: new Set() };
+      for (const t of teamRows) teams[t.league]?.add(t.team_name);
+      for (const m of queue) { teams[m.league]?.add(m.home_name); teams[m.league]?.add(m.away_name); }
+      const aliases = { efbet: L.teamAliases([...teams.efbet]), mrbit: L.teamAliases([...teams.mrbit]) } as Record<string, any>;
+      const qnames = { efbet: L.queryNames([...teams.efbet]), mrbit: L.queryNames([...teams.mrbit]) } as Record<string, Map<string, string>>;
+      for (const m of queue) {
+        if (Date.now() - started > 100000) break;
+        const home = qnames[m.league]?.get(m.home_name) ?? L.searchName(m.home_name), away = qnames[m.league]?.get(m.away_name) ?? L.searchName(m.away_name);
+        if (rc.searches) await sleep(1800 + Math.random() * 1200);
+        rc.searches++;
+        let vids: any[];
+        try { vids = await youtube(`${home} ${away} съдия`); }
+        catch (e) { rc.errors.push(String((e as Error).message)); break; }   // YouTube refused: the match comes back next run
+        const have = new Set([m.short_video?.id, m.long_video?.id, ...(m.other_videos ?? []).map((v: any) => v?.id)].filter(Boolean));
+        const keep = (m.ref_videos ?? []).filter((v: any) => v && v.id);
+        const clips: any[] = [...keep];
+        for (const c of L.pickRefClips(m, vids, aliases[m.league], new Set([...have, ...keep.map((v: any) => v.id)]))) {
+          if (clips.length >= 8) break;
+          const e = await embeddable(c.id);
+          if (e !== 'gone') clips.push({ ...c, embed: e });
+        }
+        clips.sort((x, y) => Number(y.kind === 'ref') - Number(x.kind === 'ref'));
+        await rest(`football_matches?id=eq.${encodeURIComponent(m.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ ref_videos: clips, ref_tries: m.ref_tries + 1, ref_checked_at: new Date().toISOString() }) });
+        rc.checked++;
+        if (clips.length) rc.withClips++;
+        if (clips.length > keep.length) rc.found.push(`${m.home_name} – ${m.away_name}: ${clips.length - keep.length} new (${clips.filter(c => c.kind === 'ref').length} about the refereeing)`);
+      }
+      rc.errors = [...new Set(rc.errors)].slice(0, 5);
+    } catch (e) { out.refclipsError = String((e as Error).message ?? e); }
+  }
+
   out.seconds = Math.round((Date.now() - started) / 100) / 10;
   // the calls made every few minutes during matches (live: true) are logged only when something failed
   if (!dry && !(body.live && !out.efbetError && !out.mrbitError)) await rpc('football_log', { details: out }).catch(() => {});
