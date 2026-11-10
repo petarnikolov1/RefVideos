@@ -36,5 +36,16 @@ const old = [{ name: '1', matches: [{ ...match('fb:m:1', 1, '2026-07-17T16:00:00
   competitorOne: { id: 'fb:t:821', name: 'Спартак Варна', assets: { logo: 'https://x/a.png' } }, competitorTwo: { id: 'fb:t:820147', name: 'ЦСКА 1948', logo: 'https://x/b.png' } }] }];
 const oldMs = L.parseEfbetMatches(`<script>self.__next_f.push([1,${JSON.stringify('2:{"rounds":' + JSON.stringify(old) + '}')}])</script>`);
 ok(oldMs.length === 1 && oldMs[0].home_name === 'Спартак Варна' && oldMs[0].home_logo === 'https://x/a.png' && oldMs[0].away_logo === 'https://x/b.png', 'the older layout with names in the match');
+// Втора лига: mr-bit.bg's table lags behind its results — goals and form only from the matches it counts
+{
+  const tr = (pos, slug, name, p, w, d, l, pts) => `<tr><td class="pos">${pos}</td><td class="team"><a href="#"><img data-src="/static/teams-logos/ids/${slug}.png" alt=""><span>${name}</span></a></td>` +
+    `<td>${p}</td><td>${w}</td><td>${d}</td><td>${l}</td><td class="form"></td><td class="pts">${pts}</td></tr>`;
+  const html = '<table class="standing-table"><tbody>' + tr(1, 'vihren-5025', 'Вихрен', 1, 1, 0, 0, 3) + tr(2, 'beroe-857', 'Берое', 1, 0, 0, 1, 0) + '</tbody></table>';
+  const ms = [{ home_name: 'Вихрен', away_name: 'Берое', home_score: 2, away_score: 0, status: 'finished', kickoff: '2026-08-01T15:00:00Z' },
+    { home_name: 'Берое', away_name: 'Вихрен', home_score: 3, away_score: 1, status: 'finished', kickoff: '2026-08-08T15:00:00Z' }];
+  const t = L.parseMrbitStandings(html, ms);
+  ok(t.length === 2 && t[0].goals_for === 2 && t[0].goals_against === 0 && t[0].form === 'W' && t[1].goals_for === 0 && t[1].form === 'L',
+    'a table one round behind: goals and form of the one match it counts, not of both');
+}
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exit(fails ? 1 : 0);

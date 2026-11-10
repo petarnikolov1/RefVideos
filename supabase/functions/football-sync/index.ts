@@ -4,7 +4,9 @@
 // Репортаж (short) and Разширен (long) are always Gong.bg's; every other channel's report of the match goes to other_videos.
 // Each video is checked with YouTube's oEmbed: embed:false means its owner only allows playing it on YouTube.
 // It also finds each played round's "Обзор на кръга" (Diema's round review, uploaded by Gong.bg) for public.football_rounds.
-// Body (JSON, all optional): { results: true, rounds: 0, videos: 10, dry: false, ytTest: "search words" }
+// Body (JSON, all optional): { results: true, leagues: ["efbet", "mrbit"] (whose results to read), rounds: 0, videos: 10, dry: false,
+//   live: false, ytTest: "search words" }. While matches are played, pg_cron calls it every few minutes for results only, with
+//   live: true (live-setup.sql).
 import * as L from './lib.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -115,8 +117,9 @@ Deno.serve(async (req) => {
   }
 
   // 1. results, fixtures and standings
+  const want = new Set(Array.isArray(body.leagues) ? body.leagues : ['efbet', 'mrbit']);
   if (body.results !== false) {
-    try {
+    if (want.has('efbet')) try {
       const ms = L.parseEfbetMatches(await page('https://efbetleague.com/matches'));
       out.efbet = summary(ms);
       if (dry) out.efbet.sample = ms.filter(m => m.round === out.efbet.lastFinishedRound).slice(0, 2);
@@ -126,7 +129,7 @@ Deno.serve(async (req) => {
       if (dry) out.efbet.tableTop = table.slice(0, 2);
       else out.efbet.tableSaved = await rpc('football_replace_standings', { p_league: 'efbet', p_season: L.SEASON, p_rows: table });
     } catch (e) { out.efbetError = String((e as Error).message ?? e); }
-    try {
+    if (want.has('mrbit')) try {
       const html = await page('https://mr-bit.bg/vtora-liga/');
       const ms = L.parseMrbit(html);
       out.mrbit = summary(ms);
@@ -258,6 +261,7 @@ Deno.serve(async (req) => {
     } catch (e) { out.videosError = String((e as Error).message ?? e); }
   }
   out.seconds = Math.round((Date.now() - started) / 100) / 10;
-  if (!dry) await rpc('football_log', { details: out }).catch(() => {});
+  // the calls made every few minutes during matches (live: true) are logged only when something failed
+  if (!dry && !(body.live && !out.efbetError && !out.mrbitError)) await rpc('football_log', { details: out }).catch(() => {});
   return Response.json(out);
 });

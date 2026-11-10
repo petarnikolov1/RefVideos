@@ -172,11 +172,12 @@ export function parseMrbitStandings(html, matches) {
   const rows = [];
   const ROW = /<tr>\s*<td class="pos">(\d+)<\/td>\s*<td class="team">[\s\S]*?<img[^>]*?data-src="([^"]*)"[\s\S]*?<span>([^<]*)<\/span>[\s\S]*?<\/td>\s*<td>(\d+)<\/td>\s*<td>(\d+)<\/td>\s*<td>(\d+)<\/td>\s*<td>(\d+)<\/td>\s*<td class="form">[\s\S]*?<\/td>\s*<td class="pts">(\d+)<\/td>/g;
   for (const m of html.matchAll(ROW)) rows.push({ rank: Number(m[1]), logo: logoUrl(m[2]), team_name: m[3].trim(), played: Number(m[4]), won: Number(m[5]), drawn: Number(m[6]), lost: Number(m[7]), points: Number(m[8]) });
-  // goals and form from the results (the sponsor's table has neither)
+  // goals and form from the results (the sponsor's table has neither) — only from the matches its table counts, each
+  // team's first `played` results: the table can be rounds behind the results, and the page adds the rest (public/table.js)
   const done = (matches || []).filter(g => g.status === 'finished').sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)));
   for (const r of rows) {
     let gf = 0, ga = 0; const form = [];
-    for (const g of done) {
+    for (const g of done.filter(x => x.home_name === r.team_name || x.away_name === r.team_name).slice(0, r.played)) {
       if (g.home_name === r.team_name) { gf += g.home_score; ga += g.away_score; form.push(g.home_score > g.away_score ? 'W' : g.home_score < g.away_score ? 'L' : 'D'); }
       else if (g.away_name === r.team_name) { gf += g.away_score; ga += g.home_score; form.push(g.away_score > g.home_score ? 'W' : g.away_score < g.home_score ? 'L' : 'D'); }
     }

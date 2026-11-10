@@ -245,6 +245,13 @@
   table.stand td.t span{display:inline-flex;align-items:center;gap:8px}
   table.stand .tlogo,table.stand .tinit{width:24px;height:24px;flex-basis:24px;font-size:10px}
   table.stand td.p{font-weight:700}
+  /* the live table: a match being played counts at its current score */
+  table.stand tr.live td{background:color-mix(in srgb,var(--hot) 9%,transparent)}
+  .tlive{font-size:11px;font-weight:700;color:var(--badge-ink);background:var(--hot);border-radius:4px;padding:1px 5px;white-space:nowrap}
+  .lplus{color:var(--hot);font-size:11px;font-weight:700;margin-left:3px}
+  .livetag{display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:13px;font-weight:700;color:var(--hot);vertical-align:middle}
+  .livetag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--hot);animation:livepulse 1.4s ease-in-out infinite}
+  @keyframes livepulse{50%{opacity:.25}}
   /* what a place in the table leads to: a coloured rank and a bar on the left, explained under the table */
   table.stand td.rk{padding-left:0;width:42px}
   .rkn{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 4px;border-radius:6px;font-weight:600;font-size:13px}
@@ -413,6 +420,7 @@
   <section id="view-admin" hidden><div id="adminBox"></div></section>
 </main>
 
+<script src="/table.js"></script>
 <script>
 (() => {
 'use strict';
@@ -2006,6 +2014,14 @@ function worldRounds(ms){
   return out;
 }
 
+// a short fingerprint of the results and the table: a refresh that brings nothing new doesn't redraw the page
+function dataVer(matches, rows){
+  let h = 0;
+  const add = v => { const x = String(v ?? ''); for (let i = 0; i < x.length; i++) h = (h * 31 + x.charCodeAt(i)) | 0; };
+  for (const m of matches || []) { add(m.id); add(m.status); add(m.home_score); add(m.away_score); add(m.kickoff); add(m.updated_at); add(m.short_video); add(m.long_video); }
+  for (const r of rows || []) { add(r.team_name); add(r.points); add(r.played); add(r.goals_for); add(r.goals_against); add(r.rank); add(r.updated_at); }
+  return h;
+}
 async function loadFootball(league, force){
   if (!SB || FB.loading[league]) return;
   const fresh = FB.data[league] && Date.now() - FB.data[league].at < 5 * 60e3;
@@ -2023,9 +2039,9 @@ async function loadFootball(league, force){
       if (m.error) throw m.error;
       if (t.error) throw t.error;
       const matches = m.data || [];
-      FB.data[league] = { at: Date.now(), matches, rounds: worldRounds(matches), world: true };
       const rows = t.data || [], newest = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
       FB.table[league] = rows.filter(r => !newest || Date.parse(newest) - Date.parse(r.updated_at) < 3600e3);
+      FB.data[league] = { at: Date.now(), ver: dataVer(matches, FB.table[league]), matches, rounds: worldRounds(matches), world: true };
     } catch (e) { FB.err = e.message || String(e); log('Results could not be loaded: ' + FB.err); }
     FB.loading[league] = false;
     if (VIEW === 'results') renderResults();
@@ -2050,10 +2066,11 @@ async function loadFootball(league, force){
     else for (const x of of.data || []) officials[x.match_id] = x;
     if (dc.error) log('Punishments could not be loaded: ' + dc.error.message);
     const matches = m.data || [], discipline = dc.data || [];
-    FB.data[league] = { at: Date.now(), matches, reviews, officials, discipline, banned: bansByMatch(matches, discipline) };
     const rows = t.data || [], newest = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
     // a team that dropped out of the source table keeps its old row: show only the latest update
     FB.table[league] = rows.filter(r => !newest || Date.parse(newest) - Date.parse(r.updated_at) < 3600e3);
+    FB.data[league] = { at: Date.now(), ver: [dataVer(matches, FB.table[league]), Object.keys(officials).length, discipline.length, Object.keys(reviews).length].join('.'),
+      matches, reviews, officials, discipline, banned: bansByMatch(matches, discipline) };
   } catch (e) { FB.err = e.message || String(e); log('Results could not be loaded: ' + FB.err); }
   FB.loading[league] = false;
   if (VIEW === 'results') renderResults();
@@ -2324,11 +2341,13 @@ function zoneLegend(lg, zones){
 function standTable(rows, form, zones, lg){
   return `<div class="standwrap"><table class="stand"><thead><tr><th>#</th><th class="t">Отбор</th><th>М</th><th class="hide-s">П</th><th class="hide-s">Р</th><th class="hide-s">З</th><th>Голове</th><th class="hide-s">ГР</th><th>Т</th><th class="hide-s">Форма</th></tr></thead><tbody>
     ${rows.map(r => { const gd = (r.goals_for ?? 0) - (r.goals_against ?? 0), f = r.form || (form && form[r.team_name]) || '';
-      const zk = zones && zones[zoneKey(lg, r)], zc = zk && ZONE[zk];
-      return `<tr${zc ? ` class="z" style="--zc:${zc[0]};--zi:${zc[1]}" title="${esc(zc[2])}"` : ''}><td class="rk"><span class="rkn">${r.rank ?? ''}</span></td>
-      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}</span></td><td>${r.played ?? ''}</td>
+      const zk = zones && zones[zoneKey(lg, r)], zc = zk && ZONE[zk], lv = r.live;
+      const cls = [zc ? 'z' : '', lv ? 'live' : ''].filter(Boolean).join(' ');
+      const tip = [zc ? zc[2] : '', lv ? `На живо: ${lv.home ? teamName(r.team_name) + ' – ' + teamName(lv.opponent) + ' ' + lv.gf + ':' + lv.ga : teamName(lv.opponent) + ' – ' + teamName(r.team_name) + ' ' + lv.ga + ':' + lv.gf}` : ''].filter(Boolean).join(' · ');
+      return `<tr${cls ? ` class="${cls}"` : ''}${zc ? ` style="--zc:${zc[0]};--zi:${zc[1]}"` : ''}${tip ? ` title="${esc(tip)}"` : ''}><td class="rk"><span class="rkn">${r.rank ?? ''}</span></td>
+      <td class="t"><span>${logoHtml(r.logo, r.team_name)}${esc(teamName(r.team_name))}${lv ? `<span class="tlive">${lv.gf}:${lv.ga}</span>` : ''}</span></td><td>${r.played ?? ''}</td>
       <td class="hide-s">${r.won ?? ''}</td><td class="hide-s">${r.drawn ?? ''}</td><td class="hide-s">${r.lost ?? ''}</td>
-      <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}</td>
+      <td>${r.goals_for ?? ''}:${r.goals_against ?? ''}</td><td class="hide-s">${gd > 0 ? '+' + gd : gd}</td><td class="p">${r.points ?? ''}${lv ? `<span class="lplus">+${lv.pts}</span>` : ''}</td>
       <td class="hide-s">${String(f).split('').map(c => `<span class="fdot ${esc(c)}" title="${({ W: 'победа', D: 'равен', L: 'загуба' })[c] || ''}"></span>`).join('')}</td></tr>`; }).join('')}
     </tbody></table></div>`;
 }
@@ -2341,8 +2360,24 @@ function formFrom(ms){
   }
   return out;
 }
-function standingsHtml(lg){
-  const rows = FB.table[lg];
+// the table as it stands now: the source's table, plus the matches finished since it was last updated, plus the
+// matches being played at their current score (public/table.js)
+function liveTable(lg){
+  const rows = FB.table[lg] || [], d = FB.data[lg];
+  if (!rows.length || !d || !window.LiveTable) return { rows, live: 0, caught: 0, changed: false };
+  try { return window.LiveTable.build(rows, d.matches, { league: lg }); }
+  catch (e) { log('Live table: ' + (e.message || e)); return { rows, live: 0, caught: 0, changed: false }; }
+}
+// a video is playing on the page: a background refresh only redraws the table, the rest waits for the next redraw
+function keepPlayer(box, lg){
+  if (!box.firstChild || box.dataset.lg !== lg || !box.querySelector('.player iframe, .player video')) return false;
+  const sb = box.querySelector('#standBox');
+  if (sb) sb.innerHTML = standingsHtml(lg, true);
+  return true;
+}
+function standingsHtml(lg, inner){
+  if (!inner) return `<div id="standBox">${standingsHtml(lg, true)}</div>`;
+  const lt = liveTable(lg), rows = lt.rows;
   if (!rows || !rows.length) return '';
   const upd = rows.reduce((a, r) => r.updated_at > a ? r.updated_at : a, '');
   const world = isWorld(lg), comp = compOf(lg), d = FB.data[lg];
@@ -2356,8 +2391,10 @@ function standingsHtml(lg){
     body = `<div class="standgrid">${[...groups].map(([g, rs]) => `<div><h3 class="grphead">${esc(g)}</h3>${standTable(rs, form, zones, lg)}</div>`).join('')}</div>`;
   } else body = standTable(rows, (world || lg === 'sw3') && d ? formFrom(d.matches) : null, zones, lg);
   body += zoneLegend(lg, zones);
-  return `<div class="standhead" id="standings"><h2>Класиране — ${esc(title)}</h2>${upd ? `<span class="muted">обновено ${esc(bgDate(upd))}</span>` : ''}</div>
+  const when = upd ? `обновено ${bgDate(upd)}${lt.caught ? ' · с мачовете, изиграни след това' : ''}` : '';
+  return `<div class="standhead" id="standings"><h2>Класиране — ${esc(title)}${lt.live ? '<span class="livetag">на живо</span>' : ''}</h2>${when ? `<span class="muted">${esc(when)}</span>` : ''}</div>
     ${body}
+    ${lt.live ? '<p class="muted">На живо: мачовете, които се играят в момента, са включени с текущия резултат (+ показва точките от тях) и таблицата се обновява сама.</p>' : ''}
     <p class="muted">М мачове · П победи · Р равни · З загуби · ГР голова разлика · Т точки · форма: последните мачове, най-новият вдясно${lg === 'mrbit' ? ' · голове и форма — изчислени от резултатите' : world || lg === 'sw3' ? ' · форма — изчислена от резултатите' : ''}</p>`;
 }
 let RES_KEY = '';
@@ -2384,9 +2421,11 @@ function renderResults(force){
   const days = list.map(m => m.kickoff).filter(Boolean).sort();
   const span = days.length ? (() => { const a = sofiaParts(days[0]), b = sofiaParts(days[days.length - 1]); return a.d === b.d && a.m === b.m ? `${a.d} ${a.m}` : `${a.d} ${a.m} – ${b.d} ${b.m}`; })() : '';
   const withVid = list.filter(m => m.short_video || m.long_video || otherVids(m).length).length, finished = list.filter(m => m.status === 'finished').length;
-  const key = [lg, r, d.at, [...FB.open].join(',')].join('|');
+  const key = [lg, r, d.ver, [...FB.open].join(',')].join('|');
   if (!force && key === RES_KEY && box.firstChild) return;   // keep playing videos alive across background refreshes
+  if (!force && keepPlayer(box, lg)) return;
   RES_KEY = key;
+  box.dataset.lg = lg;
   box.innerHTML = leagueBar() + `<div class="roundnav">
       <button data-rnd="${r - 1}" ${r <= rounds[0] ? 'disabled' : ''} aria-label="Previous round">‹</button>
       <div class="mid"><h2>Кръг ${r} от ${total}</h2><div class="muted">${esc(span)}${finished && VIDEO_LEAGUES.includes(lg) ? ` · видео за ${withVid} от ${finished} мача` : ''}</div>
@@ -2424,9 +2463,11 @@ function renderWorldResults(box, lg, d, force){
   const span = days.length ? (() => { const a = sofiaParts(days[0]), b = sofiaParts(days[days.length - 1]); return a.d === b.d && a.m === b.m ? `${a.d} ${a.m}` : `${a.d} ${a.m} – ${b.d} ${b.m}`; })() : '';
   // how many rounds a full season has, where that is fixed: a double round robin, or the 8 matchdays of a UEFA league phase
   const total = R.ko ? 0 : comp.grp === 'top5' ? 2 * (R.teams - 1) : comp.grp === 'euro' && R.stage === 'Основна фаза' ? 8 : 0;
-  const key = [lg, i, d.at].join('|');
+  const key = [lg, i, d.ver].join('|');
   if (!force && key === RES_KEY && box.firstChild) return;
+  if (!force && keepPlayer(box, lg)) return;
   RES_KEY = key;
+  box.dataset.lg = lg;
   const top = m => `${comp.name} - ${R.ko ? (m.note || R.label) : R.label + (m.note && /^Група /.test(m.note) ? ' · ' + m.note : '')}`;
   box.innerHTML = leagueBar() + `<div class="roundnav">
       <button data-rnd="${i - 1}" ${i <= 0 ? 'disabled' : ''} aria-label="Previous round">‹</button>
@@ -2894,6 +2935,15 @@ applyView();
 initSupabase();
 setTimeout(autoCheck, 500);
 setInterval(autoCheck, 10 * 60e3);
+// while a match of the league on screen is being played (or should be by now), its results and table are read again
+// every minute; the database gets them every two minutes from the leagues' sites (see supabase/live-setup.sql)
+const inPlay = ms => { const now = Date.now(); return (ms || []).some(m => m.status === 'live'
+  || (m.status === 'scheduled' && m.kickoff && Date.parse(m.kickoff) <= now && now - Date.parse(m.kickoff) < 3 * 3600e3)); };
+setInterval(() => {
+  if (VIEW !== 'results' || document.hidden) return;
+  const d = FB.data[FB.league];
+  if (d && inPlay(d.matches) && Date.now() - d.at > 55e3) loadFootball(FB.league, true);
+}, 20e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
 
 window.BGRW = { loadNews, buildStories, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };

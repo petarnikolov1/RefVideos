@@ -6,6 +6,7 @@
 //   {}                 every competition: last, this and next month (every 30 minutes)
 //   { season: true }   the competitions being played: every month of the current season (once a day)
 //   { only: ["eng.1"] } just these competitions
+//   { only: [...], live: true }  just this month: pg_cron's call every two minutes while their matches are played (live-setup.sql)
 import * as W from './world.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL') ?? '';
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
     return Response.json({ ok: false, error: 'forbidden' }, { status: 403 });
   const body = await req.json().catch(() => ({}));
   const dry = !!body.dry, now = Date.now();
-  const out: Record<string, any> = { ok: true, dry, mode: body.season ? 'season' : 'recent', at: new Date().toISOString(), comps: {} as Record<string, any>, errors: [] as string[] };
+  const out: Record<string, any> = { ok: true, dry, mode: body.season ? 'season' : body.live ? 'live' : 'recent', at: new Date().toISOString(), comps: {} as Record<string, any>, errors: [] as string[] };
   const comps = W.COMPS.filter(c => !Array.isArray(body.only) || body.only.includes(c.key));
   const known: Record<string, any> = {};
   try { for (const k of await rest('football_competitions?select=key,active,season')) known[k.key] = k; } catch (e) { out.errors.push(String((e as Error).message)); }
@@ -57,7 +58,10 @@ Deno.serve(async (req) => {
       catch (e) { out.errors.push(`${c.key}: ${(e as Error).message}`); }
     });
     for (const c of comps) if (starts[c.key]) for (const m of W.monthsBetween(Math.max(starts[c.key], now - 420 * 864e5), now + 31 * 864e5)) jobs.push({ c, m });
-  } else for (const c of comps) for (const m of recent) jobs.push({ c, m });
+  } else {
+    const months = body.live ? (new Date(now).getUTCDate() === 1 ? [W.ym(now, -1), W.ym(now)] : [W.ym(now)]) : recent;
+    for (const c of comps) for (const m of months) jobs.push({ c, m });
+  }
 
   // 2. read them
   const got: Record<string, { rows: Map<string, any>; editions: Record<string, string> }> = {};
@@ -87,13 +91,14 @@ Deno.serve(async (req) => {
         if (!dry && st.rows.length >= 2) info.tableSaved = await rpc('football_replace_standings', { p_league: c.key, p_season: st.edition || edition, p_rows: st.rows });
       }
       const ed = rows.filter(r => r.season === edition), ea = W.activity(ed, now);
-      if (!dry) await upsert('football_competitions', 'key', [{ key: c.key, name: c.name, grp: c.grp, ord: c.ord, season: edition,
+      // a live call reads one month: the competition's first and last match stay as the full reads found them
+      if (!dry && !body.live) await upsert('football_competitions', 'key', [{ key: c.key, name: c.name, grp: c.grp, ord: c.ord, season: edition,
         active: act.active, first_match: ea.first, last_match: ea.last, updated_at: new Date().toISOString() }]);
     } catch (e) { info.error = String((e as Error).message ?? e).slice(0, 200); }
     out.comps[c.key] = info;
   });
   out.active = Object.entries(out.comps).filter(([, v]: any) => v.active).map(([k]) => k);
   out.seconds = Math.round((Date.now() - started) / 100) / 10;
-  if (!dry) await rpc('football_log', { details: { world: out } }).catch(() => {});
+  if (!dry && (!body.live || out.errors.length)) await rpc('football_log', { details: { world: out } }).catch(() => {});
   return Response.json(out);
 });
