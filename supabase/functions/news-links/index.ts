@@ -70,13 +70,15 @@ Deno.serve(async (req) => {
   const feedsOf = async (site: string) => {
     const known = feeds[site];
     if (known && Date.now() - known.t < 3 * 864e5) return known.urls;
-    const tried: string[] = [];
+    const tried: string[] = [...((G.FEEDS as Record<string, string[]>)[site] ?? [])];
     for (const home of site.split('.').length > 2 ? [`https://${site}/`] : [`https://www.${site}/`, `https://sport.${site}/`]) {
       try { const h = await get(home); tried.push(...G.feedLinks(h.text, h.url)); } catch { /* no such page */ }
     }
+    // the news sitemap robots.txt names (Google News sitemaps: the last two days, with headlines)
+    try { const r = await get(`https://${site.split('.').length > 2 ? site : 'www.' + site}/robots.txt`); tried.push(...G.robotsSitemaps(r.text).filter(u => /news/i.test(u)).slice(0, 2)); } catch { /* none */ }
     const urls: string[] = [];
-    for (const u of [...new Set([...tried, ...G.feedGuesses(site)])].slice(0, 10)) {
-      if (urls.length >= 3 || Date.now() - started > 80000) break;
+    for (const u of [...new Set([...tried, ...G.feedGuesses(site)])].slice(0, 12)) {
+      if (urls.length >= 4 || Date.now() - started > 80000) break;
       try { if (G.feedItems((await get(u)).text).length) urls.push(u); } catch { /* not a feed */ }
     }
     feeds[site] = { urls, t: Date.now() };

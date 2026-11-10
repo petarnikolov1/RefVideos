@@ -93,6 +93,21 @@ export function matchTitle(items, title) {
   }
   return best;
 }
+// the football feeds of outlets whose home page announces none, or only its general news
+export const FEEDS = {
+  'bbc.co.uk': ['https://feeds.bbci.co.uk/sport/football/rss.xml', 'https://feeds.bbci.co.uk/sport/rss.xml'],
+  'skysports.com': ['https://www.skysports.com/rss/12040', 'https://www.skysports.com/rss/11095'],
+  'espn.com': ['https://www.espn.com/espn/rss/soccer/news'], 'theguardian.com': ['https://www.theguardian.com/football/rss'],
+  'independent.co.uk': ['https://www.independent.co.uk/sport/football/rss'], 'thesun.co.uk': ['https://www.thesun.co.uk/sport/football/feed/'],
+  'mirror.co.uk': ['https://www.mirror.co.uk/sport/football/?service=rss'], 'talksport.com': ['https://talksport.com/football/feed/'],
+  'standard.co.uk': ['https://www.standard.co.uk/sport/football/rss'], 'football365.com': ['https://www.football365.com/feed'],
+  'goal.com': ['https://www.goal.com/en/feeds/news?fmt=rss'],
+};
+// the sitemaps robots.txt names: news sitemaps (the last two days, with headlines) first
+export function robotsSitemaps(txt) {
+  const all = [...String(txt).matchAll(/^\s*sitemap:\s*(\S+)/gim)].map(m => m[1]).filter(u => /^https?:\/\//.test(u));
+  return [...all.filter(u => /news/i.test(u)), ...all.filter(u => !/news/i.test(u))].filter((u, i, a) => a.indexOf(u) === i);
+}
 // where to look for an outlet's feed when its home page doesn't say
 export const feedGuesses = site => {
   const hosts = site.split('.').length > 2 ? [site] : ['www.' + site, 'sport.' + site];

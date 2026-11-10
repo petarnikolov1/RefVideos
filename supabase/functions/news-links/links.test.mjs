@@ -22,5 +22,8 @@ ok(G.matchTitle(items, 'Срам! Съдията спести червен ка�
   && G.matchTitle(items, 'Андрей Йорданов: Кристиан Димитров направи дузпа срещу Годой (ВИДЕО)') === 'https://topsport.bg/cska/andrey-jordanov.html'
   && G.matchTitle(items, 'Левски загуби от ЦСКА с 0:3 във вечното дерби') === null, 'the same headline (a word added is fine), not a different one');
 ok(G.feedGuesses('blitz.bg').includes('https://sport.blitz.bg/rss') && G.feedGuesses('sport.bg').includes('https://www.sport.bg/feed'), 'where to look for a feed');
+ok(JSON.stringify(G.robotsSitemaps('User-agent: *\nDisallow: /x\nSitemap: https://gong.bg/sitemap.xml\nsitemap: https://gong.bg/sitemap-news.xml\n'))
+  === '["https://gong.bg/sitemap-news.xml","https://gong.bg/sitemap.xml"]', 'robots.txt sitemaps, news first');
+ok(G.FEEDS['bbc.co.uk'][0].startsWith('https://feeds.bbci.co.uk/sport/football'), 'known football feeds');
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exit(fails ? 1 : 0);
