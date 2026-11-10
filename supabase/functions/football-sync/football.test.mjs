@@ -76,6 +76,23 @@ ok(oldMs.length === 1 && oldMs[0].home_name === 'Спартак Варна' && o
     V('b6', 'Левски протестира заради ВАР', 'Gong.bg', '1:30', 'преди 3 седм.'),
   ];
   const got = L.pickRefClips(m, [...real, ...made], al, new Set(['a9']), Date.parse('2026-11-10T12:00:00Z'));
+  // Спартак Варна – Арда 3:2 and Ботев Пловдив – Дунав 1:1 ("<home> <away> съдия" two and three days after)
+  const m2 = { id: 'y', league: 'efbet', round: 13, kickoff: '2026-11-08T12:30:00Z', home_name: 'Спартак Варна', away_name: 'Арда Кърджали', home_score: 3, away_score: 2 };
+  const m3 = { id: 'z', league: 'efbet', round: 14, kickoff: '2026-11-06T17:00:00Z', home_name: 'Ботев Пловдив', away_name: 'Дунав Русе', home_score: 1, away_score: 1 };
+  const at = Date.parse('2026-11-10T17:00:00Z');
+  const g2 = L.pickRefClips(m2, [
+    V('c1', 'Александър Тунчев след поражението на „Арда“ от „Спартак“ във Варна – анализ и коментар', 'Naroden Sport Rumen Genov', '2:09', 'преди 2 дни'),
+    V('c2', 'Дани Моралес започна с победа начело на „Спартак“ Варна! Успешен дебют срещу „Арда“', 'Naroden Sport Rumen Genov', '5:15', 'преди 2 дни'),
+    V('c3', 'Спартак Пловдив 1:2 Арда: Пловдивският тим отпадна злощастно', 'Истински футбол', '4:44', 'преди 3 седм.'),
+    V('c4', '„Спартак“ (Варна) – „Арда“ (Кърджали): Начало на двубоя', 'Naroden Sport Rumen Genov', '2:37', 'преди 2 дни'),
+  ], al, new Set(), at).map(v => v.id).join(',');
+  ok(g2 === 'c1', 'a coach after the match on a smaller channel, naming both teams; not news clips or another Спартак → ' + g2);
+  const g3 = L.pickRefClips(m3, [
+    V('d1', 'Генчев: Най-много ме е яд за изравнителния гол на Дунав', 'Gong.bg', '2:03', 'преди 3 дни'),
+    V('d2', 'Много лесно изгубени точки!!! Ботев Пловдив - Дунав Русе 1-1 реакция', ' Stefan Zombori', '10:35', 'преди 3 дни'),
+    V('d3', 'Botev Plovdiv vs Dunav Ruse - Bulgarian First League - Live Score', 'NetAndGoal', '2:53:44', 'Предавано поточно преди 3 дни'),
+  ], al, new Set(), at).map(v => v.id).join(',');
+  ok(g3 === 'd1', 'a quote headline ("Генчев: …") is an interview; a fan\'s reaction video and a stream are not → ' + g3);
   const ids = got.map(v => v.id).join(',');
   ok(ids === 'b1,b2,a8,a5', 'referee clips: refereeing words first, then the interviews; not the reports, goals, streams, old clips, other matches → ' + ids);
   ok(got[0].kind === 'ref' && got[2].kind === 'talk', 'referee clips are marked ref / talk');

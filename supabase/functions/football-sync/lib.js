@@ -352,8 +352,10 @@ export function pickVideos(match, vids, aliasList, now = Date.now()) {
 // a refereeing word: decisions (penalty, cards, VAR, offside, a disallowed goal, fouls, handball), the referee, a scandal,
 // a brawl. Not "червените" (ЦСКА's nickname) and not "Варна": the words are whole-word or followed by their endings.
 const REF_CLIP = /(?<![\p{L}])(?:съди[яиейщ]\p{L}*|съдийск\p{L}*|съдийств\p{L}*|рефер\p{L}*|арбит\p{L}*|дузп\p{L}*|наказателн\p{L}* удар|картон\p{L}*|изгон\p{L}*|(?:вар|var)(?:а|ът)?(?![\p{L}])|засад\p{L}*|офсайд\p{L}*|отмен\p{L}*|неправилно|фаул\p{L}*|фал(?:а|ът|ове)?(?![\p{L}])|игра с ръка|ръка в наказателното|симулац\p{L}*|скандал\p{L}*|протест\p{L}*|ограб\p{L}*|откраднат\p{L}*|кражб\p{L}*|меле(?:то|та)?(?![\p{L}])|сбиван\p{L}*|бой(?:ът)?(?![\p{L}])|инцидент\p{L}*|грозни сцени|наказан\p{L}*)/iu;
-// an interview, a press conference or a reaction after the match
-const TALK_CLIP = /(?<![\p{L}])(?:след (?:мача|срещата|дербито|двубоя|победата|загубата|равенството|успеха|поражението|триумфа|разгрома)|пресконференц\p{L}*|интервю\p{L}*|коментира\p{L}*|коментар\p{L}*|реакци\p{L}*|изявлени\p{L}*|заяви\p{L}*|сподели\p{L}*|разкри\p{L}*|призна\p{L}*|недоволен|недоволни|бесен|бесни|гневен)(?![\p{L}])/iu;
+// an interview, a press conference or what a coach / player said after the match (not fans' "реакция" videos)
+const TALK_CLIP = /(?<![\p{L}])(?:след (?:мача|срещата|дербито|двубоя|победата|загубата|равенството|успеха|поражението|триумфа|разгрома)|пресконференц\p{L}*|интервю\p{L}*|коментира\p{L}*|коментар\p{L}*|анализ\p{L}*|изявлени\p{L}*|заяви\p{L}*|сподели\p{L}*|разкри\p{L}*|призна\p{L}*|недоволен|недоволни|бесен|бесни|гневен)(?![\p{L}])/iu;
+// a quote headline: "Генчев: Най-много ме е яд за изравнителния гол", "Иван Петров: …" (not "Репортаж: …", "Обзор: …")
+const QUOTE_HEAD = /^\s*(?!(?:Репортаж|Обзор|Голове|Гол|Видео|Мачът|Мач|Резултат|Live|На живо)\s*:)\p{Lu}\p{Ll}+(?:[ -]\p{Lu}\p{Ll}+)?\s*:\s+\S/u;
 const YOUTH = /(?<![\p{L}])(?:юноши|юношеска|жени|девойки|момчета|деца|дублиращ\p{L}*)(?![\p{L}])|(?<![\p{L}\p{N}])u ?(?:1\d|2[0-3])(?![\p{N}])/iu;
 // YouTube's "преди 3 дни" as a range of days: [at least, less than]
 const ageRange = pub => {
@@ -361,7 +363,7 @@ const ageRange = pub => {
   return [a, a + (/год|г\.|year/.test(s) ? 365 : /мес|м\.|month/.test(s) ? 31 : /седм|week/.test(s) ? 7 : 1)];
 };
 // The referee clips of a played match among search results: the title names this match's teams (no other team of the league)
-// and either a refereeing word ("ref") or an interview / reaction ("talk"). A clip naming only one of the two teams must be
+// and either a refereeing word ("ref") or an interview / a coach's or player's words ("talk"). A clip naming only one team must be
 // from a known channel (Gong, the league, the TV channels, the clubs' own) and from the days right after the match.
 // Clips of other matches (another round, season or score in the title), youth matches, streams and anything older than the
 // match are left out, and so are the videos the match already has (have: their ids). Best first, up to 8.
@@ -381,11 +383,11 @@ export function pickRefClips(match, vids, aliasList, have = new Set(), now = Dat
     const sn = seasonIn(v.title); if (sn && sn !== SEASON) continue;
     const scores = scoresIn(v.title);
     if (scores.length && !scores.some(([x, y]) => (x === match.home_score && y === match.away_score) || (x === match.away_score && y === match.home_score))) continue;
-    const ref = REF_CLIP.test(v.title), talk = !ref && TALK_CLIP.test(v.title);
+    const ref = REF_CLIP.test(v.title), talk = !ref && (TALK_CLIP.test(v.title) || QUOTE_HEAD.test(v.title));
     if (!ref && !talk) continue;
     const ch = channelRank(v.channel, match), both = !!(h && a);
     if (!both && (!ch || hi < days - 6)) continue;                               // one team only: a known channel, right after the match
-    if (!ch && !(both && ref)) continue;                                         // unknown channels: both teams and a refereeing word
+    if (!ch && !both) continue;                                                  // unknown channels: both teams named
     seen.add(v.id);
     out.push({ v, ref, ch, both, scoreOk: scores.length > 0 });
   }
