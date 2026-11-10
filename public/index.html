@@ -462,11 +462,11 @@ const SEASON_START_ISO = SEASON_START_DEFAULT + 'T00:00:00Z';
 const CS = list => new RegExp('(?<![\\p{L}\\p{N}])(?:' + list.join('|') + ')(?![\\p{L}])', 'u'); // case-sensitive names
 // Bulgarian clubs (for grouping articles about the same match): [key, division, display name, pattern]
 const CLUBS = [
-  ['levski','d1','Левски'], ['cska','d1','ЦСКА','ЦСКА(?!\\s*(?:1948|II|2|Москва))'], ['cska48','d1','ЦСКА 1948'],
-  ['ludo','d1','Лудогорец','Лудогорец(?!\\s*(?:II|2|III|3))'], ['chm','d1','Черно море','Черно море(?!\\s*(?:II|2))'],
+  ['levski','d1','Левски'], ['cska','d1','ЦСКА София','ЦСКА(?!\\s*[-–—]?\\s*1948|\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)|Москва))'], ['cska48','d1','ЦСКА 1948','ЦСКА\\s*[-–—]?\\s*1948'],
+  ['ludo','d1','Лудогорец','Лудогорец(?!\\s*(?:II|III|2(?!\\d|\\s*[:–—-]\\s*\\d)|3(?!\\d|\\s*[:–—-]\\s*\\d)))'], ['chm','d1','Черно море','Черно море(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)))'],
   ['lokpd','d1','Локомотив Пловдив','Локо(?:мотив)?\\s*\\(?(?:Пловдив|Пд)\\)?'],
   ['loksf','d1','Локомотив София','Локо(?:мотив)?\\s*\\(?(?:София|Сф)\\)?'],
-  ['botpd','d1','Ботев Пловдив','Ботев\\s*\\(?(?:Пловдив|Пд)\\)?(?!\\s*(?:II|2))'], ['botvr','d1','Ботев Враца','Ботев\\s*\\(?(?:Враца|Вр)\\)?'],
+  ['botpd','d1','Ботев Пловдив','Ботев\\s*\\(?(?:Пловдив|Пд)\\)?(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)))'], ['botvr','d1','Ботев Враца','Ботев\\s*\\(?(?:Враца|Вр)\\)?'],
   ['slavia','d1','Славия'], ['arda','d1','Арда'], ['septemvri','d1','Септември'],
   ['spartakvn','d1','Спартак Варна','Спартак\\s*\\(?(?:Варна|Вн)\\)?'], ['dunav','d1','Дунав'],
   ['beroe','d2','Берое'], ['dobrudzha','d2','Добруджа'], ['montana','d2','Монтана'], ['fratria','d2','Фратрия'],
@@ -477,8 +477,8 @@ const CLUBS = [
   ['marek','d2','Марек'], ['strumska','d2','Струмска слава'], ['vitosha','d2','Витоша'], ['slivnishki','d2','Сливнишки герой'],
   ['spartakpl','d2','Спартак Плевен','Спартак\\s*\\(?Плевен\\)?'],
   ['lokgo','d2','Локомотив ГО','Локомотив\\s*\\(?(?:Горна Оряховица|ГО|Г\\. Оряховица)\\)?'],
-  ['cska2','d2','ЦСКА II','ЦСКА\\s*(?:II|2)'], ['ludo2','d2','Лудогорец II','Лудогорец\\s*(?:II|2)'],
-  ['botev2','d2','Ботев II','Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2)'],
+  ['cska2','d2','ЦСКА II','ЦСКА\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'], ['ludo2','d2','Лудогорец II','Лудогорец\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'],
+  ['botev2','d2','Ботев II','Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'],
 ].map(([k, div, label, pat]) => ({ k, div, label, re: CS([pat || label]) }));
 const CLUB_LABEL = Object.fromEntries(CLUBS.map(c => [c.k, c.label]));
 
@@ -2435,7 +2435,7 @@ function liveTable(lg){
 }
 // a video is playing on the page: a background refresh only redraws the table, the rest waits for the next redraw
 function keepPlayer(box, lg){
-  if (!box.firstChild || box.dataset.lg !== lg || !box.querySelector('.player iframe, .player video')) return false;
+  if (!box.firstChild || box.dataset.shown !== lg || !box.querySelector('.player iframe, .player video')) return false;
   const sb = box.querySelector('#standBox');
   if (sb) sb.innerHTML = standingsHtml(lg, true);
   return true;
@@ -2490,7 +2490,7 @@ function renderResults(force){
   if (!force && key === RES_KEY && box.firstChild) return;   // keep playing videos alive across background refreshes
   if (!force && keepPlayer(box, lg)) return;
   RES_KEY = key;
-  box.dataset.lg = lg;
+  box.dataset.shown = lg;   // not data-lg: the clicks inside would read as a league switch
   box.innerHTML = leagueBar() + `<div class="roundnav">
       <button data-rnd="${r - 1}" ${r <= rounds[0] ? 'disabled' : ''} aria-label="Previous round">‹</button>
       <div class="mid"><h2>Кръг ${r} от ${total}</h2><div class="muted">${esc(span)}${finished && VIDEO_LEAGUES.includes(lg) ? ` · видео за ${withVid} от ${finished} мача` : ''}</div>
@@ -2532,7 +2532,7 @@ function renderWorldResults(box, lg, d, force){
   if (!force && key === RES_KEY && box.firstChild) return;
   if (!force && keepPlayer(box, lg)) return;
   RES_KEY = key;
-  box.dataset.lg = lg;
+  box.dataset.shown = lg;   // not data-lg: the clicks inside would read as a league switch
   const top = m => `${comp.name} - ${R.ko ? (m.note || R.label) : R.label + (m.note && /^Група /.test(m.note) ? ' · ' + m.note : '')}`;
   box.innerHTML = leagueBar() + `<div class="roundnav">
       <button data-rnd="${i - 1}" ${i <= 0 ? 'disabled' : ''} aria-label="Previous round">‹</button>
@@ -2569,7 +2569,7 @@ function initFootballUI(){
       }
       return;
     }
-    const lg = e.target.closest('[data-lg]');
+    const lg = e.target.closest('button[data-lg]');
     if (lg) { FB.league = lg.dataset.lg; FB.last[sectOf(FB.league)] = FB.league; saveJSON('bgRefWatch.fbLeague', FB.league); FB.open.clear(); renderResults(true); return; }
     const nav = e.target.closest('[data-rnd]');
     if (nav && !nav.disabled) { FB.round[FB.league] = Number(nav.dataset.rnd); FB.open.clear(); renderResults(true); return; }
@@ -2672,7 +2672,7 @@ const WORLD_LATIN = {
   'Türkiye': ['Türkiye', 'Turkey', 'Turquía', 'Turchia', 'Türkei', 'Turquie'], 'Bulgaria': ['Bulgaria', 'Bulgarien', 'Bulgarie'],
 };
 // the Bulgarian clubs as the international media write them (Levski in the Europa League)
-const BG_LATIN = { levski: 'Levski(?: Sofia)?', cska: 'CSKA Sofia|CSKA-Sofia', ludo: 'Ludogorets?(?: Razgrad)?', cska48: 'CSKA 1948', lokpd: 'Lokomotiv Plovdiv',
+const BG_LATIN = { levski: 'Levski(?: Sofia)?', cska: 'CSKA Sofia|CSKA-Sofia', ludo: 'Ludogorets?(?: Razgrad)?', cska48: 'CSKA[ -]?1948', lokpd: 'Lokomotiv Plovdiv',
   chm: 'Cherno More(?: Varna)?', arda: 'Arda Kardzhali', botpd: 'Botev Plovdiv', slavia: 'Slavia Sofia' };
 const latinOf = n => WORLD_LATIN[n] || [String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')];
 // One lean list of every match of the season (all competitions) is loaded for this, so a story is matched across
@@ -2710,12 +2710,18 @@ const RX_APPOINT = /ще (?:ръководи|свири|води|бъде гла
 // for the international media)
 const isWorldName = n => !!(WORLD_TEAMS[teamName(n)] || WORLD_LATIN[teamName(n)] || (WORLD_NAMES && WORLD_NAMES.has(n)));
 let WORLD_NAMES = null;
+// "Ботев – Дунав": a club's first word alone, loosely (only to pair two teams of one headline). Not when that word is
+// itself a club: "ЦСКА" is ЦСКА София, never ЦСКА 1948 or ЦСКА II, and ЦСКА София needs no loose form
+function looseWord(c){
+  const w = c.label.split(' ')[0];
+  return c.label.includes(' ') && !CLUBS.some(o => o.re.test(w)) ? CS([w]) : null;
+}
 function teamMatcher(name){
   const n = teamName(name), k = TEAM_KEY[n];
   let t = null;
   if (k) { const c = CLUBS.find(x => x.k === k);
     if (c) t = { k, re: BG_LATIN[k] ? new RegExp('(?:' + c.re.source + '|' + CS([BG_LATIN[k]]).source + ')', 'u') : c.re, bg: true, cyr: true,
-      loose: c.label.includes(' ') ? CS([c.label.split(' ')[0]]) : null }; }
+      loose: looseWord(c) }; }
   else if (isWorldName(name)) t = { k: 'w:' + n, re: CS((WORLD_TEAMS[n] || []).concat(latinOf(n))), cyr: !!WORLD_TEAMS[n] };
   if (t) { t.endRe = new RegExp(t.re.source + '[)"“”»\\s]*$', 'u'); t.startRe = new RegExp('^[„"“«(\\s]*' + t.re.source, 'u');
     if (t.loose) { t.lEnd = new RegExp(t.loose.source + '[)"“”»\\s]*$', 'u'); t.lStart = new RegExp('^[„"“«(\\s]*' + t.loose.source, 'u'); } }

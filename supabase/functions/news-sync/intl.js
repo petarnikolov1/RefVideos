@@ -210,7 +210,7 @@ const refName = t => Object.values(REFS).some(r => r.test(t));
 const DERBY = { eng: I(`manchester derby|merseyside derby|north london derby|tyne-wear derby|m23 derby`), esp: I(`el clásico|clásico|derbi madrileño|derbi sevillano|derbi vasco|derbi barceloní`),
   ita: I(`derby d'italia|derby della madonnina|derby di milano|derby della capitale|derby di roma|derby della mole`), ger: I(`revierderby|klassiker|nordderby`), fra: I(`le classique|classique|derby du rhône|derby de la côte`) };
 // Bulgarian clubs and referees in the international media (shown in the Bulgaria tab too)
-const BG_CLUBS = [['ludo', 'Ludogorets?(?: Razgrad)?'], ['levski', 'Levski(?: Sofia)?'], ['cska48', 'CSKA 1948'], ['cska', 'CSKA Sofia|CSKA-Sofia'],
+const BG_CLUBS = [['ludo', 'Ludogorets?(?: Razgrad)?'], ['levski', 'Levski(?: Sofia)?'], ['cska48', 'CSKA[ -]?1948'], ['cska', 'CSKA Sofia|CSKA-Sofia'],
   ['lokpd', 'Lokomotiv Plovdiv'], ['chm', 'Cherno More'], ['botpd', 'Botev Plovdiv'], ['arda', 'Arda Kardzhali|Arda(?! Turan| Güler)'], ['slavia', 'Slavia Sofia']]
   .map(([k, p]) => ({ k, re: CSx(p) }));
 const BG_REF = new RegExp(CSx('Kabakov|Gidzhenov|Gidjenov|Chinkov|Trenchev|Mitrev|Draganov|Kabakow|Gidschenow').source + '|' +

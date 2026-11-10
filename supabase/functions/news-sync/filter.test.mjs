@@ -87,4 +87,18 @@ for (const [t, eur] of [
   ['Скандал с ВАР в Ливърпул – Арсенал: Оливър отмени гола на Салах', false],
   ['Червен картон и скандал в мача на Англия в квалификациите за Мондиал 2030', false],
 ]) { const r = N.analyze(t, '', loose); ok(r && r.scope === 'world' && r.divs.includes('eur') === eur, `${eur ? 'also Bulgaria' : 'World only'}: ${t} → ${r && r.scope + ':' + r.divs}`); }
+// ЦСКА (София) and ЦСКА 1948 are two clubs; ЦСКА II and III are reserve teams; "ЦСКА 2:1" is a score, not ЦСКА 2
+const clubsOf = t => N.CLUBS.filter(c => c.re.test(t)).map(c => c.k).sort().join(',');
+for (const [t, want] of [
+  ['Любомиров получи сблъсъка между ЦСКА 1948 и ЦСКА', 'cska,cska48'],
+  ['ЦСКА 1948 - ЦСКА 2:3, спорна дузпа в края', 'cska,cska48'],
+  ['Лудогорец - ЦСКА 1948 1:2, "червените" обърнаха резултата', 'cska48,ludo'],
+  ['Скандал в мача на ЦСКА-1948 с Ботев', 'cska48'],
+  ['Левски - ЦСКА 0:3, съдията не даде дузпа', 'cska,levski'],
+  ['ЦСКА 2:1 Левски след червен картон', 'cska,levski'],
+  ['Червен картон за играч на ЦСКА 2 срещу Беласица', 'belasitsa,cska2'],
+  ['ЦСКА II загуби от Беласица', 'belasitsa,cska2'],
+  ['Спорен гол в мача ЦСКА III - Кюстендил', ''],
+  ['Лудогорец 2:2 ЦСКА 1948, съдията отмени гол', 'cska48,ludo'],
+]) ok(clubsOf(t) === want, `clubs of "${t}" → ${clubsOf(t)} (want ${want})`);
 console.log(fails ? fails + ' FAILED' : 'all passed');
