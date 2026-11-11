@@ -482,8 +482,22 @@ const CLUBS = [
   ['botev2','d2','Ботев II','Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'],
 ].map(([k, div, label, pat]) => ({ k, div, label, re: CS([pat || label]) }));
 const CLUB_LABEL = Object.fromEntries(CLUBS.map(c => [c.k, c.label]));
+// A club's youth teams ("ЦСКА U17", "юношите на Левски", "Елитната група до 18 години") and its reserves' youth games are not
+// the club's first team: their stories get the club's key with "~y" ("cska~y"), the Юноши division, and no first-team match
+const RX_YOUTH = /(?<![\p{L}\p{N}])(?:[UУ]\s?-?(?:1[0-9]|2[0-3])(?![\p{N}])|до\s?(?:1[0-9]|2[0-3])\s?(?:г\.|год\p{L}*)|юнош\p{L}*|девойк\p{L}*|детск\p{L}*|подрастващ\p{L}*|(?:младша|старша) възраст)/iu;
+const RX_RESERVES = /(?<![\p{L}])дублиращ\p{L}*/iu;          // "при дублиращите отбори": the clubs' reserve teams
+const youthKey = k => k.endsWith('~y') ? k : k + '~y';
+// a reserve team ("Левски II", "Славия II", "Септември 2") likewise gets "~r" — ЦСКА II, Лудогорец II and Ботев II have keys of their own
+const CLUB_BY_K = Object.fromEntries(CLUBS.map(c => [c.k, c]));
+const RX_RESERVE_AFTER = /^\s*\(?(?:III|II|2|3)\)?(?![\p{L}\p{N}:\-–])(?!\s*[-–:]\s*\d)/u;
+function reserveOnly(c, text){       // the club named in the text only as its reserve team
+  let any = false;
+  for (const m of String(text).matchAll(new RegExp(c.re.source, 'gu'))) { if (!RX_RESERVE_AFTER.test(text.slice(m.index + m[0].length))) return false; any = true; }
+  return any;
+}
+const clubLabel = k => { const [b, t] = k.split('~'); const l = CLUB_LABEL[b]; return !l ? '' : t === 'y' ? l + ' (юноши)' : t === 'r' ? l + ' II' : l; };
 
-const DIVS = { d1:'1st League (efbet)', d2:'2nd League', d3:'3rd League', cup:'Bulgarian Cup', eur:'Europe & abroad', unk:'Unclassified' };
+const DIVS = { d1:'1st League (efbet)', d2:'2nd League', d3:'3rd League', cup:'Bulgarian Cup', youth:'Юноши', eur:'Europe & abroad', unk:'Unclassified' };
 // which tab an article belongs to: Bulgarian, World, or both (a Bulgarian club in a European cup, a Bulgarian referee abroad)
 const artSide = a => a.scope === 'bg' ? 'bg' : (a.divs || []).includes('eur') ? 'both' : 'world';
 const COMPS = { nat:'National teams', ucl:'Champions League', uel:'Europa League', uecl:'Conference League',
@@ -553,10 +567,16 @@ const NEWS_COLS = 'aid,title,link,descr,src,published_at,found_at,scope,divs,com
 const fromRow = r => ({ aid: r.aid, title: r.title, link: r.link || '', desc: r.descr || '', src: r.src || '',
   date: Date.parse(r.published_at), found: Date.parse(r.found_at), scope: r.scope, divs: r.divs || ['unk'], comps: r.comps || [],
   cats: (r.cats && r.cats.length) ? r.cats : ['other'], score: r.score || 1, hinted: !!r.hinted, clubs: r.clubs || [], vh: !!r.vh, lang: r.lang || '' });
+// a youth headline is about the clubs' youth teams: "ЦСКА U17 – Левски U17" is not ЦСКА – Левски
+const youthArt = a => {
+  if (RX_YOUTH.test(a.title)) return { ...a, youth: true, clubs: [...new Set((a.clubs || []).map(youthKey))], divs: a.scope === 'bg' ? ['youth'] : (a.divs || []).filter(d => d === 'eur') };
+  const res = RX_RESERVES.test(a.title), clubs = (a.clubs || []).map(k => res || (CLUB_BY_K[k] && reserveOnly(CLUB_BY_K[k], a.title)) ? k + '~r' : k);
+  return clubs.some(k => k.endsWith('~r')) ? { ...a, clubs } : a;
+};
 // the international media are shown in English only (articles saved earlier in Spanish, Italian, German or French are left out)
 const HIDDEN_LANGS = ['es', 'it', 'de', 'fr'];
 function useArticles(list){
-  list = list.filter(a => !HIDDEN_LANGS.includes(a.lang));
+  list = list.filter(a => !HIDDEN_LANGS.includes(a.lang)).map(youthArt);
   S.articles = Object.fromEntries(list.map(a => [a.aid, a]));
   NEWS.count = list.length;
   NEWS.newest = list.reduce((m, a) => Math.max(m, a.found || 0), 0);
@@ -618,7 +638,7 @@ function feat(a){
   const tok = new Set(words.filter(w => (w.length >= 4 && !/^\d+$/.test(w)) || /^\d{2,}$/.test(w)).map(w => /^\d/.test(w) ? w : stem(w)).filter(t => !STOP.has(t)));
   // who and what it is about: clubs (the "eternal derby" is Левски – ЦСКА), division, competition and round number
   const clubs = new Set(a.clubs || []);
-  if (/вечн\p{L}* дерби/iu.test(a.title)) { clubs.add('levski'); clubs.add('cska'); }
+  if (/вечн\p{L}* дерби/iu.test(a.title)) { const y = a.youth ? '~y' : ''; clubs.add('levski' + y); clubs.add('cska' + y); }
   const rnd = new Set([...String(a.title).matchAll(/(\d{1,2})\s*-?\s*(?:ия|ти|ви|ри|и)?\s+кръг/giu)].map(m => m[1]));
   f = { tok, base: norm(a.title), full: new Set(words.filter(Boolean)), cats: (a.cats || []).filter(c => c !== 'other'),
     clubs, divs: new Set((a.divs || []).filter(x => x !== 'unk' && x !== 'eur')), comps: new Set(a.comps || []), rnd, side: artSide(a) };
@@ -713,7 +733,7 @@ function buildStories(){
 function storyMatch(s){
   const count = {};
   s.arts.forEach(a => (a.clubs || []).forEach(k => count[k] = (count[k] || 0) + 1));
-  const top = Object.entries(count).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => CLUB_LABEL[k]);
+  const top = Object.entries(count).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => clubLabel(k)).filter(Boolean);
   return top.length === 2 ? top.join(' – ') : top[0] || '';
 }
 
@@ -1145,12 +1165,34 @@ function updateLastRun(){
     : NEWS.count ? 'Showing the copy saved in this browser…' : '';
 }
 
+// The search box: a club named in it is matched by who the story is about, not by its letters — "ЦСКА" finds ЦСКА София's
+// stories, not ЦСКА 1948's, ЦСКА II's or the youth teams'; "ЦСКА 1948", "ЦСКА II" and "ЦСКА U17" find just those.
+// The rest of the words are looked for as text.
+const CLUB_RX_I = CLUBS.map(c => ({ k: c.k, re: new RegExp(c.re.source, 'iu') }));   // people type "цска"
+function parseQuery(raw){
+  let rest = String(raw || '');
+  const youth = RX_YOUTH.test(rest), keys = [];
+  for (const c of CLUB_RX_I) {
+    const m = rest.match(c.re);
+    if (!m) continue;
+    let end = m.index + m[0].length;
+    const r = !youth && rest.slice(end).match(new RegExp(RX_RESERVE_AFTER.source, 'iu'));   // "левски ii"
+    if (r) end += r[0].length;
+    keys.push(youth ? youthKey(c.k) : r ? c.k + '~r' : c.k);
+    rest = rest.slice(0, m.index) + ' ' + rest.slice(end);
+  }
+  return { keys, text: norm(rest) };
+}
+// the clubs a piece of text is about (videos have no tags): as the news analysis tags them, youth teams with "~y"
+const clubsOfText = t => { const y = RX_YOUTH.test(t); return new Set(CLUBS.filter(c => c.re.test(t)).map(c => y ? youthKey(c.k) : reserveOnly(c, t) ? c.k + '~r' : c.k)); };
+const storyClubs = s => s._clubs || (s._clubs = new Set(s.arts.flatMap(a => a.clubs || [])));
 function filteredStories(){
   const scope = VIEW === 'world' ? 'world' : 'bg';
-  const text = norm($('#q').value);
+  const q = parseQuery($('#q').value);
   return buildStories().filter(s => s[scope] &&
     (!$('#onlyNew').checked || s.hasNew) && (!$('#onlyHot').checked || s.hot) && (!$('#hideRead').checked || !storyRead(s)) &&
-    (!text || s.arts.some(a => norm(a.title + ' ' + a.desc + ' ' + a.src).includes(text))));
+    q.keys.every(k => storyClubs(s).has(k)) &&
+    (!q.text || s.arts.some(a => norm(a.title + ' ' + a.desc + ' ' + a.src).includes(q.text))));
 }
 function renderChips(el, labels, sel, list, key){
   const counts = {};
@@ -1337,11 +1379,12 @@ function renderVideos(){
   if (VSEL.cat && VSEL.cat !== 'none' && !CATS_V.some(c => c.id === Number(VSEL.cat))) VSEL.cat = '';
   renderVideoFilters();
   renderCatAdmin();
-  const text = norm($('#vq').value);
-  const listKey = [VID_VER, text, USER && USER.id, isAdmin(), AUTH, VSEL.region, VSEL.status, VSEL.cat].join('|');
+  const vq = parseQuery($('#vq').value), text = vq.text;
+  const listKey = [VID_VER, $('#vq').value, USER && USER.id, isAdmin(), AUTH, VSEL.region, VSEL.status, VSEL.cat].join('|');
   if (listKey !== LIST_KEY) {
     LIST_KEY = listKey;
-    const vids = VIDEOS.filter(v => vMatch(v, VSEL) && (!text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name, v.committee_note,
+    const vids = VIDEOS.filter(v => vMatch(v, VSEL) && (!vq.keys.length || (cl => vq.keys.every(k => cl.has(k)))(clubsOfText([v.match, v.title].join(' \n '))))
+      && (!text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name, v.committee_note,
       ...[...vCats(v)].map(catName)].join(' ')).includes(text)));
     preserveForm($('#videoList'), () => {
       $('#videoList').innerHTML = vids.length ? vids.map(videoCard).join('')
@@ -2760,9 +2803,10 @@ function matchNewsIndex(){
   const bgM = matchers.filter(t => t.bg);
   // the matches one headline is about. x: what is known about it — its tab, competitions, topics and when it was published
   function hitsOf(text, x){
+    if (RX_YOUTH.test(text) || RX_RESERVES.test(text)) return null;   // "ЦСКА U17 – Левски U17", "юношите на Лудогорец", "при дублиращите": not the first teams' match
     const cand = x.world || x.comps.length || x.eur ? matchers : bgM;
     const title = text.replace(RX_RIVALS, ' ');
-    const found = cand.filter(t => t.re.test(title));
+    const found = cand.filter(t => t.re.test(title) && !(t.bg && CLUB_BY_K[t.k] && reserveOnly(CLUB_BY_K[t.k], title)));   // "Левски II" is not Левски
     if (!found.length) return null;
     // which competitions it can be about: the ones the news analysis named; the European cups when the headline says
     // Europe/UEFA; none for the Bulgarian Cup (not on the Results page); otherwise its tab's competitions
