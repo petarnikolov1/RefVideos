@@ -1,0 +1,13 @@
+name: news-dump (temporary)
+on: { push: { branches: [tmp-news-dump] } }
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print the saved Bulgarian articles (public key, read-only)
+        run: |
+          K=sb_publishable_sElFdQnVmyqIZMRqBV5dAg_VrstG7T8
+          for off in 0 1000 2000 3000; do
+            curl -s "https://zinuspouctowujhocevy.supabase.co/rest/v1/news_articles?select=published_at,src,cats,clubs,divs,title,descr&scope=eq.bg&order=published_at.desc&offset=$off&limit=1000" \
+              -H "apikey: $K" | jq -r '.[] | "ART\t\(.published_at[0:10])\t\(.src)\t\(.cats|join(","))\t\(.clubs|join(","))\t\(.divs|join(","))\t\(.title)\t\((.descr // "")[0:160])"'
+          done
