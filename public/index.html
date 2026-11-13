@@ -207,6 +207,17 @@
   .newsround .rlinks{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 14px;margin-top:3px;font-size:13px}
   .newsround .rlinks a,.newsround .rlinks button.link{color:var(--accent);font-weight:600;text-decoration:none;font-size:13px;padding:0;width:auto;height:auto;line-height:1.5}
   .newsround .rlinks a:hover,.newsround .rlinks button.link:hover{text-decoration:underline}
+  /* the rounds of the competition picked, as number tiles with how many stories each has */
+  .rpickhead{font-size:13px;color:var(--muted);margin-top:10px}
+  .rpickhead b{color:var(--text)}
+  .rtiles{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .rtile{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:46px;padding:5px 9px;border-radius:10px;line-height:1.15}
+  .rtile b{font-size:15px}
+  .rtile small{font-size:11px;color:var(--muted)}
+  .rtile.none{border-style:dashed}
+  .rtile.none b{color:var(--muted);font-weight:500}
+  .rtile.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .rtile.on b,.rtile.on small{color:var(--accent-ink)}
   /* the news feed, a day at a time: "Днес · петък, 13 ноември" stays at the top while its stories scroll by */
   .dayhead{position:sticky;top:var(--hdrh,56px);z-index:3;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:22px 0 6px;padding:8px 2px 6px;
     background:var(--bg);border-bottom:2px solid var(--accent);font-size:15.5px;font-weight:700;color:var(--text)}
@@ -391,10 +402,12 @@
         <p class="intro" id="intro"></p>
         <div class="flabel" id="groupLabel">Division</div>
         <div id="groupChips" class="chips"></div>
+        <!-- a round: the competition first, then its rounds -->
+        <div class="flabel" id="roundLabel" hidden>Кръг</div>
+        <div id="roundComps" class="chips" hidden></div>
+        <div id="roundPick" hidden></div>
         <div class="flabel">Topic</div>
         <div id="catChips" class="chips"></div>
-        <div class="flabel" id="roundLabel" hidden>Кръг</div>
-        <div class="row" id="roundRow" hidden><select id="roundSel" aria-label="Кръг"></select></div>
         <div class="row">
           <select id="sort" aria-label="Order">
             <option value="date">Newest first</option>
@@ -1173,7 +1186,7 @@ function renderAll(){
 }
 
 /* ======================= UI: NEWS ======================= */
-const SEL = { bg: { group: new Set(), cats: new Set(), round: '' }, world: { group: new Set(), cats: new Set(), sect: '', round: '' } };
+const SEL = { bg: { group: new Set(), cats: new Set(), rcomp: '', round: '' }, world: { group: new Set(), cats: new Set(), sect: '', rcomp: '', round: '' } };
 const EXPANDED = new Set();
 let shown = PAGE_SIZE, renderTimer = null;
 function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 350); }
@@ -1322,32 +1335,43 @@ function withDays(page, all){
   return out;
 }
 
-// The round filter: the rounds of the Bulgarian leagues (Bulgaria tab; only those of the divisions picked), or of the
-// competitions of the World section picked (top 5 leagues, European cups). Rounds that have started (or start within
-// four days: the referee appointments come first), newest first, each with how many of the stories on screen are about it.
+// The round filter, in two steps: the competition first — efbet Лига, Втора лига, Трета лига (Bulgaria tab; those of the
+// divisions picked), or the top 5 leagues and the European cups (World tab; those of the section picked) — then one of
+// its rounds. Rounds that have started (or start within four days: the referee appointments come first), each with how
+// many of the stories on screen are about it; a competition none of whose rounds has a story isn't offered.
 const roundLg = id => String(id).slice(0, String(id).lastIndexOf('|'));
 function roundChoices(world, sel, stories){
-  const lgs = world
-    ? (sel.sect === 'top5' || sel.sect === 'euro' ? WSECT[sel.sect][1].filter(c => !sel.group.size || sel.group.has(c)).map(c => COMP_LG[c]).filter(Boolean) : [])
+  const comps = !world ? [] : sel.sect === 'top5' || sel.sect === 'euro' ? WSECT[sel.sect][1] : !sel.sect ? [...WSECT.top5[1], ...WSECT.euro[1]] : [];
+  const lgs = world ? comps.filter(c => !sel.group.size || sel.group.has(c)).map(c => COMP_LG[c]).filter(Boolean)
     : Object.keys(LEAGUES).filter(lg => !sel.group.size || sel.group.has(LG_DIV[lg]));
-  const R = roundIndex(), count = new Map(), soon = Date.now() + 4 * DAY;
-  for (const s of stories) for (const id of storyRounds(s)) count.set(id, (count.get(id) || 0) + 1);
-  const list = lgs.map(lg => R.byLg.get(lg)).filter(Boolean).map(L => ({ ...L,
-    rounds: L.rounds.filter(r => r.start <= soon || count.get(r.id)).map(r => ({ ...r, n: count.get(r.id) || 0 })).sort((a, b) => b.no - a.no) }))
-    .filter(L => L.rounds.some(r => r.n));       // a league none of whose rounds has a story isn't offered
+  const R = roundIndex(), count = new Map(), inLg = new Map(), soon = Date.now() + 4 * DAY;
+  for (const s of stories) {
+    const ids = storyRounds(s);
+    for (const id of ids) count.set(id, (count.get(id) || 0) + 1);
+    for (const lg of new Set([...ids].map(roundLg))) inLg.set(lg, (inLg.get(lg) || 0) + 1);
+  }
+  const list = lgs.map(lg => R.byLg.get(lg)).filter(Boolean).map(L => ({ ...L, n: inLg.get(L.lg) || 0,
+    rounds: L.rounds.filter(r => r.start <= soon || count.get(r.id)).map(r => ({ ...r, n: count.get(r.id) || 0 })).sort((a, b) => a.no - b.no) }))
+    .filter(L => L.n);
   return { lgs, list };
 }
 function roundName(id){
   const r = roundIndex().byId.get(id), L = r && roundIndex().byLg.get(r.lg);
   return r ? `${L.name} · ${r.label}` : 'Кръг';
 }
-function renderRoundSel(sel, list){
-  const el = $('#roundSel');
-  const html = '<option value="">Всички кръгове</option>' + list.map(L => `<optgroup label="${esc(L.name)}">${L.rounds.map(r =>
-    `<option value="${esc(r.id)}">${esc(r.label)} — ${esc(r.when)} (${r.n})</option>`).join('')}</optgroup>`).join('');
-  if (el._html !== html) { el.innerHTML = html; el._html = html; }
-  el.value = sel.round;
-  $('#roundLabel').hidden = $('#roundRow').hidden = !list.length;
+// a tile shows the round's number ("14"); a knockout stage its name ("1/8-финал")
+const tileLabel = r => (String(r.label).match(/^(?:.* · )?[Кк]ръг (\d+)$/) || [])[1] || r.label;
+function renderRoundPick(sel, list){
+  const comps = $('#roundComps'), pick = $('#roundPick');
+  $('#roundLabel').hidden = comps.hidden = !list.length;
+  comps.innerHTML = list.map(L => `<button class="chip${sel.rcomp === L.lg ? ' on' : ''}" data-rcomp="${esc(L.lg)}" aria-pressed="${sel.rcomp === L.lg}">${esc(L.name)}<span class="n">${L.n}</span></button>`).join('');
+  const L = list.find(x => x.lg === sel.rcomp);
+  pick.hidden = !L;
+  if (!L) { pick.innerHTML = ''; return; }
+  const r0 = L.rounds.find(r => r.id === sel.round);
+  pick.innerHTML = `<div class="rpickhead">${r0 ? `<b>${esc(r0.label)}</b> · ${esc(r0.when)}` : `<b>${esc(L.name)}</b> — изберете кръг`} · под номера: брой теми</div>
+    <div class="rtiles" role="group" aria-label="Кръгове на ${esc(L.name)}">${L.rounds.map(r => `<button class="rtile${r.id === sel.round ? ' on' : ''}${r.n ? '' : ' none'}" data-rpick="${esc(r.id)}"
+      aria-pressed="${r.id === sel.round}" title="${esc(r.label)} · ${esc(r.when)} · ${plural(r.n, 'тема', 'теми')}"><b>${esc(tileLabel(r))}</b><small>${r.n}</small></button>`).join('')}</div>`;
 }
 // a round picked: its name and days above the feed, the rounds before and after it, its page on Results
 function renderRoundBar(sel, list, stories){
@@ -1390,8 +1414,10 @@ function render(){
   // one round of a competition ("efbet Лига · Кръг 14"): the stories about its matches
   const rc = roundChoices(world, sel, all);
   if (sel.round && !rc.lgs.includes(roundLg(sel.round))) sel.round = '';
+  if (sel.round) sel.rcomp = roundLg(sel.round);
+  else if (sel.rcomp && !rc.lgs.includes(sel.rcomp)) sel.rcomp = '';
   const list = sel.round ? all.filter(s => storyRounds(s).has(sel.round)) : all;
-  renderRoundSel(sel, rc.list);
+  renderRoundPick(sel, rc.list);
   renderRoundBar(sel, rc.list, list);
   // newest day first, and in each day the stories the leading outlets (Sportal, Gong, Blitz, Topsport, Dsport, БНТ, bTV…) wrote first
   const byDay = $('#sort').value !== 'score';
@@ -3182,7 +3208,7 @@ function initUI(){
     const b = e.target.closest('[data-pill]'); if (!b) return;
     const k = b.dataset.pill, sel = SEL[VIEW === 'world' ? 'world' : 'bg'];
     const off = id => { if (id === 'q') $('#q').value = ''; else if (id === 'sort') $('#sort').value = 'date'; else if ($('#' + id)) $('#' + id).checked = false; };
-    if (k === '*') { sel.group.clear(); sel.cats.clear(); sel.round = ''; ['q', 'sort', 'onlyNew', 'onlyMajor', 'onlyHot', 'hideRead'].forEach(off); }
+    if (k === '*') { sel.group.clear(); sel.cats.clear(); sel.round = sel.rcomp = ''; ['q', 'sort', 'onlyNew', 'onlyMajor', 'onlyHot', 'hideRead'].forEach(off); }
     else if (k === 'round') sel.round = '';
     else if (k.startsWith('group:')) sel.group.delete(k.slice(6));
     else if (k.startsWith('cats:')) sel.cats.delete(k.slice(5));
@@ -3207,7 +3233,17 @@ function initUI(){
   ['#sort', '#onlyNew', '#onlyMajor', '#onlyHot', '#hideRead'].forEach(s => $(s).addEventListener('change', () => { shown = PAGE_SIZE; render(); }));
   // a round of a competition: picked in the Filters panel, then stepped through (‹ ›) above the feed
   const pickRound = id => { SEL[VIEW === 'world' ? 'world' : 'bg'].round = id; shown = PAGE_SIZE; render(); };
-  $('#roundSel').addEventListener('change', e => pickRound(e.target.value));
+  // the competition first (a tap on the one picked closes it), then one of its rounds (a tap on the one picked: all rounds)
+  $('#roundComps').addEventListener('click', e => {
+    const b = e.target.closest('[data-rcomp]'); if (!b) return;
+    const sel = SEL[VIEW === 'world' ? 'world' : 'bg'];
+    sel.rcomp = sel.rcomp === b.dataset.rcomp ? '' : b.dataset.rcomp; sel.round = '';
+    shown = PAGE_SIZE; render();
+  });
+  $('#roundPick').addEventListener('click', e => {
+    const b = e.target.closest('[data-rpick]'); if (!b) return;
+    pickRound(SEL[VIEW === 'world' ? 'world' : 'bg'].round === b.dataset.rpick ? '' : b.dataset.rpick);
+  });
   $('#roundBar').addEventListener('click', e => {
     const res = e.target.closest('[data-rres]');
     if (res) { e.preventDefault(); openRound(res.dataset.rres); return; }

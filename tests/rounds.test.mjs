@@ -16,7 +16,8 @@ const src = [
   cut('// The feed a day at a time', '// The round filter'),
   cut("/* ── the competitions' rounds, for the news ── */", 'let RIDX'),
   cut('// the round a headline names', 'function storyRounds'),
-  'export { roundNos, buildRounds, roundsOfStory, dayHead, withDays, dayNo };',
+  cut('// a tile shows the round', 'function renderRoundPick'),
+  'export { roundNos, buildRounds, roundsOfStory, dayHead, withDays, dayNo, tileLabel };',
 ].join('\n');
 const dir = mkdtempSync(join(tmpdir(), 'rounds-'));
 writeFileSync(join(dir, 'page.mjs'), src);
@@ -59,6 +60,9 @@ for (const [wk, day] of [[0, '2026-08-15'], [1, '2026-08-22']]) for (let i = 0; 
     home_name: 'T' + (wk ? i : 2 * i), away_name: 'T' + (wk ? i + 10 : 2 * i + 1) });
 const RW = P.buildRounds(W, [{ key: 'eng.1', name: 'Висша лига' }]);
 ok(RW.byLg.get('eng.1') && RW.byLg.get('eng.1').rounds.length === 2 && RW.byId.get('eng.1|0').label === 'Кръг 1' && RW.byId.get('eng.1|1').label === 'Кръг 2', 'Висша лига: Кръг 1 and Кръг 2 from the fixture list');
+
+// a round's tile: its number, or a knockout stage's name
+ok(P.tileLabel({ label: 'Кръг 14' }) === '14' && P.tileLabel({ label: 'Основна фаза · кръг 3' }) === '3' && P.tileLabel({ label: '1/8-финал' }) === '1/8-финал', 'tiles: "14", "3", "1/8-финал"');
 
 // which round a story is about
 const story = (key, arts) => ({ key, arts: arts.map((a, i) => ({ aid: key + i, scope: 'bg', divs: ['d1'], ...a })) });
