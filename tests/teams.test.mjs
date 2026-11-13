@@ -69,5 +69,8 @@ ok(link(1794200000, 'Спартак (Варна) победи Локомотив
 ok(link(1794160000, 'Червен картон за Левски II срещу Беласица', ['red']) === '', 'Левски II → not Левски\'s match');
 
 ok(link(1794160000, 'Червен картон обърна дербито при дублиращите отбори: Левски изпусна ЦСКА', ['red']) === '', 'the reserves\' derby → not the first teams\' derby');
+// the committee rules on a match a week or two later: a headline naming both teams still goes to their match
+ok(link(1794150000 + 12 * 86400, 'Съдийската комисия: ЦСКА трябваше да получи дузпа срещу Левски', ['penalty', 'committee']) === 'efbet:534543', 'a ruling 12 days later on Левски – ЦСКА → that match');
+ok(link(1794150000 + 20 * 86400, 'Съдийската комисия: ЦСКА трябваше да получи дузпа срещу Левски', ['penalty', 'committee']) === '', '…but not three weeks later');
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exit(fails ? 1 : 0);

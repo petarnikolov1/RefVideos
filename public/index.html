@@ -200,6 +200,19 @@
   .roundnav h2{font-size:18px;margin:0}
   .roundnav select{margin-top:4px}
   .roundnav button{width:42px;height:42px;padding:0;font-size:20px;line-height:1}
+  /* the news of one round ("efbet Лига · Кръг 14"), above the feed */
+  .newsround{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:8px 10px;margin:10px 0 4px}
+  .newsround h2{font-size:16px}
+  .newsround .muted{font-size:13px}
+  .newsround .rlinks{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 14px;margin-top:3px;font-size:13px}
+  .newsround .rlinks a,.newsround .rlinks button.link{color:var(--accent);font-weight:600;text-decoration:none;font-size:13px;padding:0;width:auto;height:auto;line-height:1.5}
+  .newsround .rlinks a:hover,.newsround .rlinks button.link:hover{text-decoration:underline}
+  /* the news feed, a day at a time: "Днес · петък, 13 ноември" stays at the top while its stories scroll by */
+  .dayhead{position:sticky;top:var(--hdrh,56px);z-index:3;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:22px 0 6px;padding:8px 2px 6px;
+    background:var(--bg);border-bottom:2px solid var(--accent);font-size:15.5px;font-weight:700;color:var(--text)}
+  .dayhead:first-child{margin-top:6px}
+  .dayhead .dnow{color:var(--accent)}
+  .dayhead .n{margin-left:auto;font-size:12.5px;font-weight:500;color:var(--muted);white-space:nowrap}
   .mcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .mtop{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
   .mrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:12px 0 8px}
@@ -380,6 +393,8 @@
         <div id="groupChips" class="chips"></div>
         <div class="flabel">Topic</div>
         <div id="catChips" class="chips"></div>
+        <div class="flabel" id="roundLabel" hidden>Кръг</div>
+        <div class="row" id="roundRow" hidden><select id="roundSel" aria-label="Кръг"></select></div>
         <div class="row">
           <select id="sort" aria-label="Order">
             <option value="date">Newest first</option>
@@ -394,6 +409,7 @@
       </div>
       <div id="sectChips" class="chips seg" hidden></div>
       <div class="fstat"><span id="pills"></span><span id="count" class="muted"></span><a id="resLink" class="flink" href="#results"></a></div>
+      <div id="roundBar" class="roundnav newsround" hidden></div>
     </div>
     <div id="warn" class="warn" hidden></div>
     <section id="feed"></section>
@@ -1157,7 +1173,7 @@ function renderAll(){
 }
 
 /* ======================= UI: NEWS ======================= */
-const SEL = { bg: { group: new Set(), cats: new Set() }, world: { group: new Set(), cats: new Set(), sect: '' } };
+const SEL = { bg: { group: new Set(), cats: new Set(), round: '' }, world: { group: new Set(), cats: new Set(), sect: '', round: '' } };
 const EXPANDED = new Set();
 let shown = PAGE_SIZE, renderTimer = null;
 function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 350); }
@@ -1271,6 +1287,7 @@ function renderPills(world, sel){
   if (q) p.push(['q', `“${q.length > 24 ? q.slice(0, 23) + '…' : q}”`]);
   sel.group.forEach(k => p.push(['group:' + k, (world ? COMPS : DIVS)[k] || k]));
   sel.cats.forEach(k => p.push(['cats:' + k, CATS[k] || k]));
+  if (sel.round) p.push(['round', roundName(sel.round)]);
   [['onlyNew', 'Only new'], ['onlyMajor', 'Само водещите сайтове'], ['onlyHot', 'Only hot'], ['hideRead', 'Hide read']].forEach(([id, l]) => { if ($('#' + id).checked) p.push([id, l]); });
   if ($('#sort').value === 'score') p.push(['sort', 'Most important first']);
   $('#pills').innerHTML = p.map(([k, l]) => `<button class="pill" data-pill="${esc(k)}" title="Remove">${esc(l)}<span class="x" aria-hidden="true">×</span></button>`).join('')
@@ -1279,6 +1296,73 @@ function renderPills(world, sel){
   fc.hidden = !n; fc.textContent = n;
   $('#ftoggle').setAttribute('aria-label', n ? `Filters, ${n} on` : 'Filters');
 }
+
+// The feed a day at a time (newest first): a heading for each day — "Днес · петък, 13 ноември", "Вчера · …",
+// "Сряда, 11 ноември" — with how many stories and articles the day has
+const dayNo = t => Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 864e5);   // the day, in this browser's time
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function dayHead(t, stories, arts, now = Date.now()){
+  const d = new Date(t), y = new Date(now);
+  const rel = dayNo(t) === dayNo(now) ? 'Днес' : dayNo(t) === dayNo(now) - 1 ? 'Вчера' : '';
+  let txt = d.toLocaleDateString('bg-BG', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== y.getFullYear() ? { year: 'numeric' } : {}) });
+  if (!rel) txt = txt.charAt(0).toUpperCase() + txt.slice(1);
+  return `<div class="dayhead" role="heading" aria-level="2">${rel ? `<span class="dnow">${rel}</span><span>·</span>` : ''}<span>${esc(txt)}</span>` +
+    `<span class="n">${plural(stories, 'тема', 'теми')} · ${plural(arts, 'статия', 'статии')}</span></div>`;
+}
+// the cards on screen, with a heading where a new day starts (the counts are for the whole day, not just what is shown)
+function withDays(page, all){
+  const n = new Map(), a = new Map();
+  for (const s of all) { const k = dayNo(s.date); n.set(k, (n.get(k) || 0) + 1); a.set(k, (a.get(k) || 0) + s.arts.length); }
+  let cur = null, out = '';
+  for (const s of page) {
+    const k = dayNo(s.date);
+    if (k !== cur) { cur = k; out += dayHead(s.date, n.get(k), a.get(k)); }
+    out += storyCard(s);
+  }
+  return out;
+}
+
+// The round filter: the rounds of the Bulgarian leagues (Bulgaria tab; only those of the divisions picked), or of the
+// competitions of the World section picked (top 5 leagues, European cups). Rounds that have started (or start within
+// four days: the referee appointments come first), newest first, each with how many of the stories on screen are about it.
+const roundLg = id => String(id).slice(0, String(id).lastIndexOf('|'));
+function roundChoices(world, sel, stories){
+  const lgs = world
+    ? (sel.sect === 'top5' || sel.sect === 'euro' ? WSECT[sel.sect][1].filter(c => !sel.group.size || sel.group.has(c)).map(c => COMP_LG[c]).filter(Boolean) : [])
+    : Object.keys(LEAGUES).filter(lg => !sel.group.size || sel.group.has(LG_DIV[lg]));
+  const R = roundIndex(), count = new Map(), soon = Date.now() + 4 * DAY;
+  for (const s of stories) for (const id of storyRounds(s)) count.set(id, (count.get(id) || 0) + 1);
+  const list = lgs.map(lg => R.byLg.get(lg)).filter(Boolean).map(L => ({ ...L,
+    rounds: L.rounds.filter(r => r.start <= soon || count.get(r.id)).map(r => ({ ...r, n: count.get(r.id) || 0 })).sort((a, b) => b.no - a.no) }))
+    .filter(L => L.rounds.some(r => r.n));       // a league none of whose rounds has a story isn't offered
+  return { lgs, list };
+}
+function roundName(id){
+  const r = roundIndex().byId.get(id), L = r && roundIndex().byLg.get(r.lg);
+  return r ? `${L.name} · ${r.label}` : 'Кръг';
+}
+function renderRoundSel(sel, list){
+  const el = $('#roundSel');
+  const html = '<option value="">Всички кръгове</option>' + list.map(L => `<optgroup label="${esc(L.name)}">${L.rounds.map(r =>
+    `<option value="${esc(r.id)}">${esc(r.label)} — ${esc(r.when)} (${r.n})</option>`).join('')}</optgroup>`).join('');
+  if (el._html !== html) { el.innerHTML = html; el._html = html; }
+  el.value = sel.round;
+  $('#roundLabel').hidden = $('#roundRow').hidden = !list.length;
+}
+// a round picked: its name and days above the feed, the rounds before and after it, its page on Results
+function renderRoundBar(sel, list, stories){
+  const bar = $('#roundBar'), L = sel.round && list.find(x => x.rounds.some(r => r.id === sel.round));
+  bar.hidden = !L;
+  if (!L) { bar.innerHTML = ''; return; }
+  const asc = L.rounds.slice().sort((a, b) => a.no - b.no), i = asc.findIndex(r => r.id === sel.round), r = asc[i], prev = asc[i - 1], next = asc[i + 1];
+  const arts = stories.reduce((n, s) => n + s.arts.length, 0);
+  const step = (x, sign, label) => `<button data-rgo="${x ? esc(x.id) : ''}"${x ? ` title="${esc(x.label)}"` : ' disabled'} aria-label="${label}">${sign}</button>`;
+  bar.innerHTML = step(prev, '‹', 'Предишен кръг') + `<div class="mid"><h2>${esc(L.name)} · ${esc(r.label)}</h2>
+      <div class="muted">${esc(r.when)} · ${plural(r.ms.length, 'мач', 'мача')} · ${plural(stories.length, 'тема', 'теми')}, ${plural(arts, 'статия', 'статии')}</div>
+      <div class="rlinks"><a href="#results" data-rres="${esc(r.id)}">Резултатите от кръга →</a><button class="link" data-rgo="">✕ Всички кръгове</button></div></div>` +
+    step(next, '›', 'Следващ кръг');
+}
+
 function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
   $('#intro').innerHTML = world
@@ -1302,11 +1386,17 @@ function render(){
   $('#groupLabel').textContent = world ? 'Competition' : 'Division';
   renderChips($('#groupChips'), groupLabels, sel.group, byCat, groupKey);
   renderChips($('#catChips'), CATS, sel.cats, byGroup, 'cats');
-  const list = byCat.filter(s => byGroup.includes(s));
+  const all = byCat.filter(s => byGroup.includes(s));
+  // one round of a competition ("efbet Лига · Кръг 14"): the stories about its matches
+  const rc = roundChoices(world, sel, all);
+  if (sel.round && !rc.lgs.includes(roundLg(sel.round))) sel.round = '';
+  const list = sel.round ? all.filter(s => storyRounds(s).has(sel.round)) : all;
+  renderRoundSel(sel, rc.list);
+  renderRoundBar(sel, rc.list, list);
   // newest day first, and in each day the stories the leading outlets (Sportal, Gong, Blitz, Topsport, Dsport, БНТ, bTV…) wrote first
-  const day = t => Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 864e5);
-  list.sort($('#sort').value === 'score' ? (a, b) => b.score - a.score || b.date - a.date
-    : (a, b) => day(b.date) - day(a.date) || (b.lead - a.lead) || b.date - a.date);
+  const byDay = $('#sort').value !== 'score';
+  list.sort(!byDay ? (a, b) => b.score - a.score || b.date - a.date
+    : (a, b) => dayNo(b.date) - dayNo(a.date) || (b.lead - a.lead) || b.date - a.date);
 
   const totalArts = list.reduce((n, s) => n + s.arts.length, 0);
   $('#count').textContent = `${list.length} stories · ${totalArts} articles`;
@@ -1321,7 +1411,7 @@ function render(){
     const any = Object.keys(S.articles).length;
     feed.innerHTML = `<div class="empty">${NEWS.loading && !any ? 'Loading the saved news…' : any ? 'No stories match these filters.' : NEWS.err ? 'The news could not be loaded — press Refresh to try again.' : 'No stories yet.'}</div>`;
   } else {
-    feed.innerHTML = list.slice(0, shown).map(storyCard).join('');
+    feed.innerHTML = byDay ? withDays(list.slice(0, shown), list) : list.slice(0, shown).map(storyCard).join('');
     feed.querySelectorAll('.media[data-key]').forEach(m => { const old = keep.get(m.dataset.key); if (old && old.dataset.sig === m.dataset.sig) m.replaceWith(old); });
   }
   $('#more').hidden = list.length <= shown;
@@ -2753,7 +2843,7 @@ async function loadMatchIndex(force){
   const from = new Date(seasonStartTs() - 10 * DAY).toISOString(), to = new Date(Date.now() + 14 * DAY).toISOString(), all = [];
   try {
     for (let p = 0; p < 5; p++) {
-      const { data, error } = await SB.from('football_matches').select('id,league,round,kickoff,status,home_name,away_name,home_score,away_score')
+      const { data, error } = await SB.from('football_matches').select('id,league,round,round_name,note,kickoff,status,home_name,away_name,home_score,away_score')
         .gte('kickoff', from).lte('kickoff', to).order('kickoff', { ascending: true }).order('id', { ascending: true }).range(p * 1000, p * 1000 + 999);
       if (error) throw error;
       all.push(...(data || []));
@@ -2833,14 +2923,15 @@ function matchNewsIndex(){
     const loose = new Set(cand.filter(t => t.loose && !strict.has(t.k) && t.loose.test(title)).map(t => t.k));
     const t0 = x.t0, hits = new Map(), paired = new Set();
     // 1. a match between two teams the headline names (one may be named loosely, "Ботев – Дунав"): the closest one
-    //    within a week before (an appointment) or nine days after (the aftermath)
+    //    within a week before (an appointment) or two weeks after (the aftermath: a review panel or the referee
+    //    committee rules on it a week or more later — "Liverpool should have had a penalty vs Arsenal", ten days on)
     const pairs = [new Map(), new Map()];
     for (const k of strict) for (const m of byTeam.get(k) || []) {
       if (!ok(m)) continue;
       const o = m._k[0] === k ? m._k[1] : m._k[0], lvl = strict.has(o) ? 0 : loose.has(o) ? 1 : -1;
       if (lvl < 0 || o === k) continue;
       const dt = t0 - m._t;
-      if (dt < (post ? -90 * 60e3 : -7 * DAY) || dt > (pre ? 2 * 3600e3 : 9 * DAY)) continue;
+      if (dt < (post ? -90 * 60e3 : -7 * DAY) || dt > (pre ? 2 * 3600e3 : 16 * DAY)) continue;
       const pk = [k, o].sort().join('|'), best = pairs[lvl].get(pk);
       if (!best || Math.abs(dt) < Math.abs(t0 - best._t)) pairs[lvl].set(pk, m);
     }
@@ -2901,6 +2992,77 @@ function matchNewsIndex(){
   byMatch.forEach(list => list.sort((a, b) => b.date - a.date));
   byStory.forEach(list => list.sort((a, b) => a._t - b._t));
   return (MN_CACHE = { key: ckey, byMatch, byStory });
+}
+
+/* ── the competitions' rounds, for the news ── */
+// The Bulgarian leagues number their rounds themselves; the five big leagues' and the European cups' rounds are worked
+// out from the fixture list, as on the Results page. A round's days are those of most of its matches: a match postponed
+// by weeks doesn't stretch them (efbet Лига's 10th round: 18–21 Sep, one match on 3 Dec).
+const LG_DIV = { efbet: 'd1', mrbit: 'd2', sw3: 'd3' };
+const spanLabel = (a, b) => { const x = sofiaParts(new Date(a).toISOString()), y = sofiaParts(new Date(b).toISOString());
+  return x.m !== y.m ? `${x.d} ${x.m} – ${y.d} ${y.m}` : x.d === y.d ? `${x.d} ${x.m}` : `${x.d}–${y.d} ${x.m}`; };
+function buildRounds(matches, comps){
+  const byId = new Map(), byMatch = new Map(), byLg = new Map();
+  const add = (lg, name, list) => {
+    const rounds = [];
+    for (const r of list) {
+      const ts = r.ms.map(m => Date.parse(m.kickoff)).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!ts.length) continue;
+      const mid = ts[Math.floor(ts.length / 2)], core = ts.filter(t => Math.abs(t - mid) <= 4 * DAY);
+      Object.assign(r, { lg, start: ts[0], t0: core[0], t1: core[core.length - 1], when: spanLabel(core[0], core[core.length - 1]) });
+      rounds.push(r); byId.set(r.id, r);
+      r.ms.forEach(m => byMatch.set(String(m.id), r));
+    }
+    if (rounds.length) byLg.set(lg, { lg, name, rounds });
+  };
+  for (const lg of Object.keys(LEAGUES)) {
+    const byNo = new Map();
+    for (const m of matches) if (m.league === lg && m.round != null && m.kickoff) { if (!byNo.has(m.round)) byNo.set(m.round, []); byNo.get(m.round).push(m); }
+    add(lg, LEAGUES[lg], [...byNo].sort((a, b) => a[0] - b[0]).map(([no, ms]) => ({ id: lg + '|' + no, no: Number(no), label: `Кръг ${no}`, ms })));
+  }
+  for (const c of comps) {
+    const ms = matches.filter(m => m.league === c.key && m.kickoff);
+    if (ms.length) add(c.key, c.name, worldRounds(ms).map((r, i) => ({ id: c.key + '|' + i, no: i + 1, label: r.label, ms: r.matches })));
+  }
+  return { byId, byMatch, byLg };
+}
+let RIDX = { key: null, byId: new Map(), byMatch: new Map(), byLg: new Map() };
+function roundIndex(){
+  const key = MIDX.at + '|' + (FB.comps ? FB.comps.length : 0);
+  if (RIDX.key !== key) RIDX = Object.assign(buildRounds(MIDX.matches, visibleComps().filter(c => c.grp === 'top5' || c.grp === 'euro')), { key });
+  return RIDX;
+}
+// the round a headline names: "14-и кръг", "14-ия кръг", "1-вия кръг", "кръг 14", "кръг №14" (not "3 кръга до края")
+const RX_RND = /(?<![\d/:.,])(\d{1,2})(?:\s*-?\s*(?:ви|ри|ти|ми|и)(?:я|ят)?)?\s+кръг(?![\p{L}])|(?<![\p{L}])кръг\s*(?:№\s*)?(\d{1,2})(?!\d|\s*[-–:/.,]\s*\d)/giu;
+const roundNos = t => [...String(t || '').matchAll(RX_RND)].map(m => Number(m[1] || m[2])).filter(n => n > 0);
+// the rounds a story is about: the round its headlines name, in their league ("Съдийската комисия: грешки в 14-ия кръг"),
+// otherwise the rounds of the matches it is linked to (the same links as on the Results page)
+function roundsOfStory(s, R, linked){
+  const out = new Set(), named = new Set();
+  for (const a of s.arts) {
+    if (DUP.has(a.aid) || a.scope !== 'bg') continue;
+    const nos = roundNos(a.title);
+    if (nos.length) for (const [lg, d] of Object.entries(LG_DIV)) if ((a.divs || []).includes(d))
+      for (const no of nos) { const r = R.byId.get(lg + '|' + no); if (r) { out.add(r.id); named.add(lg); } }
+  }
+  for (const m of linked || []) { const r = R.byMatch.get(String(m.id)); if (r && !named.has(r.lg)) out.add(r.id); }
+  return out;
+}
+function storyRounds(s){
+  const R = roundIndex(), idx = matchNewsIndex(), key = R.key + '|' + idx.key;
+  if (s._rk !== key) { s._rounds = roundsOfStory(s, R, idx.byStory.get(s.key)); s._rk = key; }
+  return s._rounds;
+}
+// "Резултатите от кръга": the round on the Results page
+function openRound(id){
+  const r = roundIndex().byId.get(id);
+  if (!r || (!LEAGUES[r.lg] && !compOf(r.lg))) return;
+  FB.league = r.lg; FB.last[sectOf(r.lg)] = r.lg; saveJSON('bgRefWatch.fbLeague', r.lg);
+  FB.open.clear(); FB.want = '';
+  if (LEAGUES[r.lg]) { FB.round[r.lg] = r.no; FB.goMatch = ''; }
+  else FB.goMatch = String((r.ms.slice().sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))[0] || {}).id || '');
+  RES_KEY = '';
+  if (VIEW === 'results') renderResults(true); else go('results');
 }
 // the strip under a match card: how much was written about it; a tap opens the stories, stacked like the news feed
 const MN_HTML = {};
@@ -3020,7 +3182,8 @@ function initUI(){
     const b = e.target.closest('[data-pill]'); if (!b) return;
     const k = b.dataset.pill, sel = SEL[VIEW === 'world' ? 'world' : 'bg'];
     const off = id => { if (id === 'q') $('#q').value = ''; else if (id === 'sort') $('#sort').value = 'date'; else if ($('#' + id)) $('#' + id).checked = false; };
-    if (k === '*') { sel.group.clear(); sel.cats.clear(); ['q', 'sort', 'onlyNew', 'onlyMajor', 'onlyHot', 'hideRead'].forEach(off); }
+    if (k === '*') { sel.group.clear(); sel.cats.clear(); sel.round = ''; ['q', 'sort', 'onlyNew', 'onlyMajor', 'onlyHot', 'hideRead'].forEach(off); }
+    else if (k === 'round') sel.round = '';
     else if (k.startsWith('group:')) sel.group.delete(k.slice(6));
     else if (k.startsWith('cats:')) sel.cats.delete(k.slice(5));
     else off(k);
@@ -3042,6 +3205,19 @@ function initUI(){
   $('#q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { shown = PAGE_SIZE; render(); }, 200); });
   $('#vq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderVideos, 200); });
   ['#sort', '#onlyNew', '#onlyMajor', '#onlyHot', '#hideRead'].forEach(s => $(s).addEventListener('change', () => { shown = PAGE_SIZE; render(); }));
+  // a round of a competition: picked in the Filters panel, then stepped through (‹ ›) above the feed
+  const pickRound = id => { SEL[VIEW === 'world' ? 'world' : 'bg'].round = id; shown = PAGE_SIZE; render(); };
+  $('#roundSel').addEventListener('change', e => pickRound(e.target.value));
+  $('#roundBar').addEventListener('click', e => {
+    const res = e.target.closest('[data-rres]');
+    if (res) { e.preventDefault(); openRound(res.dataset.rres); return; }
+    const b = e.target.closest('button[data-rgo]');
+    if (b && !b.disabled) pickRound(b.dataset.rgo);
+  });
+  // the day headings stay just under the page header while their stories scroll by
+  const hdr = document.querySelector('header'), setHdr = () => document.documentElement.style.setProperty('--hdrh', hdr.offsetHeight + 'px');
+  setHdr();
+  if (window.ResizeObserver) new ResizeObserver(setHdr).observe(hdr); else window.addEventListener('resize', setHdr);
   // "only the leading outlets" is a way of reading the site: it is remembered in this browser
   try { $('#onlyMajor').checked = localStorage.getItem('refvideos.onlyMajor') === '1'; } catch (e) { /* no storage */ }
   $('#onlyMajor').addEventListener('change', () => { try { localStorage.setItem('refvideos.onlyMajor', $('#onlyMajor').checked ? '1' : '0'); } catch (e) { /* no storage */ } });
