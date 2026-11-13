@@ -386,6 +386,7 @@
             <option value="score">Most important first</option>
           </select>
           <label><input type="checkbox" id="onlyNew"> Only new</label>
+          <label><input type="checkbox" id="onlyMajor"> Само водещите сайтове</label>
           <label><input type="checkbox" id="onlyHot"> Only hot</label>
           <label><input type="checkbox" id="hideRead"> Hide read</label>
         </div>
@@ -463,7 +464,7 @@ const SEASON_START_ISO = SEASON_START_DEFAULT + 'T00:00:00Z';
 const CS = list => new RegExp('(?<![\\p{L}\\p{N}])(?:' + list.join('|') + ')(?![\\p{L}])', 'u'); // case-sensitive names
 // Bulgarian clubs (for grouping articles about the same match): [key, division, display name, pattern]
 const CLUBS = [
-  ['levski','d1','Левски'], ['cska','d1','ЦСКА София','ЦСКА(?!\\s*[-–—]?\\s*1948|\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)|Москва))'], ['cska48','d1','ЦСКА 1948','ЦСКА\\s*[-–—]?\\s*1948'],
+  ['levski','d1','Левски','(?<!Васил\\s)(?<!В\\.\\s?)Левски'], ['cska','d1','ЦСКА София','ЦСКА(?!\\s*[-–—]?\\s*1948|\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)|Москва))'], ['cska48','d1','ЦСКА 1948','ЦСКА\\s*[-–—]?\\s*1948'],
   ['ludo','d1','Лудогорец','Лудогорец(?!\\s*(?:II|III|2(?!\\d|\\s*[:–—-]\\s*\\d)|3(?!\\d|\\s*[:–—-]\\s*\\d)))'], ['chm','d1','Черно море','Черно море(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)))'],
   ['lokpd','d1','Локомотив Пловдив','Локо(?:мотив)?\\s*\\(?(?:Пловдив|Пд)\\)?'],
   ['loksf','d1','Локомотив София','Локо(?:мотив)?\\s*\\(?(?:София|Сф)\\)?'],
@@ -567,6 +568,12 @@ const NEWS_COLS = 'aid,title,link,descr,src,published_at,found_at,scope,divs,com
 const fromRow = r => ({ aid: r.aid, title: r.title, link: r.link || '', desc: r.descr || '', src: r.src || '',
   date: Date.parse(r.published_at), found: Date.parse(r.found_at), scope: r.scope, divs: r.divs || ['unk'], comps: r.comps || [],
   cats: (r.cats && r.cats.length) ? r.cats : ['other'], score: r.score || 1, hinted: !!r.hinted, clubs: r.clubs || [], vh: !!r.vh, lang: r.lang || '' });
+// "Съдия" is also a judge: a headline about a court, the judiciary or a police investigation, with nothing about football in
+// it, is not about referees ("екипажът на „Челси 3“ е разпитан пред съдия", "Висшия съдебен съвет от квотата на съдиите в
+// Монтана", "Спортният арбитраж решава…"). The news search leaves these out too; this also hides those saved before.
+const RX_COURT = /(?<![\p{L}])(?:пред съди\p{L}*|разпит\p{L}*|съда|съдът|съдилищ\p{L}*|съдебн\p{L}*|прокур\p{L}*|делото|присъд\p{L}*|осъд\p{L}*|обвиняем\p{L}*|подсъдим\p{L}*|адвокат\p{L}*|магистрат\p{L}*|ВСС|ВКС|ВАС|ЕСПЧ|конституционн\p{L}* съд\p{L}*|арбитражн\p{L}* съд\p{L}*|спортни\p{L}* арбитраж|квотата на съдиите|избирателна активност|екипаж\p{L}*|кораб\p{L}*|court|courts|judges?|tribunal|lawsuit|trial)(?![\p{L}])/iu;
+const RX_FOOTBALL = /(?<![\p{L}])(?:мач\p{L}*|футбол\p{L}*|гол(?:а|ът|ове|овете)?|дузп\p{L}*|картон\p{L}*|ВАР|VAR|засад\p{L}*|лига(?:та)?|БФС|УЕФА|ФИФА|рефер\p{L}*|арбитър\p{L}*|арбитри\p{L}*|свир\p{L}*|наряд\p{L}*|стадион\p{L}*|треньор\p{L}*|футболист\p{L}*|играч\p{L}*|фенове\p{L}*|агитк\p{L}*|дерби\p{L}*|referee\p{L}*|football|soccer|penalty|red card)(?![\p{L}])/iu;
+const notRefereeing = a => RX_COURT.test(a.title) && !RX_FOOTBALL.test(a.title);
 // a youth headline is about the clubs' youth teams: "ЦСКА U17 – Левски U17" is not ЦСКА – Левски
 const youthArt = a => {
   if (RX_YOUTH.test(a.title)) return { ...a, youth: true, clubs: [...new Set((a.clubs || []).map(youthKey))], divs: a.scope === 'bg' ? ['youth'] : (a.divs || []).filter(d => d === 'eur') };
@@ -576,7 +583,7 @@ const youthArt = a => {
 // the international media are shown in English only (articles saved earlier in Spanish, Italian, German or French are left out)
 const HIDDEN_LANGS = ['es', 'it', 'de', 'fr'];
 function useArticles(list){
-  list = list.filter(a => !HIDDEN_LANGS.includes(a.lang)).map(youthArt);
+  list = list.filter(a => !HIDDEN_LANGS.includes(a.lang) && !notRefereeing(a)).map(youthArt);
   S.articles = Object.fromEntries(list.map(a => [a.aid, a]));
   NEWS.count = list.length;
   NEWS.newest = list.reduce((m, a) => Math.max(m, a.found || 0), 0);
@@ -688,13 +695,15 @@ function clusterArticles(arts){
 // The headline of a story is the article from the best-known outlet; among equals, the one closest to the rest of the
 // story (the most typical headline), then the earliest. The other articles are listed under it.
 const MEDIA = [
-  [3, /sportal|gong|blitz|блиц|topsport|btv|бтв|nova\b|nova\.bg|нова|бнт|bnt|24\s?chasa|24 часа|dnevnik|дневник/i],
+  // the leading Bulgarian sports outlets (and the football union's own site): their headlines lead, their stories come first
+  [3, /sportal|gong|blitz|блиц|topsport|dsport|7\s?dni\s?sport|7 дни спорт|мач телеграф|btv|бтв|(?<![a-z])nova\b|нова тв|бнт|bnt|24\s?chasa|24 часа|bfunion|български футболен съюз/i],
   [3, /^(?:BBC|Sky Sports|ESPN|The Guardian|The Athletic|The New York Times|Reuters|AP News|MARCA|Marca|Diario AS|AS|Mundo Deportivo|La Gazzetta dello Sport|Gazzetta|Corriere dello Sport|kicker|BILD|Bild|sportschau|L'[ÉE]quipe|RMC Sport)\b/],
   [2, /^(?:The Telegraph|The Independent|The Times|Mirror|Daily Mail|talkSPORT|GOAL|Evening Standard|SPORT|Sport|EL PAÍS|El País|Relevo|Tuttosport|Sky Sport|Corriere della Sera|SPORT1|Sport1|DER SPIEGEL|Der Spiegel|Le Parisien|Le Figaro|France Football|Foot Mercato|So Foot|Eurosport)\b/],
-  [2, /dsport|7dnisport|dnes\.bg|днес|fakti|факти|mediapool|offnews|actualno|football24|sportlive|\bgol\b|gol\.bg|novsport|bfunion|футболен съюз|бнр|bnr|бта|\bbta\b|dir\.bg|webcafe|telegraph|телеграф|trud|труд|standart|стандарт|bgonair|arena\s?sport|арена спорт|fokus|фокус|plovdiv24|marica|марица/i],
+  [2, /dnevnik|дневник|dnes\.bg|днес|fakti|факти|mediapool|offnews|actualno|football24|sportlive|\bgol\b|gol\.bg|novsport|bfunion|футболен съюз|бнр|bnr|бта|\bbta\b|dir\.bg|webcafe|telegraph|телеграф|trud|труд|standart|стандарт|bgonair|arena\s?sport|арена спорт|fokus|фокус|plovdiv24|marica|марица/i],
   [0, /facebook|novini247|topnovini|winbet|vbox7|youtube|unknown/i],
 ];
 const mediaTier = src => { for (const [t, re] of MEDIA) if (re.test(src || '')) return t; return 1; };
+const LEADING = 3;                   // a story one of the leading outlets wrote about
 const cutTitle = t => /(\.\.\.|…)\s*$/.test(t) || /\s(?:на|в|от|по|за|и|с|между)\s*$/i.test(t);   // a headline cut off by the feed
 
 let STORY_CACHE = { ver: -1, season: '', list: [] };
@@ -718,11 +727,12 @@ function buildStories(){
     const rep = g.map(a => [a, rank(a)]).sort((x, y) => (y[1] - x[1]) || (x[0].date - y[0].date))[0][0];
     const union = (key, filler) => { const s = new Set(g.flatMap(a => a[key] || [])); if (filler && s.size > 1) s.delete(filler); return [...s]; };
     const sources = new Set(g.map(a => a.src)).size;
-    const score = Math.max(...g.map(a => a.score || 1)) + Math.min(6, sources - 1);
+    const tier = Math.max(...g.map(a => mediaTier(a.src)));
+    const score = Math.max(...g.map(a => a.score || 1)) + Math.min(6, sources - 1) + (tier >= LEADING ? 4 : tier >= 2 ? 2 : 0);
     list.push({
       key: g[0].aid, scope: rep.scope, arts: g.slice().reverse(), aidSet: new Set(g.map(a => a.aid)), rep,
       bg: g.some(a => artSide(a) !== 'world'), world: g.some(a => a.scope === 'world'), bgOnly: g.some(a => a.scope === 'bg'),
-      date: g[g.length - 1].date, first: g[0].date, sources, score,
+      date: g[g.length - 1].date, first: g[0].date, sources, score, lead: tier >= LEADING,
       divs: union('divs', 'unk'), comps: union('comps'), cats: union('cats', 'other'),
       hot: score >= 12 || sources >= 4, hasNew: g.some(isNewArt), vh: g.some(a => a.vh),
     });
@@ -1191,7 +1201,7 @@ function filteredStories(){
   const q = parseQuery($('#q').value);
   return buildStories().filter(s => s[scope] &&
     (!$('#onlyNew').checked || s.hasNew) && (!$('#onlyHot').checked || s.hot) && (!$('#hideRead').checked || !storyRead(s)) &&
-    q.keys.every(k => storyClubs(s).has(k)) &&
+    (!$('#onlyMajor').checked || s.lead) && q.keys.every(k => storyClubs(s).has(k)) &&
     (!q.text || s.arts.some(a => norm(a.title + ' ' + a.desc + ' ' + a.src).includes(q.text))));
 }
 function renderChips(el, labels, sel, list, key){
@@ -1261,7 +1271,7 @@ function renderPills(world, sel){
   if (q) p.push(['q', `“${q.length > 24 ? q.slice(0, 23) + '…' : q}”`]);
   sel.group.forEach(k => p.push(['group:' + k, (world ? COMPS : DIVS)[k] || k]));
   sel.cats.forEach(k => p.push(['cats:' + k, CATS[k] || k]));
-  [['onlyNew', 'Only new'], ['onlyHot', 'Only hot'], ['hideRead', 'Hide read']].forEach(([id, l]) => { if ($('#' + id).checked) p.push([id, l]); });
+  [['onlyNew', 'Only new'], ['onlyMajor', 'Само водещите сайтове'], ['onlyHot', 'Only hot'], ['hideRead', 'Hide read']].forEach(([id, l]) => { if ($('#' + id).checked) p.push([id, l]); });
   if ($('#sort').value === 'score') p.push(['sort', 'Most important first']);
   $('#pills').innerHTML = p.map(([k, l]) => `<button class="pill" data-pill="${esc(k)}" title="Remove">${esc(l)}<span class="x" aria-hidden="true">×</span></button>`).join('')
     + (p.length > 1 ? '<button class="pill clear" data-pill="*">Clear all</button>' : '');
@@ -1293,7 +1303,10 @@ function render(){
   renderChips($('#groupChips'), groupLabels, sel.group, byCat, groupKey);
   renderChips($('#catChips'), CATS, sel.cats, byGroup, 'cats');
   const list = byCat.filter(s => byGroup.includes(s));
-  list.sort($('#sort').value === 'score' ? (a, b) => b.score - a.score || b.date - a.date : (a, b) => b.date - a.date);
+  // newest day first, and in each day the stories the leading outlets (Sportal, Gong, Blitz, Topsport, Dsport, БНТ, bTV…) wrote first
+  const day = t => Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 864e5);
+  list.sort($('#sort').value === 'score' ? (a, b) => b.score - a.score || b.date - a.date
+    : (a, b) => day(b.date) - day(a.date) || (b.lead - a.lead) || b.date - a.date);
 
   const totalArts = list.reduce((n, s) => n + s.arts.length, 0);
   $('#count').textContent = `${list.length} stories · ${totalArts} articles`;
@@ -3007,7 +3020,7 @@ function initUI(){
     const b = e.target.closest('[data-pill]'); if (!b) return;
     const k = b.dataset.pill, sel = SEL[VIEW === 'world' ? 'world' : 'bg'];
     const off = id => { if (id === 'q') $('#q').value = ''; else if (id === 'sort') $('#sort').value = 'date'; else if ($('#' + id)) $('#' + id).checked = false; };
-    if (k === '*') { sel.group.clear(); sel.cats.clear(); ['q', 'sort', 'onlyNew', 'onlyHot', 'hideRead'].forEach(off); }
+    if (k === '*') { sel.group.clear(); sel.cats.clear(); ['q', 'sort', 'onlyNew', 'onlyMajor', 'onlyHot', 'hideRead'].forEach(off); }
     else if (k.startsWith('group:')) sel.group.delete(k.slice(6));
     else if (k.startsWith('cats:')) sel.cats.delete(k.slice(5));
     else off(k);
@@ -3028,7 +3041,10 @@ function initUI(){
   let t;
   $('#q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { shown = PAGE_SIZE; render(); }, 200); });
   $('#vq').addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderVideos, 200); });
-  ['#sort', '#onlyNew', '#onlyHot', '#hideRead'].forEach(s => $(s).addEventListener('change', () => { shown = PAGE_SIZE; render(); }));
+  ['#sort', '#onlyNew', '#onlyMajor', '#onlyHot', '#hideRead'].forEach(s => $(s).addEventListener('change', () => { shown = PAGE_SIZE; render(); }));
+  // "only the leading outlets" is a way of reading the site: it is remembered in this browser
+  try { $('#onlyMajor').checked = localStorage.getItem('refvideos.onlyMajor') === '1'; } catch (e) { /* no storage */ }
+  $('#onlyMajor').addEventListener('change', () => { try { localStorage.setItem('refvideos.onlyMajor', $('#onlyMajor').checked ? '1' : '0'); } catch (e) { /* no storage */ } });
   $('#more').addEventListener('click', () => { shown += PAGE_SIZE; render(); });
 
   bindStoryEvents($('#feed'), render);

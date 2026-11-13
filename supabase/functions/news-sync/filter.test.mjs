@@ -101,4 +101,18 @@ for (const [t, want] of [
   ['Спорен гол в мача ЦСКА III - Кюстендил', ''],
   ['Лудогорец 2:2 ЦСКА 1948, съдията отмени гол', 'cska48,ludo'],
 ]) ok(clubsOf(t) === want, `clubs of "${t}" → ${clubsOf(t)} (want ${want})`);
+// "съдия" is also a judge (real headlines that were saved before this rule)
+for (const [t, keep, d] of [
+  ['При 69,44 процента активност приключи изборният ден за членове на Висшия съдебен съвет от квотата на съдиите в Монтана', false, 'the judiciary\'s election'],
+  ['Разпитаха пред съдия част от екипажа на „Челси 3“, чакат експертизи', false, 'a ship\'s crew before a judge'],
+  ['Спортният арбитраж решава съдбата на финала за Купата на африканските нации през ноември', false, 'the court of arbitration'],
+  ['Съдията от Монтана получи наряд за Добруджа - Етър', true, 'a referee from Монтана'],
+  ['Марица отстъпи пред адашите от Милево след много съдийски спорни отсъждания', true, 'a town club with refereeing words'],
+  ['Вижте как футболист рита в главата съдия, Дани Петканов зове прокуратурата', true, 'a referee attacked, the prosecutor called'],
+  ['Моуриньо се оправда със съдията за боя от Атлетико', true, 'a coach blames the referee'],
+  ['Огромен скандал на Етър - Марек! Тръгнаха да бият съдията (видео)', true, 'two town clubs and a referee'],
+  ['„Дунав“ ще обжалва рекордна глоба от 7090 евро', true, 'a river club fined'],
+]) ok(!!N.analyze(t, '', { ctx: 'bg' }) === keep, `${keep ? 'kept' : 'left out'}: ${d}`);
+ok(!N.CLUBS.find(c => c.k === 'levski').re.test('Бой между фенове на ЦСКА и Лудогорец на "Васил Левски"') && N.CLUBS.find(c => c.k === 'levski').re.test('Левски с жалба'),
+  '"Васил Левски" (the stadium, the man) is not Левски');
 console.log(fails ? fails + ' FAILED' : 'all passed');

@@ -161,7 +161,7 @@ export const RX = {
 
 // Bulgarian clubs: [key, division, display name, pattern]
 export const CLUBS = [
-  ['levski', 'd1', 'Левски'], ['cska', 'd1', 'ЦСКА София', 'ЦСКА(?!\\s*[-–—]?\\s*1948|\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)|Москва))'], ['cska48', 'd1', 'ЦСКА 1948', 'ЦСКА\\s*[-–—]?\\s*1948'],
+  ['levski', 'd1', 'Левски', '(?<!Васил\\s)(?<!В\\.\\s?)Левски'], ['cska', 'd1', 'ЦСКА София', 'ЦСКА(?!\\s*[-–—]?\\s*1948|\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)|Москва))'], ['cska48', 'd1', 'ЦСКА 1948', 'ЦСКА\\s*[-–—]?\\s*1948'],
   ['ludo', 'd1', 'Лудогорец', 'Лудогорец(?!\\s*(?:II|III|2(?!\\d|\\s*[:–—-]\\s*\\d)|3(?!\\d|\\s*[:–—-]\\s*\\d)))'], ['chm', 'd1', 'Черно море', 'Черно море(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)))'],
   ['lokpd', 'd1', 'Локомотив Пловдив', 'Локомотив\\s*\\(?(?:Пловдив|Пд)\\)?|Локо\\s*\\(?Пд\\)?'],
   ['loksf', 'd1', 'Локомотив София', 'Локомотив\\s*\\(?(?:София|Сф)\\)?|Локо\\s*\\(?Сф\\)?'],
@@ -179,6 +179,13 @@ export const CLUBS = [
   ['botev2', 'd2', 'Ботев II', 'Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'],
 ].map(([k, div, label, pat]) => ({ k, div, label, re: CS([pat || label]) }));
 const clubsIn = t => CLUBS.filter(c => c.re.test(t)).map(c => c.k);
+// "Съдия" is also a judge: a headline about a court, the judiciary or an investigation, with nothing about football in it, is
+// not about referees ("екипажът на „Челси 3“ е разпитан пред съдия", "Висшия съдебен съвет от квотата на съдиите в Монтана")
+export const COURT = new RegExp(B + `(?:пред съди${W}|разпит${W}|съда|съдът|съдилищ${W}|съдебн${W}|прокур${W}|делото|присъд${W}|осъд${W}|обвиняем${W}|` +
+  `подсъдим${W}|адвокат${W}|магистрат${W}|всс|вкс|вас|еспч|конституционн${W} съд${W}|арбитражн${W} съд${W}|спортни${W} арбитраж|квотата на съдиите|` +
+  `избирателна активност|екипаж${W}|кораб${W})${E}`, 'iu');
+export const FOOTBALL = new RegExp(B + `(?:мач${W}|футбол${W}|гол(?:а|ът|ове|овете)?${E}|дузп${W}|картон${W}|вар${E}|var${E}|засад${W}|лига(?:та)?${E}|бфс${E}|уефа${E}|фифа${E}|` +
+  `рефер${W}|арбитър${W}|арбитри${W}|свир${W}|наряд${W}|стадион${W}|треньор${W}|футболист${W}|играч${W}|фенове${W}|агитк${W}|дерби${W})`, 'iu');
 const REFNAMES = CS(REFEREES.concat(REF_SURNAMES).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
 // World section: the five big leagues, the three European cups and national teams
@@ -245,6 +252,7 @@ export function analyze(title, desc, q) {
   const foot = anyLeague || clubs.length > 0 || refName || RX.bgOrg.test(t) || RX.foot.test(t) || comps.length > 0 || cats.some(c => ['penalty', 'var', 'red'].includes(c));
   if (!foot) return null;
   if (RX.court.test(t) && !(refName || comps.length || cats.some(c => DIRECT.includes(c)) || RX.foot.test(title))) return null;
+  if (COURT.test(title) && !FOOTBALL.test(title)) return null;
   // 3. player / manager / club stories (transfers, injuries, contracts, coaching changes, interviews…)
   //    only stay when the headline itself is about a referee or a decision on the pitch
   if (RX.personal.test(title) && !(RX.referee.test(title) || REFNAMES.test(title) || DIRECT.some(c => RX[c].test(title)) || RX.dispRef.test(title))) return null;
