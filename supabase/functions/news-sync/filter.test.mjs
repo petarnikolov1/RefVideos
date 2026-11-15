@@ -98,7 +98,7 @@ for (const [t, want] of [
   ['ЦСКА 2:1 Левски след червен картон', 'cska,levski'],
   ['Червен картон за играч на ЦСКА 2 срещу Беласица', 'belasitsa,cska2'],
   ['ЦСКА II загуби от Беласица', 'belasitsa,cska2'],
-  ['Спорен гол в мача ЦСКА III - Кюстендил', ''],
+  ['Спорен гол в мача ЦСКА III - Кюстендил', 'kyustendil'],   // ЦСКА III is not ЦСКА; Кюстендил is a Third League club
   ['Лудогорец 2:2 ЦСКА 1948, съдията отмени гол', 'cska48,ludo'],
 ]) ok(clubsOf(t) === want, `clubs of "${t}" → ${clubsOf(t)} (want ${want})`);
 // "съдия" is also a judge (real headlines that were saved before this rule)
@@ -115,4 +115,18 @@ for (const [t, keep, d] of [
 ]) ok(!!N.analyze(t, '', { ctx: 'bg' }) === keep, `${keep ? 'kept' : 'left out'}: ${d}`);
 ok(!N.CLUBS.find(c => c.k === 'levski').re.test('Бой между фенове на ЦСКА и Лудогорец на "Васил Левски"') && N.CLUBS.find(c => c.k === 'levski').re.test('Левски с жалба'),
   '"Васил Левски" (the stadium, the man) is not Левски');
+// a club's name that is something else: another town's club, a referee's town, a former club, a reserve team
+const an = t => N.analyze(t, '', { ctx: 'bg' }) || {};
+ok(an('„Пирин“ (Рз) загуби дънното дерби в мач с двама изгонени').clubs?.join() === 'pirinrz' && an('„Пирин“ (Рз) загуби дънното дерби в мач с двама изгонени').divs?.join() === 'd3',
+  '„Пирин“ (Рз) is Пирин Разлог, a Third League club');
+ok(an('Съдии от Монтана и Враца ще ръководят мача на "Бдин" с "Етър II"').clubs?.join() === '', '"Съдии от Монтана": a referee\'s town; "Етър II" is not Етър');
+ok(an('Марица отстъпи пред адашите от Милево след много съдийски спорни отсъждания').divs?.join() === 'd3', 'Марица plays in the Third League');
+ok(!!N.analyze('Бивш нападател на ЦСКА вече е съдия', '', { ctx: 'bg' }) && an('Бивш нападател на ЦСКА вече е съдия').clubs?.join() === '', 'a former ЦСКА player who is a referee now: kept, but not ЦСКА\'s story');
+ok(an('Струмска слава се добра до равенство срещу дубъла на Левски след дузпа в 93-ата минута').clubs?.join() === 'strumska', '"дубъла на Левски" is Левски II, not Левски');
+ok(an('Скандал на "Бернабеу": как изчезна запис от фал на Арда Гюлер при 26 камери?').scope === 'world', 'Арда Гюлер at the Bernabéu: Real Madrid, not Арда');
+ok(an('БФС наложи 5 307,50 евро глоби след II предварителен кръг на Купата: Берое 2 132,50€, Миньор 1 583,75€').clubs?.slice().sort().join() === 'beroe,minyor',
+  '"Берое 2 132,50€" is a fine, not Берое II');
+ok(N.clubsIn('Габриела Найденова ще бъде главен съдия на двубоя между „Родопа“ (Смолян) и втория отбор на „Ботев“ (Пловдив)').join() === 'botev2', '"втория отбор на „Ботев“ (Пловдив)" is Ботев II');
+ok(!N.analyze('Най-бързият червен картон за дебютант закопа Славия Прага (ВИДЕО)', '', { ctx: 'bg' }) && !!N.analyze('Левски е на прага на титлата след спорна дузпа', '', { ctx: 'bg' }),
+  'Славия Прага is Czech football (left out); "на прага на" is not Prague');
 console.log(fails ? fails + ' FAILED' : 'all passed');

@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
     out.mode = 'reclassify';                        // passes, and move the rest to their current section / competitions
     const rows: any[] = [];
     for (let from = 0; ; from += 1000) {
-      const page = await rest(`news_articles?select=aid,title,descr,src,link,scope,divs,comps,lang&order=aid&offset=${from}&limit=1000`);
+      const page = await rest(`news_articles?select=aid,title,descr,src,link,scope,divs,comps,clubs,hinted,lang&order=aid&offset=${from}&limit=1000`);
       rows.push(...page);
       if (page.length < 1000) break;
     }
@@ -116,10 +116,13 @@ Deno.serve(async (req) => {
         : INTL_LANGS.includes(r.lang) ? (INTL.looksEnglish(r.title) ? INTL.analyzeIntl(r.title, [r.descr, r.src].filter(Boolean).join(' · '), r.lang) : null)
         : N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
       if (!a) { drop.push(r); continue; }
-      const same = a.scope === r.scope && [...a.comps].sort().join() === [...(r.comps ?? [])].sort().join() &&
-        (a.scope !== 'world' || [...a.divs].sort().join() === [...(r.divs ?? [])].sort().join());
-      if (!same) move.push({ aid: r.aid, title: r.title, from: `${r.scope}:${(r.comps ?? []).join('+')}`, to: `${a.scope}:${a.comps.join('+')}`,
-        patch: { scope: a.scope, comps: a.comps, divs: a.scope === 'bg' && r.scope === 'bg' ? r.divs : a.divs } });
+      // a Bulgarian article keeps its divisions when they came from the search that found it (hinted), or when the analysis
+      // finds none of its own; otherwise it takes the new ones ("„Пирин“ (Рз)" is a Third League club, not Втора лига's Пирин)
+      const divs = a.scope === 'bg' && r.scope === 'bg' && (r.hinted || a.divs.join() === 'unk') ? (r.divs ?? a.divs) : a.divs;
+      const key = (x: any[]) => [...(x ?? [])].sort().join();
+      const same = a.scope === r.scope && key(a.comps) === key(r.comps) && key(divs) === key(r.divs) && key(a.clubs) === key(r.clubs);
+      if (!same) move.push({ aid: r.aid, title: r.title, from: `${r.scope}:${(r.comps ?? []).join('+')}:${(r.divs ?? []).join('+')}:${(r.clubs ?? []).join('+')}`,
+        to: `${a.scope}:${a.comps.join('+')}:${divs.join('+')}:${(a.clubs ?? []).join('+')}`, patch: { scope: a.scope, comps: a.comps, divs, clubs: a.clubs } });
     }
     if (!body.dry) {
       for (let k = 0; k < drop.length; k += 100) {

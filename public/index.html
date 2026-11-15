@@ -491,35 +491,91 @@ const PROXIES = [
 // News is searched on the server (Supabase Edge Function "news-sync") and saved in news_articles; the page only reads it.
 const SEASON_START_ISO = SEASON_START_DEFAULT + 'T00:00:00Z';
 const CS = list => new RegExp('(?<![\\p{L}\\p{N}])(?:' + list.join('|') + ')(?![\\p{L}])', 'u'); // case-sensitive names
+// A club's name also names other clubs of other towns ("Пирин" (Рз) is Пирин Разлог, "Септември (Симитли)", "Левски Лом"):
+// a club's name followed by another town, in brackets or not, is not that club. OWN_TOWN: each club's own town and its short forms
+const OWN_TOWN = { cska2: 'София|Сф', ludo2: 'Разград|Рз', botev2: 'Пловдив|Пд', levski: 'София|Сф', cska: 'София|Сф', cska48: 'София|Сф', ludo: 'Разград|Рз', chm: 'Варна|Вн', lokpd: 'Пловдив|Пд', loksf: 'София|Сф',
+  botpd: 'Пловдив|Пд', botvr: 'Враца|Вр', slavia: 'София|Сф', arda: 'Кърджали|Кж', septemvri: 'София|Сф', spartakvn: 'Варна|Вн', dunav: 'Русе|Рс',
+  beroe: 'Стара Загора|Ст\\. Загора|СЗ', dobrudzha: 'Добрич|Дб', montana: 'Монтана|Мн', fratria: 'Бенковски|Варна|Вн', yantra: 'Габрово|Гб', vihren: 'Сандански',
+  etar: 'Велико Търново|В\\. Търново|ВТ', hebar: 'Пазарджик|Пз', maritsa: 'Пловдив|Пд', pirin: 'Благоевград|Бл', litex: 'Ловеч|Лч', sportist: 'Своге',
+  chernomorets: 'Бургас|Бс', rilski: 'Самоков', nesebar: 'Несебър', neftochimic: 'Бургас|Бс', belasitsa: 'Петрич', minyor: 'Перник|Пк', sevlievo: 'Севлиево',
+  marek: 'Дупница', strumska: 'Радомир', vitosha: 'Бистрица', slivnishki: 'Сливница', spartakpl: 'Плевен', lokgo: 'Горна Оряховица|Г\\. Оряховица|ГО',
+  pirinrz: 'Разлог|Рз', piringd: 'Гоце Делчев|Г\\. Делчев|ГД', septsim: 'Симитли', botih: 'Ихтиман', balkan: 'Ботевград', bansko: 'Банско',
+  etropole: 'Етрополе', kyustendil: 'Кюстендил', kostinbrod: 'Костинброд', oborishte: 'Панагюрище' };
+const TOWNS = '(?:Стара|Нова|Горна|Долна|Велико|Генерал|Полски|Бобов|Елин|Червен|Сапарева|Нови|Гоце)\\s+\\p{L}+|София|Пловдив|Варна|Бургас|Русе|Плевен|Сливен|' +
+  'Добрич|Шумен|Перник|Хасково|Ямбол|Пазарджик|Благоевград|Враца|Габрово|Асеновград|Видин|Казанлък|Кюстендил|Кърджали|Монтана|Димитровград|Търговище|Ловеч|' +
+  'Силистра|Разград|Дупница|Смолян|Петрич|Самоков|Сандански|Лом|Карлово|Севлиево|Велинград|Айтос|Троян|Свищов|Ботевград|Харманли|Карнобат|Свиленград|' +
+  'Панагюрище|Чирпан|Попово|Раднево|Козлодуй|Поморие|Несебър|Балчик|Разлог|Банско|Симитли|Тервел|Мездра|Ихтиман|Костинброд|Етрополе|Своге|Радомир|Бяла|' +
+  'Павликени|Луковит|Кнежа|Оряхово|Каварна|Девня|Провадия|Созопол|Царево|Средец|Елхово|Първомай|Раковски|Пещера|Чепеларе|Рудозем|Мадан|Девин|Златоград|' +
+  'Момчилград|Крумовград|Сливница|Божурище|Брезник|Кочериново|Якоруда|Сопот|Белово|Берковица|Белоградчик|Бистрица|Милево|Главиница|Дулово|Исперих|Кубрат|' +
+  'Сф|Пд|Вн|Вр|Рз|Бл|ГД|ГО|ВТ|Бс|Рс|Кж|СЗ|Ям|Хс|Сл|Шм|Пз|Пк|Дб|Лч|Мн|Вд|Гб';
+const TOWN_NOT = k => { const own = OWN_TOWN[k] ? `(?:${OWN_TOWN[k]})` : '(?!)';
+  return `(?!["“”»']?\\s*\\(\\s*(?!${own}\\s*\\))(?!\\p{Lu}{3,}\\s*\\))(?![Вв]идео|[Сс]нимки|[Гг]алерия|[Оо]бновена|[Дд]опълнена)\\p{Lu}[^()]{0,23}\\))` +
+    `(?!["“”»']?\\s+(?!${own}(?![\\p{L}]))(?:${TOWNS})(?![\\p{L}]))`; };
 // Bulgarian clubs (for grouping articles about the same match): [key, division, display name, pattern]
+// (a club named with its town may have the closing quotes between: „Локомотив“ (Пловдив))
+const Q_ = '["“”»\']?\\s*';
 const CLUBS = [
-  ['levski','d1','Левски','(?<!Васил\\s)(?<!В\\.\\s?)Левски'], ['cska','d1','ЦСКА София','ЦСКА(?!\\s*[-–—]?\\s*1948|\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)|Москва))'], ['cska48','d1','ЦСКА 1948','ЦСКА\\s*[-–—]?\\s*1948'],
-  ['ludo','d1','Лудогорец','Лудогорец(?!\\s*(?:II|III|2(?!\\d|\\s*[:–—-]\\s*\\d)|3(?!\\d|\\s*[:–—-]\\s*\\d)))'], ['chm','d1','Черно море','Черно море(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)))'],
-  ['lokpd','d1','Локомотив Пловдив','Локо(?:мотив)?\\s*\\(?(?:Пловдив|Пд)\\)?'],
-  ['loksf','d1','Локомотив София','Локо(?:мотив)?\\s*\\(?(?:София|Сф)\\)?'],
-  ['botpd','d1','Ботев Пловдив','Ботев\\s*\\(?(?:Пловдив|Пд)\\)?(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d)))'], ['botvr','d1','Ботев Враца','Ботев\\s*\\(?(?:Враца|Вр)\\)?'],
-  ['slavia','d1','Славия'], ['arda','d1','Арда'], ['septemvri','d1','Септември'],
-  ['spartakvn','d1','Спартак Варна','Спартак\\s*\\(?(?:Варна|Вн)\\)?'], ['dunav','d1','Дунав'],
+  ['levski','d1','Левски','(?<!Васил\\s)(?<!В\\.\\s?)Левски'], ['cska','d1','ЦСКА София','ЦСКА(?!\\s*[-–—]?\\s*1948|\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d)|Москва))'], ['cska48','d1','ЦСКА 1948','ЦСКА\\s*[-–—]?\\s*1948'],
+  ['ludo','d1','Лудогорец','Лудогорец(?!\\s*(?:II|III|2(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d)|3(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d)))'], ['chm','d1','Черно море','Черно море(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d)))'],
+  ['lokpd','d1','Локомотив Пловдив',`Локо(?:мотив)?${Q_}\\(?(?:Пловдив|Пд)\\)?`],
+  ['loksf','d1','Локомотив София',`Локо(?:мотив)?${Q_}\\(?(?:София|Сф)\\)?`],
+  ['botpd','d1','Ботев Пловдив',`Ботев${Q_}\\(?(?:Пловдив|Пд)\\)?(?!\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d)))`], ['botvr','d1','Ботев Враца',`Ботев${Q_}\\(?(?:Враца|Вр)\\)?`],
+  ['slavia','d1','Славия','Славия(?!\\s*Прага)'], ['arda','d1','Арда','Арда(?!\\s+(?:Туран|Гюлер))'], ['septemvri','d1','Септември'],
+  ['spartakvn','d1','Спартак Варна',`Спартак${Q_}\\(?(?:Варна|Вн)\\)?`], ['dunav','d1','Дунав'],
   ['beroe','d2','Берое'], ['dobrudzha','d2','Добруджа'], ['montana','d2','Монтана'], ['fratria','d2','Фратрия'],
-  ['yantra','d2','Янтра'], ['vihren','d2','Вихрен'], ['etar','d2','Етър'], ['hebar','d2','Хебър'], ['maritsa','d2','Марица'],
-  ['pirin','d2','Пирин'], ['litex','d2','Литекс'], ['sportist','d2','Спортист','(?<!Рилски\\s)Спортист(?:\\s*\\(?Своге\\)?)?'], ['chernomorets','d2','Черноморец'],
-  ['rilski','d2','Рилски спортист','Рилски\\s+[Сс]портист'], ['nesebar','d2','Несебър'],
-  ['neftochimic','d2','Нефтохимик'], ['belasitsa','d2','Беласица'], ['minyor','d2','Миньор'], ['sevlievo','d2','Севлиево'],
-  ['marek','d2','Марек'], ['strumska','d2','Струмска слава'], ['vitosha','d2','Витоша'], ['slivnishki','d2','Сливнишки герой'],
-  ['spartakpl','d2','Спартак Плевен','Спартак\\s*\\(?Плевен\\)?'],
-  ['lokgo','d2','Локомотив ГО','Локомотив\\s*\\(?(?:Горна Оряховица|ГО|Г\\. Оряховица)\\)?'],
-  ['cska2','d2','ЦСКА II','ЦСКА\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'], ['ludo2','d2','Лудогорец II','Лудогорец\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'],
-  ['botev2','d2','Ботев II','Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d))'],
-].map(([k, div, label, pat]) => ({ k, div, label, re: CS([pat || label]) }));
+  ['yantra','d2','Янтра'], ['vihren','d2','Вихрен'], ['etar','d2','Етър'], ['hebar','d2','Хебър'],
+  ['pirin','d2','Пирин','Пирин(?!\\s*1941)(?:\\s*\\(?(?:Благоевград|Бл)\\)?)?'], ['sportist','d2','Спортист',`(?<!Рилски\\s)Спортист(?:${Q_}\\(?Своге\\)?)?`], ['chernomorets','d2','Черноморец','Черноморец(?:\\s*1919)?'],
+  ['rilski','d2','Рилски спортист','Рилски\\s+[Сс]портист'], ['nesebar','d2','Несебър'], ['marek','d2','Марек'],
+  ['spartakpl','d2','Спартак Плевен',`Спартак${Q_}\\(?Плевен\\)?`],
+  ['lokgo','d2','Локомотив ГО',`Локомотив${Q_}\\(?(?:Горна Оряховица|ГО|Г\\. Оряховица)\\)?`],
+  ['cska2','d2','ЦСКА II','ЦСКА\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d))'], ['ludo2','d2','Лудогорец II','Лудогорец\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d))'],
+  ['botev2','d2','Ботев II','Ботев\\s*\\(?(?:Пловдив|Пд)?\\)?\\s*(?:II|2(?!\\d|\\s*[:–—-]\\s*\\d|[\\s.,]\\d))'],
+  // the Third League (South-West and the others)
+  ['belasitsa','d3','Беласица'], ['minyor','d3','Миньор'], ['strumska','d3','Струмска слава'], ['vitosha','d3','Витоша'], ['slivnishki','d3','Сливнишки герой'],
+  ['litex','d3','Литекс'], ['sevlievo','d3','Севлиево'], ['neftochimic','d3','Нефтохимик'], ['maritsa','d3','Марица'],
+  ['pirinrz','d3','Пирин Разлог',`Пирин(?:\\s*1941)?${Q_}\\(?(?:Разлог|Рз)\\)?|Пирин\\s*1941`], ['piringd','d3','Пирин Гоце Делчев',`Пирин${Q_}\\(?(?:Гоце Делчев|Г\\.\\s?Делчев|ГД)\\)?`],
+  ['septsim','d3','Септември Симитли',`Септември${Q_}\\(?Симитли\\)?`], ['botih','d3','Ботев Ихтиман',`Ботев(?:\\s*1937)?${Q_}\\(?Ихтиман\\)?|Ботев\\s*1937`],
+  ['balkan','d3','Балкан Ботевград','Балкан(?:\\s*1929)?'], ['bansko','d3','Банско','Банско(?:\\s+тийм)?'], ['etropole','d3','Етрополе'], ['kyustendil','d3','Кюстендил'],
+  ['kostinbrod','d3','Костинброд','(?:ОФК\\s+)?Костинброд(?:\\s*2012)?'], ['oborishte','d3','Оборище'],
+].map(([k, div, label, pat]) => ({ k, div, label, re: new RegExp(CS([pat || label]).source + TOWN_NOT(k), 'u') }));
 const CLUB_LABEL = Object.fromEntries(CLUBS.map(c => [c.k, c.label]));
+// A club's name in a headline that is not about the club, blanked out before any club is looked for (teamText):
+//  · a referee's town: "Съдии от Монтана и Враца ще ръководят мача на „Бдин“ с „Етър II“", "Иван Иванов (Монтана)" in a
+//    referee story — not "рефера от Лудогорец – ЦСКА" (a match)
+//  · a club someone used to play for or came from: "бивш нападател на Лудогорец", "Кадър на Лудогорец и Пирин е главен арбитър"
+//  · and a club's reserve team written as "дубъла на Левски" becomes "Левски II"
+const NAMEW = '["„“«]?\\p{Lu}[\\p{L}\\-]*(?:\\s+\\p{Lu}[\\p{L}\\-]*)?["“”»]?';
+const NAMES = NAMEW + '(?:\\s*(?:,|и)\\s*' + NAMEW + ')*';
+const REFW = '(?:[Сс]ъди(?:я|ята|и|ите|йка|йки|йката|йките)|[Рр]ефер(?:и|а|ът|ите)?|[Аа]рбит(?:ър|ъра|ърът|ри|рите)|[Бб]ригад(?:а|ата|и)|[Лл]айнсмен\\p{L}*|[Аа]систент\\p{L}*|[Нн]аблюдател\\p{L}*|[Дд]елегат\\p{L}*|ВАР|VAR)(?![\\p{L}])';
+const RX_REF_FROM = new RegExp(`(${REFW}(?:\\s+\\p{Ll}+){0,2}\\s+от\\s+)(${NAMES})(?![\\p{L}\\-])(?!\\s*[-–—]\\s*["„“«]?\\p{Lu})`, 'gu');
+const RX_EX_CLUB = new RegExp(`((?:[Бб]ивш\\p{L}*|[Кк]адър|[Кк]адри|[Вв]ъзпитани\\p{L}*|[Пп]родукт\\p{L}*)(?:\\s+\\p{Ll}+){0,2}\\s+(?:на|от)\\s+)(${NAMES})(?![\\p{L}\\-])`, 'gu');
+// the site's name some outlets add to the headline: " - TribunaPlovdiv.bg: Спортни новини, Локомотив Пловдив, Ботев Пловдив", "ᐉ Новини от Fakti.bg"
+const RX_SITE_TAIL = /\s+(?:[-–|]\s+(?:[\p{L}\d-]+\.)+(?:bg|com|net|eu|info|org)(?![\p{L}])|ᐉ\s)[\s\S]*$/u;
+const RX_REFWORD = new RegExp(REFW, 'u');
+const RX_NAME_TOWN = /(\p{Lu}\p{Ll}+\s+\p{Lu}\p{Ll}+\s*\()(Монтана|Севлиево|Несебър|Етрополе|Кюстендил|Костинброд|Банско|Добрич)(\))/gu;
+const RX_DUBAL = /((?:[Дд]убъл(?:а|ът)?|[Вв]тори(?:я|ят)?\s+отбор)\s+на\s+)(["„“«]?)(\p{Lu}\p{L}*(?:\s+\p{Lu}\p{L}*)?(?:\s*[-–]?\s*\d{4})?)(["“”»]?)/gu;
+const CLUB_FIRST = new Set(CLUBS.map(c => c.label.split(' ')[0]));        // "дубъла на Ботев": the first word of a club's name is enough
+const blank = x => ' '.repeat(x.length);
+const TEAM_TEXT = new Map();
+function teamText(t){
+  t = String(t || '');
+  let s = TEAM_TEXT.get(t);
+  if (s !== undefined) return s;
+  s = t.replace(RX_SITE_TAIL, '').replace(RX_DUBAL, (m, a, q1, n, q2) => CLUBS.some(c => c.re.test(n)) || CLUB_FIRST.has(n.split(/\s/)[0]) ? `${a}${q1}${n} II${q2}` : m)
+    .replace(RX_REF_FROM, (m, a, b) => a + blank(b)).replace(RX_EX_CLUB, (m, a, b) => a + blank(b));
+  if (RX_REFWORD.test(s)) s = s.replace(RX_NAME_TOWN, (m, a, b, c) => a + blank(b) + c);
+  if (TEAM_TEXT.size > 20000) TEAM_TEXT.clear();
+  TEAM_TEXT.set(t, s);
+  return s;
+}
 // A club's youth teams ("ЦСКА U17", "юношите на Левски", "Елитната група до 18 години") and its reserves' youth games are not
 // the club's first team: their stories get the club's key with "~y" ("cska~y"), the Юноши division, and no first-team match
-const RX_YOUTH = /(?<![\p{L}\p{N}])(?:[UУ]\s?-?(?:1[0-9]|2[0-3])(?![\p{N}])|до\s?(?:1[0-9]|2[0-3])\s?(?:г\.|год\p{L}*)|юнош\p{L}*|девойк\p{L}*|детск\p{L}*|подрастващ\p{L}*|(?:младша|старша) възраст)/iu;
+const RX_YOUTH = /(?<![\p{L}\p{N}])(?:[UУ]\s?-?(?:1[0-9]|2[0-3])(?![\p{N}])|до\s?(?:1[0-9]|2[0-3])\s?(?:г\.|год\p{L}*)|юнош\p{L}*|девойк\p{L}*|детск\p{L}*|подрастващ\p{L}*|(?:младша|старша) възраст|младежк\p{L}*\s+(?:лига|отбор|национал\p{L}*|първенство|шампионат)|youth league)/iu;
 const RX_RESERVES = /(?<![\p{L}])дублиращ\p{L}*/iu;          // "при дублиращите отбори": the clubs' reserve teams
 const youthKey = k => k.endsWith('~y') ? k : k + '~y';
 // a reserve team ("Левски II", "Славия II", "Септември 2") likewise gets "~r" — ЦСКА II, Лудогорец II and Ботев II have keys of their own
 const CLUB_BY_K = Object.fromEntries(CLUBS.map(c => [c.k, c]));
-const RX_RESERVE_AFTER = /^\s*\(?(?:III|II|2|3)\)?(?![\p{L}\p{N}:\-–])(?!\s*[-–:]\s*\d)/u;
+const RX_RESERVE_AFTER = /^\s*\(?(?:III|II|2|3)\)?(?![\p{L}\p{N}:\-–])(?!\s*[-–:]\s*\d)(?![.,]?\s?\d)/u;
 function reserveOnly(c, text){       // the club named in the text only as its reserve team
   let any = false;
   for (const m of String(text).matchAll(new RegExp(c.re.source, 'gu'))) { if (!RX_RESERVE_AFTER.test(text.slice(m.index + m[0].length))) return false; any = true; }
@@ -604,9 +660,17 @@ const RX_COURT = /(?<![\p{L}])(?:пред съди\p{L}*|разпит\p{L}*|съ
 const RX_FOOTBALL = /(?<![\p{L}])(?:мач\p{L}*|футбол\p{L}*|гол(?:а|ът|ове|овете)?|дузп\p{L}*|картон\p{L}*|ВАР|VAR|засад\p{L}*|лига(?:та)?|БФС|УЕФА|ФИФА|рефер\p{L}*|арбитър\p{L}*|арбитри\p{L}*|свир\p{L}*|наряд\p{L}*|стадион\p{L}*|треньор\p{L}*|футболист\p{L}*|играч\p{L}*|фенове\p{L}*|агитк\p{L}*|дерби\p{L}*|referee\p{L}*|football|soccer|penalty|red card)(?![\p{L}])/iu;
 const notRefereeing = a => RX_COURT.test(a.title) && !RX_FOOTBALL.test(a.title);
 // a youth headline is about the clubs' youth teams: "ЦСКА U17 – Левски U17" is not ЦСКА – Левски
+// A Bulgarian article's clubs are read again here from its headline and description, by the rules above (the saved
+// list may be older than them: "Съдии от Монтана…" is not Монтана's story, "„Пирин“ (Рз)" is Пирин Разлог's)
+const CLUB_WORD = {}, clubWord = k => CLUB_WORD[k] || (CLUB_WORD[k] = CS([CLUB_BY_K[k].label.split(' ')[0]]));
 const youthArt = a => {
+  if (a.scope === 'bg') {
+    const raw = a.title + ' \n ' + (a.desc || a.descr || ''), t = teamText(raw), now = CLUBS.filter(c => c.re.test(t)).map(c => c.k);
+    // (a club the text doesn't name at all was found where the page can't see: kept)
+    a = { ...a, clubs: [...now, ...(a.clubs || []).filter(k => !now.includes(k) && CLUB_BY_K[k] && !clubWord(k).test(raw))] };
+  }
   if (RX_YOUTH.test(a.title)) return { ...a, youth: true, clubs: [...new Set((a.clubs || []).map(youthKey))], divs: a.scope === 'bg' ? ['youth'] : (a.divs || []).filter(d => d === 'eur') };
-  const res = RX_RESERVES.test(a.title), clubs = (a.clubs || []).map(k => res || (CLUB_BY_K[k] && reserveOnly(CLUB_BY_K[k], a.title)) ? k + '~r' : k);
+  const tt = teamText(a.title), res = RX_RESERVES.test(a.title), clubs = (a.clubs || []).map(k => res || (CLUB_BY_K[k] && reserveOnly(CLUB_BY_K[k], tt)) ? k + '~r' : k);
   return clubs.some(k => k.endsWith('~r')) ? { ...a, clubs } : a;
 };
 // the international media are shown in English only (articles saved earlier in Spanish, Italian, German or French are left out)
@@ -1223,7 +1287,7 @@ function parseQuery(raw){
   return { keys, text: norm(rest) };
 }
 // the clubs a piece of text is about (videos have no tags): as the news analysis tags them, youth teams with "~y"
-const clubsOfText = t => { const y = RX_YOUTH.test(t); return new Set(CLUBS.filter(c => c.re.test(t)).map(c => y ? youthKey(c.k) : reserveOnly(c, t) ? c.k + '~r' : c.k)); };
+const clubsOfText = t => { const y = RX_YOUTH.test(t); t = teamText(t); return new Set(CLUBS.filter(c => c.re.test(t)).map(c => y ? youthKey(c.k) : reserveOnly(c, t) ? c.k + '~r' : c.k)); };
 const storyClubs = s => s._clubs || (s._clubs = new Set(s.arts.flatMap(a => a.clubs || [])));
 function filteredStories(){
   const scope = VIEW === 'world' ? 'world' : 'bg';
@@ -2793,8 +2857,11 @@ const TEAM_KEY = {   // the Bulgarian leagues' team names (as on efbetleague.com
   'Лудогорец II': 'ludo2', 'Марек': 'marek', 'Монтана': 'montana', 'Несебър': 'nesebar', 'Пирин Благоевград': 'pirin', 'Пирин': 'pirin',
   'Рилски Спортист': 'rilski', 'Спартак Плевен': 'spartakpl', 'Спортист Своге': 'sportist', 'Фратрия': 'fratria', 'Хебър 1918': 'hebar', 'Хебър': 'hebar',
   'ЦСКА София II': 'cska2', 'ЦСКА II': 'cska2', 'Черноморец 1919 Бургас': 'chernomorets', 'Черноморец': 'chernomorets', 'Янтра 2019': 'yantra', 'Янтра': 'yantra',
-  // the Third League South-West (bulgarian-football.com's names, without the town)
+  // the Third League South-West (bulgarian-football.com's names; looked up with the town, then without it)
   'Беласица': 'belasitsa', 'Миньор': 'minyor', 'Струмска слава 1927': 'strumska', 'Сливнишки герой': 'slivnishki',
+  'Пирин 1941 (Разлог)': 'pirinrz', 'Септември (Симитли)': 'septsim', 'Ботев 1937 (Ихтиман)': 'botih', 'Балкан 1929 (Ботевград)': 'balkan',
+  'Банско тийм (Банско)': 'bansko', 'Етрополе (Етрополе)': 'etropole', 'Кюстендил (Кюстендил)': 'kyustendil',
+  'ОФК Костинброд 2012 (Костинброд)': 'kostinbrod', 'Оборище (Панагюрище)': 'oborishte',
   // Bulgarian clubs in the European cups (ESPN's names)
   'Levski Sofia': 'levski', 'CSKA Sofia': 'cska', 'Ludogorets Razgrad': 'ludo', 'Ludogorets': 'ludo', 'CSKA 1948 Sofia': 'cska48', 'CSKA 1948': 'cska48',
   'Lokomotiv Plovdiv': 'lokpd', 'Cherno More Varna': 'chm', 'Arda Kardzhali': 'arda', 'Botev Plovdiv': 'botpd', 'Slavia Sofia': 'slavia',
@@ -2884,12 +2951,41 @@ async function loadMatchIndex(force){
 const COMP_LG = { eng: 'eng.1', esp: 'esp.1', ita: 'ita.1', ger: 'ger.1', fra: 'fra.1', ucl: 'uefa.champions', uel: 'uefa.europa', uecl: 'uefa.europa.conf' };
 const EURO_LG = ['uefa.champions', 'uefa.europa', 'uefa.europa.conf'];
 const lgGroup = lg => LEAGUES[lg] ? 'bg' : EURO_LG.includes(lg) ? 'euro' : Object.values(COMP_LG).includes(lg) ? 'top5' : 'nat';
-const RX_EURO = /УЕФА|Европ|Шампионск|Лига на конференциите|Конферентна лига|Лига Европа|Champions League|Europa League|Conference League|UEFA|Liga de Campeones|Ligue des champions|Königsklasse|Ligue Europa/u;
-const RX_CUP = /(?<![\p{L}])Куп(?:а|ата)(?![\p{L}])|FA Cup|Carabao Cup|League Cup|EFL Cup|Copa del Rey|Coppa Italia|DFB-Pokal|Coupe de France|Supercopa|Supercoppa|Community Shield|Trophée des Champions/u;
+// Europe: the cups by name or short name (ШЛ, ЛЕ, ЛК), "евромачовете", "европейските мачове"; and for a Bulgarian story, a club's match
+// abroad ("Швейцарец свири на Лудогорец в Унгария", "ВАР от Полша за ЦСКА в Гърция")
+const RX_EURO = new RegExp('УЕФА|Европ|[Ее]вромач|[Ее]вротурни|[Ее]вропейск\\p{L}*\\s+(?:мач|турни|участ|кампани|клубн|сцена|вечер|пролет|есен)|Шампионск|Лига на конференциите|Конферентна лига|' +
+  'Лига Европа|Champions League|Europa League|Conference League|UEFA|Liga de Campeones|Ligue des champions|Königsklasse|Ligue Europa|(?<![\\p{L}])(?:ШЛ|ЛЕ|ЛК|ЛКЕ)(?![\\p{L}])', 'u');
+const RX_ABROAD = new RegExp('(?<![\\p{L}])(?:в|във)\\s+(?:Унгария|Гърция|Полша|Турция|Румъния|Сърбия|Хърватия|Казахстан|Израел|Кипър|Дания|Норвегия|Швеция|Шотландия|Ирландия|Англия|Испания|' +
+  'Италия|Германия|Франция|Белгия|Холандия|Нидерландия|Португалия|Австрия|Швейцария|Чехия|Словакия|Словения|Босна|Черна гора|Северна Македония|Албания|Косово|Армения|' +
+  'Азербайджан|Грузия|Молдова|Украйна|Беларус|Литва|Латвия|Естония|Финландия|Исландия|Малта|Люксембург|Уелс|Андора|Гибралтар|Фарьорските|Сан Марино|Лихтенщайн)(?![\\p{L}])', 'u');
+const RX_CUP = /(?<![\p{L}])(?:Куп(?:а|ата)|Суперкуп\p{L}*)(?![\p{L}])|FA Cup|Carabao Cup|League Cup|EFL Cup|Copa del Rey|Coppa Italia|DFB-Pokal|Coupe de France|Supercopa|Supercoppa|Community Shield|Trophée des Champions/u;
 const RX_RIVALS = /съперни\p{L}*\s+на\s+[„"]?\p{Lu}\p{L}*(?:\s+\p{Lu}\p{L}*)?/gu;   // "between two of Levski's rivals" is not Levski's match
 const RX_SEP = /\s+-\s+|\s*[–—]\s*|\s+(?:срещу|v\.?|vs\.?|contra|contro|gegen|contre)\s+/gu;  // "Левски – ЦСКА", "Ботев срещу Дунав", "Arsenal v Chelsea"
 // a referee appointment (about the next match), also when the news analysis tagged it only "other"
 const RX_APPOINT = /ще (?:ръководи|свири|води|бъде главен)|главен съдия на|(?<![\p{L}])свир(?:и|ят) (?:на|мача|дербито|срещата|гостуването)|наряд|назначи|определи|бригад|кой ще свири|ясни са съдиите|ясен е съдията|обявиха съдиите|(?<![\p{L}])съдии от|to referee|will referee|named (?:as )?referee|appointed (?:as |to )|in charge of|referee for|arbitrar[áa]|designad[oa]|dirigir[áa]|arbitrer[àa]|designat[oa]|dirigerà|leitet|pfeift|angesetzt|arbitrera|désigné/iu;
+// …and the wording that is about the next match whatever else the headline says ("недоволства от назначаването на Гидженов за мача с ЦСКА",
+// "Тодор Киров ще ръководи Ботев – Левски, Драганов ще отговаря за ВАР"): an appointment, even with a complaint or a VAR word in it
+const RX_APPOINT_NEXT = /ще (?:ръководи|ръководят|свири|свирят|води|водят|бъде главен|отговаря за ВАР)|назначени\p{L}*|назначаване\p{L}*|назначен(?:а|и)?(?![\p{L}])|назначи|наряд|повери\p{L}*|(?<![\p{L}])пое(?:ма|мат)?\s+["„]?\p{Lu}|(?<![\p{L}])свир(?:и|ят)\s+["„]?\p{Lu}|кой ще свири|ясни са съдиите|ясен е съдията|обявиха съдиите|определиха съдиите|to referee|will referee|named (?:as )?referee|appointed (?:as |to )/u;
+// a headline about something already played: "след мача с…", "след загубата"
+const RX_AFTER = /(?<![\p{L}])след\s+(?:мач\p{L}*|двубо\p{L}*|срещата|дербито|загубата|победата|равенството|кръга|гостуването|реванша)/iu;
+// a fixture the headline names in words: "между Кайрат и Левски", "мача на „Бдин“ с „Етър II“", or only its other side: "реванша им срещу ОФИ"
+const MATCHW = '(?:[Мм]ач(?:а|ът)?|[Сс]рещата|[Дд]вубоя|[Дд]ербито|[Рр]еванш(?:а|ът)?|[Бб]итката|[Сс]блъсъка|[Гг]остуването|[Фф]инала|[Пп]олуфинала|[Пп]лейофа)';
+const TEAMW = '["„“«]?\\p{Lu}[\\p{L}.\\-]*(?:\\s+(?:\\p{Lu}[\\p{L}.\\-]*|\\d{4}|I{1,3}))?["“”»]?';
+const RX_BETWEEN = new RegExp(`(?<![\\p{L}])[Мм]ежду\\s+(${TEAMW})\\s+и\\s+(${TEAMW})`, 'gu');
+const RX_MATCH_OF = new RegExp(`(?<![\\p{L}])${MATCHW}\\s+(?:на|между)\\s+(${TEAMW})\\s+(?:с|със|срещу|и)\\s+(${TEAMW})`, 'gu');
+const RX_MATCH_VS = new RegExp(`(?<![\\p{L}])${MATCHW}(?:\\s+(?:им|си|му|ѝ|й|ни))?\\s+(?:с|със|срещу)\\s+(${TEAMW})`, 'gu');
+const RX_SHORT_CLUB = /^["„“«]?(?:Локо(?:мотив)?|Ботев|Спартак|Пирин|Септември|Черноморец|Миньор|Марица|Славия)["“”»]?$/u;
+// "„Янтра“ (Полски Тръмбеш)", "Левски (Лом)": a club's name with another town, and no club of the list is that one
+const RX_TOWN_AFTER = new RegExp(`^["“”»']?\\s*(?:\\(\\s*(?!\\p{Lu}{3,}\\s*\\))(?![Вв]идео|[Сс]нимки|[Гг]алерия)\\p{Lu}[^()]{0,23}\\)|(?:${TOWNS})(?![\\p{L}]))`, 'u');
+const STICKY = new Map(), sticky = c => STICKY.get(c.k) || (STICKY.set(c.k, new RegExp(c.re.source, 'uy')), STICKY.get(c.k));
+function otherClub(t){
+  for (const c of CLUBS) for (const m of t.matchAll(new RegExp(clubWord(c.k).source, 'gu'))) {
+    if (!RX_TOWN_AFTER.test(t.slice(m.index + m[0].length))) continue;
+    if (!CLUBS.some(o => { const r = sticky(o); r.lastIndex = m.index; return r.test(t); })) return true;
+  }
+  return false;
+}
+const RX_NOT_CLUB = new RegExp('^["„“«]?(?:ВАР|VAR|БФС|УЕФА|ФИФА|СК|ДК|' + REF_SURNAMES.concat(REFEREES.map(n => n.split(' ').pop())).join('|') + ')(?![\\p{L}])', 'u');
 // a team of the world competitions: one the list knows, or any team of an ESPN competition (its own name is enough
 // for the international media)
 const isWorldName = n => !!(WORLD_TEAMS[teamName(n)] || WORLD_LATIN[teamName(n)] || (WORLD_NAMES && WORLD_NAMES.has(n)));
@@ -2898,10 +2994,10 @@ let WORLD_NAMES = null;
 // itself a club: "ЦСКА" is ЦСКА София, never ЦСКА 1948 or ЦСКА II, and ЦСКА София needs no loose form
 function looseWord(c){
   const w = c.label.split(' ')[0];
-  return c.label.includes(' ') && !CLUBS.some(o => o.re.test(w)) ? CS([w]) : null;
+  return c.label.includes(' ') && !CLUBS.some(o => o.re.test(w)) ? CS([w === 'Локомотив' ? 'Локо(?:мотив)?' : w]) : null;
 }
 function teamMatcher(name){
-  const n = teamName(name), k = TEAM_KEY[n];
+  const n = teamName(name), k = TEAM_KEY[name] || TEAM_KEY[n];
   let t = null;
   if (k) { const c = CLUBS.find(x => x.k === k);
     if (c) t = { k, re: BG_LATIN[k] ? new RegExp('(?:' + c.re.source + '|' + CS([BG_LATIN[k]]).source + ')', 'u') : c.re, bg: true, cyr: true,
@@ -2934,55 +3030,94 @@ function matchNewsIndex(){
   function hitsOf(text, x){
     if (RX_YOUTH.test(text) || RX_RESERVES.test(text)) return null;   // "ЦСКА U17 – Левски U17", "юношите на Лудогорец", "при дублиращите": not the first teams' match
     const cand = x.world || x.comps.length || x.eur ? matchers : bgM;
-    const title = text.replace(RX_RIVALS, ' ');
+    const title = teamText(text).replace(RX_RIVALS, ' ');   // a referee's town, a former club, "дубъла на Левски" (see teamText)
     const found = cand.filter(t => t.re.test(title) && !(t.bg && CLUB_BY_K[t.k] && reserveOnly(CLUB_BY_K[t.k], title)));   // "Левски II" is not Левски
     if (!found.length) return null;
     // which competitions it can be about: the ones the news analysis named; the European cups when the headline says
     // Europe/UEFA; none for the Bulgarian Cup (not on the Results page); otherwise its tab's competitions
     const comps = x.comps.map(c => c === 'nat' ? 'nat' : COMP_LG[c]).filter(Boolean);
-    const euro = RX_EURO.test(title), cup = RX_CUP.test(title);
-    const ok = m => comps.length ? comps.includes(m.league) || (comps.includes('nat') && m._g === 'nat')
-      : euro ? m._g === 'euro' : cup ? false : (x.bg && (m._g === 'bg' || m._g === 'euro')) || (x.world && m._g !== 'bg');
-    // decisions, cards, complaints: the last match; an appointment: the next one; anything else: the nearer of the two
-    const post = x.cats.some(c => POST.includes(c)), pre = !post && (x.cats.includes('committee') || RX_APPOINT.test(title));
+    const euro = RX_EURO.test(title) || (!x.world && RX_ABROAD.test(title)), cup = RX_CUP.test(title), fifa = /(?<![\p{L}])(?:ФИФА|FIFA)(?![\p{L}])/u.test(title) && !x.world;
+    // (a club of a big league in a headline about a UEFA appointment — "След като изгони звездата на Байерн, Кабаков получи
+    // нов наряд от УЕФА" — is about the European cups, not the league)
+    const byComps = comps.length && !(euro && comps.every(c => c !== 'nat' && !EURO_LG.includes(c)));
+    const ok = m => byComps ? comps.includes(m.league) || (comps.includes('nat') && m._g === 'nat')
+      : euro ? m._g === 'euro' : cup || fifa ? false : (x.bg && (m._g === 'bg' || m._g === 'euro')) || (x.world && m._g !== 'bg');   // ("Ботев Враца получи наказание от ФИФА")
+    // decisions, cards, complaints, "след мача": the last match; an appointment: the next one (an appointment's wording wins
+    // over a complaint or a VAR word in the same headline); anything else: the nearer of the two
+    const postCats = x.cats.some(c => POST.includes(c));
+    const pre = RX_APPOINT_NEXT.test(title) || (!postCats && (x.cats.includes('committee') || RX_APPOINT.test(title)));
+    const post = !pre && (postCats || RX_AFTER.test(title));
     const strict = new Set(found.map(t => t.k));
-    const loose = new Set(cand.filter(t => t.loose && !strict.has(t.k) && t.loose.test(title)).map(t => t.k));
+    // "Ботев – Дунав": a club's first word alone, loosely — not inside a club the headline names in full ("Локомотив Пловдив"
+    // is not also a loose "Локомотив" for Локомотив София)
+    let rest = title;
+    for (const t of found) rest = rest.replace(new RegExp(t.re.source, 'gu'), blank);
+    const loose = new Set(cand.filter(t => t.loose && !strict.has(t.k) && t.loose.test(rest)).map(t => t.k));
     const t0 = x.t0, hits = new Map(), paired = new Set();
+    // the fixtures the headline names: "Левски – ЦСКА", "Ботев срещу Дунав", "между Кайрат и Левски", "мача на „Бдин“ с „Етър II“";
+    // each side: the clubs it names, or none (a club the list doesn't have), or a short name of several ("Локо", "Ботев")
+    const fx = [];
+    for (const y of title.matchAll(RX_SEP)) {
+      const L = title.slice(Math.max(0, y.index - 40), y.index), R = title.slice(y.index + y[0].length, y.index + y[0].length + 40);
+      if (!/\p{Lu}[\p{L}.]*(?:\s+(?:\d{4}|I{1,3}))?[)"“”»']?$/u.test(L) || !/^[„"“«(']?\p{Lu}/u.test(R)) continue;
+      fx.push({ words: false, L, R, lk: cand.filter(t => t.endRe.test(L) || (t.lEnd && t.lEnd.test(L))), rk: cand.filter(t => t.startRe.test(R) || (t.lStart && t.lStart.test(R))) });
+    }
+    for (const y of [...title.matchAll(RX_BETWEEN), ...title.matchAll(RX_MATCH_OF)])
+      fx.push({ words: true, L: y[1], R: y[2], lk: cand.filter(t => t.re.test(y[1]) || (t.loose && t.loose.test(y[1]))), rk: cand.filter(t => t.re.test(y[2]) || (t.loose && t.loose.test(y[2]))) });
+    const fixt = new Set(), pk2 = (a, b) => [a, b].sort().join('|');
+    for (const f of fx) for (const a of f.lk) for (const b of f.rk) if (a.k !== b.k) fixt.add(pk2(a.k, b.k));
+    // …and "ЦСКА трябваше да получи дузпа срещу Левски": one club before "срещу"/"над", the other after it
+    const at = k => { const t = mByKey.get(k), r = strict.has(k) ? t.re : t.loose, m = r && title.match(r); return m ? m.index : -1; };
+    const both = [...strict, ...loose];
+    for (const a of both) for (const b of both) {
+      const ia = at(a), ib = at(b);
+      if (a !== b && ia >= 0 && ib > ia && /\s(?:срещу|над|vs?\.?|against)\s/u.test(title.slice(ia, ib + 1))) fixt.add(pk2(a, b));
+    }
     // 1. a match between two teams the headline names (one may be named loosely, "Ботев – Дунав"): the closest one
-    //    within a week before (an appointment) or two weeks after (the aftermath: a review panel or the referee
-    //    committee rules on it a week or more later — "Liverpool should have had a penalty vs Arsenal", ten days on)
+    //    within a week before (an appointment) or two weeks after. Up to three weeks after when the headline names them
+    //    as a fixture (a review panel or the referee committee rules on a match a week or more later — "Liverpool should
+    //    have had a penalty vs Arsenal", ten days on; a fine for the fans at a derby, two weeks on). A decision is about a
+    //    match played: one still to come only on the day (the times are not exact) or when the headline names the fixture
+    //    ("Жандармерията се включва в опазването на реда за Левски – ЦСКА"); "санкции за Левски и ЦСКА" is no fixture
     const pairs = [new Map(), new Map()];
     for (const k of strict) for (const m of byTeam.get(k) || []) {
       if (!ok(m)) continue;
       const o = m._k[0] === k ? m._k[1] : m._k[0], lvl = strict.has(o) ? 0 : loose.has(o) ? 1 : -1;
       if (lvl < 0 || o === k) continue;
-      const dt = t0 - m._t;
-      if (dt < (post ? -90 * 60e3 : -7 * DAY) || dt > (pre ? 2 * 3600e3 : 16 * DAY)) continue;
-      const pk = [k, o].sort().join('|'), best = pairs[lvl].get(pk);
-      if (!best || Math.abs(dt) < Math.abs(t0 - best._t)) pairs[lvl].set(pk, m);
+      const dt = t0 - m._t, pk = pk2(k, o), named2 = fixt.has(pk);
+      if (dt < -7 * DAY || dt > (pre ? 2 * 3600e3 : named2 ? 21 * DAY : 16 * DAY)) continue;
+      const later = dt < -90 * 60e3;
+      if (post && later && dt < -DAY && !named2) continue;
+      const score = Math.abs(dt) + (post && later ? 30 * DAY : 0), best = pairs[lvl].get(pk);
+      if (!best || score < best.score) pairs[lvl].set(pk, { m, score });
     }
-    (pairs[0].size ? pairs[0] : pairs[1]).forEach(m => { hits.set(String(m.id), m); m._k.forEach(k => paired.add(k)); });
-    // 2. every other team: its last or next match. A headline naming a fixture that isn't on the list (a cup tie) adds
-    //    nothing; "Панатинайкос – ЦСКА" (a club the list has no name for) only goes to a match against such a club
-    let named = false;
+    (pairs[0].size ? pairs[0] : pairs[1]).forEach(({ m }) => { hits.set(String(m.id), m); m._k.forEach(k => paired.add(k)); });
+    // 2. every other team: its last or next match. A headline naming a fixture that isn't on the list (a cup tie, a
+    //    Third League North-West match, "„Янтра“ (Полски Тръмбеш)") adds nothing: the other clubs it names are something
+    //    else; "Панатинайкос – ЦСКА", "между Кайрат и Левски", "реванша срещу ОФИ" (a club the list has no name for) only go
+    //    to a match against such a club, not to ЦСКА's league match against Левски
+    let named = false, offList = otherClub(title), vsUnknown = false;
     const foreign = new Set();
-    for (const y of title.matchAll(RX_SEP)) {
-      const L = title.slice(Math.max(0, y.index - 40), y.index), R = title.slice(y.index + y[0].length, y.index + y[0].length + 40);
-      if (!/\p{Lu}[\p{L}.]*[)"“”»']?$/u.test(L) || !/^[„"“«(']?\p{Lu}/u.test(R)) continue;
-      const lk = cand.filter(t => t.endRe.test(L) || (t.lEnd && t.lEnd.test(L))), rk = cand.filter(t => t.startRe.test(R) || (t.lStart && t.lStart.test(R)));
-      if (lk.length && rk.length) { if (![...lk, ...rk].some(t => paired.has(t.k))) named = true; }
-      else (lk.length ? lk : rk).forEach(t => foreign.add(t.k));
+    for (const f of fx) {
+      const lg = !f.lk.length && RX_SHORT_CLUB.test(f.L.trim()), rg = !f.rk.length && RX_SHORT_CLUB.test(f.R.trim());   // "„Локо“": one of several, unknown which
+      if (f.lk.length && f.rk.length) { if (![...f.lk, ...f.rk].some(t => paired.has(t.k))) named = true; }
+      else if (lg || rg) continue;
+      else if (f.lk.length || f.rk.length) (f.lk.length ? f.lk : f.rk).forEach(t => foreign.add(t.k));
+      else if (f.words) offList = true;
     }
-    // a 1st League and a 2nd League club in one headline, not playing each other in the league: a cup tie
+    for (const y of title.matchAll(RX_MATCH_VS))            // ("мача с Гидженов", "мача с ВАР" name no club)
+      if (!RX_NOT_CLUB.test(y[1]) && !RX_SHORT_CLUB.test(y[1].trim()) && !cand.some(t => t.re.test(y[1]) || (t.loose && t.loose.test(y[1])))) vsUnknown = true;
+    // clubs of two divisions in one headline, not playing each other in the league: a cup tie, or one of them is only
+    // where someone comes from
     const divs = new Set(found.filter(t => t.bg && !paired.has(t.k)).map(t => (CLUBS.find(c => c.k === t.k) || {}).div));
-    if (named || (divs.has('d1') && divs.has('d2'))) return hits;
+    if (named || offList || divs.size > 1) return hits;
     const back = (x.cats.includes('discipline') || x.cats.includes('committee') ? 5 : 3) * DAY;
     for (const k of strict) {
       if (paired.has(k) || (natKeys.has(k) && !x.comps.includes('nat'))) continue;   // "България" alone is not about the national team
       // "Панатинайкос – ЦСКА": the other side is a club the headline names in a way the list can't read (a foreign club
       // in Cyrillic): only a match against such a club, not ЦСКА's league match against Левски
       const unnamed = m => { const o = m._k[m._k[0] === k ? 1 : 0], t = o && mByKey.get(o); return !t || (!t.cyr && /[\u0400-\u04ff]/.test(title)); };
-      const list = (byTeam.get(k) || []).filter(m => ok(m) && (!foreign.has(k) || unnamed(m)));
+      const list = (byTeam.get(k) || []).filter(m => ok(m) && (!(foreign.has(k) || vsUnknown) || unnamed(m)));
       const last = list.filter(m => m._t <= t0 + 90 * 60e3 && t0 - m._t < (post ? back : 3 * DAY)).pop();   // kickoff and publishing times are not exact
       const next = list.find(m => m._t > t0 + (pre ? -2 * 3600e3 : 90 * 60e3) && m._t - t0 < (pre ? 5 : 3) * DAY);
       const m = post ? last : pre ? next : !last ? next : !next ? last : (t0 - last._t <= next._t - t0 ? last : next);
@@ -3003,7 +3138,9 @@ function matchNewsIndex(){
       named++;
       h.forEach((m, id) => count.set(id, { m, n: (count.has(id) ? count.get(id).n : 0) + 1 }));
     }
-    if (!named) {   // no headline names a team: the descriptions, taken together
+    // no headline names a team: the descriptions, taken together (not when a headline is about a youth or reserve team:
+    // its description names the club without saying so again)
+    if (!named && !s.arts.some(a => RX_YOUTH.test(a.title) || RX_RESERVES.test(a.title))) {
       const h = hitsOf(s.arts.map(a => a.desc || '').join(' \n '), Object.assign(info(s.rep), { bg: s.bg, world: s.world, comps: s.comps, cats: s.cats, t0: s.first }));
       if (h) { named = 1; h.forEach((m, id) => count.set(id, { m, n: 1 })); }
     }

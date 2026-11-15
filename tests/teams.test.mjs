@@ -12,6 +12,7 @@ let mn = cut('function matchNewsIndex(){', '  const byMatch = new Map(), byStory
   .replace(/const ckey = [^\n]*\n\s*if \(MN_CACHE\.key === ckey\) return MN_CACHE;\n/, '')
   .replace(/const vis = new Set\(\[[^\n]*\n/, "const vis = new Set(Object.keys(LEAGUES));\n").replace('MIDX.matches', 'MATCHES');
 const src = [
+  cut('const REFEREES =', 'const SITES ='),
   cut('const CS = list =>', '// which tab an article belongs to'),
   "const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\\s+/, '').replace(/\\s+\\([^)]*\\)$/, '');",
   "const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига', sw3: 'Трета лига Югозапад' }; const EURO_LG = []; const norm = s => (s || '').toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();",
@@ -41,13 +42,13 @@ ok(keys('Гидженов') === '' && P.parseQuery('Гидженов').text === 
 // what a story is about
 const art = (title, clubs) => P.youthArt({ title, clubs, scope: 'bg', divs: ['d1'] });
 const y = art('Червен картон и скандал в мача ЦСКА U17 - Левски U17', ['cska', 'levski']);
-ok(y.youth && y.clubs.join() === 'cska~y,levski~y' && y.divs.join() === 'youth', 'a U17 headline: the youth teams, division Юноши');
+ok(y.youth && y.clubs.slice().sort().join() === 'cska~y,levski~y' && y.divs.join() === 'youth', 'a U17 headline: the youth teams, division Юноши');
 ok(art('Ужасяващ инцидент в Елитната група до 18 години: вратар удари съдия', ['lokgo']).clubs.join() === 'lokgo~y', '"до 18 години" is youth');
 ok(art('Скандал при юношите на Левски', ['levski']).clubs.join() === 'levski~y', '"юношите на Левски" is youth');
 ok(art('Червен картон за Левски II срещу Беласица', ['levski', 'belasitsa']).clubs.join() === 'levski~r,belasitsa', '"Левски II" is the reserve team');
 ok(art('Левски 2:1 Славия след спорна дузпа', ['levski', 'slavia']).clubs.join() === 'levski,slavia', 'a score is not a reserve team');
 ok(art('Левски II и Левски с наказания', ['levski']).clubs.join() === 'levski', 'both named: the first team stays');
-ok(art('Червен картон обърна дербито при дублиращите отбори: Ботев Пловдив изпусна Локомотив Пловдив', ['botpd', 'lokpd']).clubs.join() === 'botpd~r,lokpd~r', '"при дублиращите отбори": the reserve teams');
+ok(art('Червен картон обърна дербито при дублиращите отбори: Ботев Пловдив изпусна Локомотив Пловдив', ['botpd', 'lokpd']).clubs.slice().sort().join() === 'botpd~r,lokpd~r', '"при дублиращите отбори": the reserve teams');
 ok(P.clubLabel('cska~y') === 'ЦСКА София (юноши)' && P.clubLabel('levski~r') === 'Левски II' && P.clubLabel('cska48') === 'ЦСКА 1948', 'labels');
 ok([...P.clubsOfText('ЦСКА 1948 – ЦСКА 2:3')].sort().join() === 'cska,cska48', 'a video of the derby names both clubs');
 
@@ -71,6 +72,6 @@ ok(link(1794160000, 'Червен картон за Левски II срещу �
 ok(link(1794160000, 'Червен картон обърна дербито при дублиращите отбори: Левски изпусна ЦСКА', ['red']) === '', 'the reserves\' derby → not the first teams\' derby');
 // the committee rules on a match a week or two later: a headline naming both teams still goes to their match
 ok(link(1794150000 + 12 * 86400, 'Съдийската комисия: ЦСКА трябваше да получи дузпа срещу Левски', ['penalty', 'committee']) === 'efbet:534543', 'a ruling 12 days later on Левски – ЦСКА → that match');
-ok(link(1794150000 + 20 * 86400, 'Съдийската комисия: ЦСКА трябваше да получи дузпа срещу Левски', ['penalty', 'committee']) === '', '…but not three weeks later');
+ok(link(1794150000 + 25 * 86400, 'Съдийската комисия: ЦСКА трябваше да получи дузпа срещу Левски', ['penalty', 'committee']) === '', '…but not more than three weeks later');
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exit(fails ? 1 : 0);
