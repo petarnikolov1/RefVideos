@@ -298,6 +298,23 @@ drop function if exists public.is_approved();
 grant execute on function private.is_admin() to authenticated;
 grant execute on function private.is_approved() to authenticated;
 
+-- ───────────────────────── Google Drive clips for the video player ─────────────────────────
+-- Is this Google Drive file one of the site's videos? The site's Cloudflare worker (/drive/video) streams Drive files to
+-- the page's own player (Google refuses them to other sites' pages) and asks this first, so it serves the site's clips
+-- only. Says yes or no and nothing else; the videos themselves stay members-only.
+create or replace function public.video_drive_ok(p_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(p_id ~ '^[A-Za-z0-9_-]{10,100}$', false)
+     and exists (select 1 from public.videos v where v.video_url is not null and position(p_id in v.video_url) > 0);
+$$;
+revoke all on function public.video_drive_ok(text) from public;
+grant execute on function public.video_drive_ok(text) to anon, authenticated;
+
 -- ───────────────────────── make yourself admin ─────────────────────────
 -- 1) Register on the website first.  2) Put your email below and run just this line.
 -- update public.profiles set role = 'admin', approved = true where email = 'YOUR_EMAIL_HERE';

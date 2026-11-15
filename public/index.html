@@ -148,6 +148,41 @@
   .rcnote{border-left:4px solid var(--line);background:var(--chip);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:14px}
   .rcnote.ok{border-left-color:var(--ok)} .rcnote p{margin:4px 0 0;white-space:pre-wrap}
   .vcard.picked{outline:2px solid var(--accent);outline-offset:-1px}
+  /* the gallery: a picture and the title; the rest is in the player (vplayer.js) */
+  .vbar{display:flex;align-items:center;gap:10px;margin:14px 0 2px;flex-wrap:wrap}
+  .vbar .muted{flex:1}
+  .vplayall{display:inline-flex;align-items:center;gap:8px;font-weight:700}
+  .vplayall svg,.vplay svg{width:18px;height:18px;fill:currentColor}
+  .vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px 14px;margin:12px 0 18px}
+  @media (max-width:520px){ .vgrid{grid-template-columns:1fr 1fr;gap:14px 10px} }
+  .vtile{position:relative;min-width:0}
+  .vthumb{position:relative;display:block;width:100%;aspect-ratio:16/9;padding:0;border:0;border-radius:12px;overflow:hidden;background:#1b1f25 center/cover no-repeat;cursor:pointer;color:#fff}
+  .vthumb>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .35s}
+  .vtile:hover .vthumb>img{transform:scale(1.04)}
+  .vthumb:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .vthumb .vph{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(135deg,#1f2937,#0f172a);color:rgba(255,255,255,.35);font-size:30px}
+  .vplay{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center;opacity:0;transition:opacity .2s;z-index:2}
+  .vplay svg{width:24px;height:24px;margin-left:2px}
+  .vtile:hover .vplay,.vthumb:focus-visible .vplay{opacity:1}
+  .vprev.on~.vplay{opacity:0}
+  @media (hover:none){ .vplay{opacity:.9;width:38px;height:38px;margin:-19px 0 0 -19px} .vplay svg{width:20px;height:20px} }
+  .vdur,.vext{position:absolute;right:6px;bottom:6px;z-index:2;background:rgba(0,0,0,.78);color:#fff;font-size:11.5px;font-weight:700;padding:1px 6px;border-radius:5px;font-variant-numeric:tabular-nums}
+  .vok{position:absolute;left:6px;top:6px;z-index:2;width:22px;height:22px;border-radius:50%;background:var(--ok);color:var(--badge-ink);font-size:13px;font-weight:800;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+  .vtitle{margin:8px 2px 0;font-size:14px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  .vtile .pick{position:absolute;right:6px;top:6px;z-index:3;background:rgba(0,0,0,.55);border-radius:6px;padding:4px;display:none}
+  #videoList.selecting .vtile .pick{display:inline-flex}
+  .vbar .vsel.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .vtile.picked .vthumb{outline:3px solid var(--accent);outline-offset:2px}
+  .vstrip{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:8px 0}
+  .vstrip .vtitle{font-size:13px;font-weight:500}
+  /* the details of a clip, in the player's side panel */
+  .vinfo .vmeta{color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:2px 8px}
+  .vinfo .vmatch{margin:6px 0 0;font-size:14px}
+  .vinfo .tags{margin-top:8px}
+  .vinfo .desc{white-space:pre-wrap;margin:10px 0 0;font-size:14px}
+  .vinfo .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .vinfo .comments{margin-top:14px}
+  .vinfo textarea,.vinfo select,.vinfo input[type=text]{width:100%;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:14px}
   .pick{display:inline-flex;align-items:center;cursor:pointer} .pick input{width:18px;height:18px;margin:0}
   .vadmin{border-top:1px solid var(--line);margin-top:10px;padding-top:8px} .vadmin summary{font-size:13px}
   .catpick{display:flex;flex-wrap:wrap;gap:6px;border:0;padding:0;margin:6px 0 0;min-width:0}
@@ -166,7 +201,7 @@
   .catrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0} .catrow input[type=text]{flex:1 1 220px;min-width:0}
   button.tag{border:1px solid var(--line);cursor:pointer;font:inherit;font-size:11.5px;color:inherit}
   p.small{font-size:12.5px;margin:0}
-  #toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,40px);opacity:0;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;transition:.25s;z-index:50;pointer-events:none;max-width:calc(100% - 32px)}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,40px);opacity:0;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;transition:.25s;z-index:1100;pointer-events:none;max-width:calc(100% - 32px)}
   #toast.on{opacity:1;transform:translate(-50%,0)}
   details.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:14px 0}
   summary{cursor:pointer;font-weight:600}
@@ -454,6 +489,7 @@
 </main>
 
 <script src="/table.js"></script>
+<script src="/vplayer.js"></script>
 <script>
 (() => {
 'use strict';
@@ -1000,7 +1036,7 @@ function ebfuHtml(s, mins){
 function mediaHtml(s){
   const out = [], M = storyMedia(s);
   const uploads = VIDEOS.filter(v => v.article_key && s.aidSet.has(v.article_key));
-  uploads.forEach(v => out.push(uploadedPlayer(v) + `<div class="muted">Uploaded by ${esc(v.uploader_name || 'member')} · ${esc(v.title)} · <a href="#video-${esc(v.id)}">💬 ${(COMMENTS[v.id] || []).length} comment${(COMMENTS[v.id] || []).length === 1 ? '' : 's'}</a></div>`));
+  if (uploads.length) out.push(`<div class="vstrip">${uploads.map(v => videoTile(v, uploads.map(u => u.id).join(','), false)).join('')}</div>`);
   const players = M.players.slice(0, 4);
   players.forEach(e => out.push(playerHtml(e) + `<div class="muted">${esc(e.kind)} from ${esc(e.from)}${e.page ? ' (found on the article page)' : ''}</div>`));
   M.files.slice(0, 2).forEach(f => out.push(fileHtml(f) + `<div class="muted">Video from ${esc(f.from)} · <a href="${esc(safeUrl(f.src))}" target="_blank" rel="noopener noreferrer">open the file</a></div>`));
@@ -1196,12 +1232,6 @@ async function loadUsers(){
   USERS = data || [];
   renderAdmin(); renderNav();
 }
-function uploadedPlayer(v){
-  if (v.storage_path) { const s = SIGNED[v.storage_path]; return s ? `<video class="file" controls preload="metadata" playsinline src="${esc(s.url)}"></video>` : '<div class="msg muted">The video file could not be opened right now.</div>'; }
-  const e = toEmbed(v.video_url || '');
-  if (e) return playerHtml(e);
-  return `<div class="msg"><a class="btn small" href="${esc(safeUrl(v.video_url))}" target="_blank" rel="noopener noreferrer">▶ Watch video</a></div>`;
-}
 
 /* ======================= UI: NAVIGATION ======================= */
 let VIEW = 'bg';
@@ -1210,7 +1240,11 @@ function go(v){ if (location.hash !== '#' + v) location.hash = v; else applyView
 let SCROLL_TO = null;
 function applyView(){
   const v = (location.hash || '#bg').slice(1);
-  SCROLL_TO = v.startsWith('video-') ? 'v-' + v.slice(6) : v === 'table' ? 'standings' : null;   // #video-12 opens Videos at that clip
+  const vid = v.startsWith('video-') ? Number(v.slice(6)) || 0 : 0;     // #video-12 opens the player at that clip
+  if (!vid && VPlayer.isOpen()) VPlayer.close(true);
+  if (vid && VPlayer.isOpen()) { const c = VPlayer.current(); if (c && c.id === vid) return; }
+  PENDING_VID = vid;
+  SCROLL_TO = v === 'table' ? 'standings' : null;
   VIEW = v.startsWith('video-') ? 'videos' : v === 'table' ? 'results' : VIEWS.includes(v) ? v : 'bg';   // the table now sits under the results
   if (VIEW === 'admin' && !isAdmin() && AUTH !== 'loading') VIEW = 'account';
   $('#view-news').hidden = !(VIEW === 'bg' || VIEW === 'world');
@@ -1242,6 +1276,7 @@ function renderNav(){
 }
 function renderAll(){
   renderNav();
+  syncPlayer();
   if (VIEW === 'bg' || VIEW === 'world') render();
   else if (VIEW === 'results') { renderResults(); refreshMatchNews(); }
   else if (VIEW === 'videos') renderVideos();
@@ -1564,26 +1599,35 @@ function renderVideos(){
   }
   $('#vFilters').hidden = $('#vSearch').hidden = !member;
   if (!member) { $('#videoList').innerHTML = ''; $('#vBulk').hidden = true; $('#vCatAdmin').innerHTML = ''; LIST_KEY = ''; return; }
-  // a #video-12 link shows that clip whatever the filters were
-  if (SCROLL_TO && SCROLL_TO.startsWith('v-')) {
-    const v = VIDEOS.find(x => 'v-' + x.id === SCROLL_TO);
-    if (v) { VSEL.region = vRegion(v); VSEL.status = ''; VSEL.cat = ''; }
-  }
+  // a #video-12 link opens that clip, with the clips of its section around it
+  const want = PENDING_VID && VIDEOS.find(x => x.id === PENDING_VID);
+  if (want && !vMatch(want, VSEL)) { VSEL.region = vRegion(want); VSEL.status = ''; VSEL.cat = ''; }
   if (VSEL.cat && VSEL.cat !== 'none' && !CATS_V.some(c => c.id === Number(VSEL.cat))) VSEL.cat = '';
   renderVideoFilters();
   renderCatAdmin();
   const vq = parseQuery($('#vq').value), text = vq.text;
-  const listKey = [VID_VER, $('#vq').value, USER && USER.id, isAdmin(), AUTH, VSEL.region, VSEL.status, VSEL.cat].join('|');
-  if (listKey !== LIST_KEY) {
+  const listKey = [VID_VER, $('#vq').value, USER && USER.id, isAdmin(), AUTH, VSEL.region, VSEL.status, VSEL.cat, Object.keys(SIGNED).length].join('|');
+  if (listKey !== LIST_KEY || want) {
     LIST_KEY = listKey;
+    VPlayer.stopPreview();
     const vids = VIDEOS.filter(v => vMatch(v, VSEL) && (!vq.keys.length || (cl => vq.keys.every(k => cl.has(k)))(clubsOfText([v.match, v.title].join(' \n '))))
       && (!text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name, v.committee_note,
       ...[...vCats(v)].map(catName)].join(' ')).includes(text)));
+    LAST_Q = vids.map(v => v.id);
+    const first = vids.find(v => vItem(v).kind !== 'link');
     preserveForm($('#videoList'), () => {
-      $('#videoList').innerHTML = vids.length ? vids.map(videoCard).join('')
+      $('#videoList').innerHTML = vids.length
+        ? `<div class="vbar">${first ? `<button class="primary vplayall" data-vplay="${esc(first.id)}" data-vq="list">${PLAY_ICON}Пусни всички</button>` : ''}
+            <span class="muted">${vids.length} ${vids.length === 1 ? 'клип' : 'клипа'}${first ? ' — пускат се един след друг' : ''}</span>
+            ${isAdmin() ? `<button class="small vsel${VSELECTING || VPICK.size ? ' on' : ''}" data-vselect aria-pressed="${!!(VSELECTING || VPICK.size)}">☑ Избери</button>` : ''}</div>
+           <div class="vgrid">${vids.map(v => videoTile(v, 'list', true)).join('')}</div>`
         : `<div class="empty">${VIDEOS.length ? 'No videos here yet.' : 'No videos uploaded yet.'}</div>`;
     });
+    $('#videoList').classList.toggle('selecting', isAdmin() && (VSELECTING || VPICK.size > 0));
+    fillThumbs($('#videoList'));
+    VPlayer.watch($('#videoList'), id => { const v = VIDEOS.find(x => String(x.id) === String(id)); return v ? vItem(v) : null; });
   }
+  if (want) { PENDING_VID = 0; if (!VPlayer.isOpen() || !VPlayer.current() || VPlayer.current().id !== want.id) openVideo(want.id, LAST_Q.includes(want.id) ? LAST_Q : [want.id], true); }
   renderBulk();
 }
 function renderVideoFilters(){
@@ -1605,42 +1649,172 @@ function renderVideoFilters(){
     </div>`;
 }
 const catChecks = (name, checked, prefix) => CATS_V.map(c => `<label class="ck"><input type="checkbox" name="${name}" value="${c.id}"${checked.has(c.id) ? ' checked' : ''}${prefix ? ` data-vc="${prefix}:${c.id}"` : ''}>${esc(c.name)}</label>`).join('');
-function videoCard(v){
-  const canDelete = USER && (v.uploaded_by === USER.id || isAdmin());
-  const cs = COMMENTS[v.id] || [], cats = [...vCats(v)].filter(catName);
-  const ok = v.review_status === 'approved';
-  const comments = cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'member')}</b> · ${esc(fmtDate(Date.parse(c.created_at)))}
-      ${USER && (c.user_id === USER.id || isAdmin()) ? `<button class="small link" data-cdel="${esc(c.id)}">delete</button>` : ''}</div><div>${esc(c.body)}</div></div>`).join('');
-  const form = `<form class="cform" data-vid="${esc(v.id)}"><textarea name="body" maxlength="2000" required placeholder="Write a comment…"></textarea><div class="bar"><button class="small primary" type="submit">Post comment</button></div><div class="msg"></div></form>`;
-  const note = v.committee_note || ok ? `<div class="rcnote${ok ? ' ok' : ''}"><b>${ok ? '✓ Approved by the Referee Committee' : 'Referee Committee'}</b>${v.reviewed_at ? `<span class="muted"> · ${esc(fmtDate(Date.parse(v.reviewed_at)))}${v.reviewed_by_name ? ' · ' + esc(v.reviewed_by_name) : ''}</span>` : ''}${v.committee_note ? `<p>${esc(v.committee_note)}</p>` : ''}</div>` : '';
-  const admin = isAdmin() ? `<details class="vadmin"><summary>⚙ Sort this video</summary>
-      <form class="form vaform" data-vid="${esc(v.id)}">
-        <div class="two"><label>Section<select name="region">${Object.entries(VREGION).map(([k, l]) => `<option value="${k}"${vRegion(v) === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-          <label>Referee Committee<select name="review_status">${Object.entries(VREVIEW).map(([k, l]) => `<option value="${k}"${(v.review_status || 'unchecked') === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label></div>
-        <label>Referee Committee's comment<textarea name="committee_note" maxlength="4000" placeholder="The decision, the Law and why">${esc(v.committee_note || '')}</textarea></label>
-        <div class="bar"><button class="small primary" type="submit">Save</button><span class="msg"></span></div>
-      </form>
-      <div class="catpick"><div class="muted">Categories — tick to add the video, untick to take it out:</div>${catChecks('vc-' + v.id, vCats(v), v.id)}</div>
-    </details>` : '';
-  return `<article class="card vcard${VPICK.has(v.id) ? ' picked' : ''}" id="v-${esc(v.id)}">
-    <div class="meta">${isAdmin() ? `<label class="pick" title="Select for moving or copying"><input type="checkbox" data-pick="${esc(v.id)}"${VPICK.has(v.id) ? ' checked' : ''}></label>` : ''}
-      <span class="badge ${ok ? 'rcok' : 'rcno'}">${ok ? '✓ RC approved' : 'Not checked'}</span>
-      <span>${esc(fmtDate(Date.parse(v.created_at)))}</span><span>·</span><span>by ${esc(v.uploader_name || 'member')}</span>
-      <span>·</span><span>${esc(vRegion(v) === 'world' ? 'World' : 'Bulgaria')}</span>${v.division && vRegion(v) === 'bg' ? `<span>·</span><span>${esc(DIVS[v.division] || v.division)}</span>` : ''}</div>
-    <h2>${esc(v.title)}</h2>
-    <div class="muted">${[v.match, v.match_date && fmtDay(Date.parse(v.match_date)), v.minutes && 'minutes ' + v.minutes].filter(Boolean).map(esc).join(' · ')}</div>
-    ${cats.length ? `<div class="tags">${cats.map(c => `<button class="tag div" data-vcat="${c}">${esc(catName(c))}</button>`).join('')}</div>` : ''}
-    ${uploadedPlayer(v)}
-    ${note}
-    ${v.description ? `<p class="desc">${esc(v.description)}</p>` : ''}
-    <div class="actions">${v.article_url ? `<a class="btn small" href="${esc(safeUrl(v.article_url))}" target="_blank" rel="noopener noreferrer">Related article</a>` : ''}
-      ${driveId(v.video_url) ? `<a class="btn small" href="${esc(safeUrl(v.video_url))}" target="_blank" rel="noopener noreferrer">Open in Google Drive</a>` : ''}
-      ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Delete video</button>` : ''}</div>
-    ${admin}
-    <div class="comments"><h3>💬 ${cs.length} comment${cs.length === 1 ? '' : 's'}</h3>${comments}${form}</div>
+/* --- the gallery and the player (public/vplayer.js) --- */
+const PLAY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>';
+let LAST_Q = [], VP_Q = [], VP_PUSHED = false, PENDING_VID = 0, VP_SYNC = '', VSELECTING = false;
+const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+const bgDay = ts => new Date(ts).toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' });
+// A clip as the player plays it. Uploaded files and Google Drive files play in the page's own <video>, so zoom, slow
+// motion and frame steps work: a Drive file comes through the site's worker (Google refuses it to other sites' pages),
+// and Drive's own player stays as the fallback. YouTube plays through its player API; other sites' players in a
+// frame; a page that can't be shown here (Reddit, Nextaur) is a link.
+function vItem(v){
+  const base = { id: v.id, title: v.title || 'Видео', href: safeUrl(v.video_url) !== '#' ? v.video_url : '' };
+  if (v.storage_path) {
+    const s = SIGNED[v.storage_path];
+    return s ? { ...base, kind: 'file', src: s.url, cors: true, thumbKey: 'up:' + v.storage_path }
+      : { ...base, kind: 'link', msg: 'Файлът не може да се отвори в момента. Опитайте пак след малко.' };
+  }
+  const u = v.video_url || '', gd = driveId(u);
+  if (gd) {
+    const id = encodeURIComponent(gd), pics = { poster: `https://lh3.googleusercontent.com/d/${id}=w640`, posterBig: `https://lh3.googleusercontent.com/d/${id}=w1280` };
+    const own = `https://drive.google.com/file/d/${id}/preview`;
+    // through the site's worker (public/_worker.js, /drive/video); without it (opened as a file) Drive's own player
+    return HOSTED ? { ...base, ...pics, kind: 'file', heavy: true, thumbKey: 'gd:' + gd, src: '/drive/video?id=' + id, fallback: own }
+      : { ...base, ...pics, kind: 'embed', src: own, host: 'Google Drive' };
+  }
+  const e = toEmbed(u);
+  if (e && e.kind === 'YouTube') { const id = e.key.slice(3); return { ...base, kind: 'yt', ytid: id, poster: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, posterBig: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` }; }
+  if (e) return { ...base, kind: 'embed', src: e.src, host: e.kind };
+  const f = videoFile(u);
+  if (f && !f.hls) return { ...base, kind: 'file', src: f.src };
+  return { ...base, kind: 'link', host: hostOf(u) };
+}
+// a tile: the picture (a muted preview plays in it) and the title — nothing else
+function videoTile(v, q, pick){
+  const x = vItem(v), d = VPlayer.duration(v.id), ok = v.review_status === 'approved';
+  return `<article class="vtile${VPICK.has(v.id) ? ' picked' : ''}" id="v-${esc(v.id)}">
+    <button class="vthumb" data-vplay="${esc(v.id)}" data-vq="${esc(q || '')}"${x.kind === 'file' ? ` data-vprev="${esc(v.id)}"` : ''} aria-label="${esc(v.title)}">
+      ${x.poster ? `<img src="${esc(x.poster)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-vimg="${esc(v.id)}">`
+        : `<span class="vph" data-vthumb="${esc(v.id)}">${x.kind === 'link' ? '↗' : ''}</span>`}
+      <span class="vplay">${PLAY_ICON}</span>
+      ${x.kind === 'link' ? `<span class="vext">↗ ${esc(x.host || 'линк')}</span>` : d ? `<span class="vdur">${esc(fmtDur(d))}</span>` : ''}
+      ${ok ? '<span class="vok" title="Одобрено от Съдийската комисия">✓</span>' : ''}
+    </button>
+    ${pick && isAdmin() ? `<label class="pick" title="Избери за преместване или копиране"><input type="checkbox" data-pick="${esc(v.id)}"${VPICK.has(v.id) ? ' checked' : ''}></label>` : ''}
+    <h3 class="vtitle" title="${esc(v.title)}">${esc(v.title)}</h3>
   </article>`;
 }
-
+// the pictures that have to be made: a frame of an uploaded file; a Google Drive picture that isn't there yet
+function fillThumbs(root){
+  root.querySelectorAll('[data-vthumb]:not([data-done])').forEach(el => {
+    el.dataset.done = '1';
+    const v = VIDEOS.find(x => String(x.id) === el.dataset.vthumb); if (!v) return;
+    const x = vItem(v); if (x.kind === 'link') return;
+    VPlayer.thumb({ ...x, poster: null }).then(u => {
+      if (!u || !el.isConnected) return;
+      const img = new Image(); img.alt = ''; img.src = u; el.replaceWith(img);
+      const t = img.closest('.vtile'), dur = VPlayer.duration(v.id);
+      if (t && dur && !t.querySelector('.vdur')) t.querySelector('.vthumb').insertAdjacentHTML('beforeend', `<span class="vdur">${esc(fmtDur(dur))}</span>`);
+    });
+  });
+}
+// open the player at a clip; the others of the list follow it. The address becomes #video-12 (Back closes the player).
+function openVideo(id, ids, fromHash){
+  id = Number(id);
+  ids = (ids && ids.length ? ids : [id]).map(Number);
+  if (!ids.includes(id)) ids = [id];
+  const items = ids.map(i => VIDEOS.find(v => v.id === i)).filter(Boolean).map(vItem);
+  const index = items.findIndex(x => x.id === id);
+  if (index < 0) return;
+  VP_Q = items.map(x => x.id);
+  VP_SYNC = [VID_VER, CATV_VER].join('|');
+  if (!fromHash && location.hash !== '#video-' + id) { history.pushState({ vp: 1 }, '', '#video-' + id); VP_PUSHED = true; }
+  else if (!fromHash) VP_PUSHED = false;
+  VPlayer.open({ items, index, details: videoInfo,
+    onChange: x => { if (location.hash !== '#video-' + x.id) history.replaceState(history.state, '', '#video-' + x.id); },
+    onClose: silent => {
+      VP_Q = [];
+      if (silent) return;
+      if (VP_PUSHED) { VP_PUSHED = false; history.back(); }
+      else history.replaceState(null, '', '#' + (VIEW === 'bg' ? 'bg' : VIEW));
+    } });
+}
+// new data while the player is open (a comment, the admin's changes, a deleted clip): the clip playing goes on
+function syncPlayer(){
+  if (!window.VPlayer || !VPlayer.isOpen()) return;
+  const k = [VID_VER, CATV_VER].join('|');
+  if (k === VP_SYNC) return;
+  VP_SYNC = k;
+  VPlayer.update(VP_Q.map(i => VIDEOS.find(v => v.id === i)).filter(Boolean).map(vItem));
+  VPlayer.refreshDetails();
+}
+const VREGION_BG = { bg: 'Български клипове', world: 'Световни клипове' };
+const VREVIEW_BG = { approved: 'Одобрено от Съдийската комисия', unchecked: 'Не е проверено от Съдийската комисия' };
+// everything about a clip except the picture: in the player's "Детайли"
+function videoInfo(x, box){
+  const v = VIDEOS.find(y => y.id === x.id);
+  if (!v) { box.innerHTML = ''; return; }
+  const key = [v.id, VID_VER, CATV_VER, [...vCats(v)].join(','), (COMMENTS[v.id] || []).length, isAdmin(), USER && USER.id].join('|');
+  if (box.dataset.key === key && box.firstChild) return;
+  box.dataset.key = key;
+  const open = !!box.querySelector('details.vadmin[open]');
+  preserveForm(box, () => { box.innerHTML = videoInfoHtml(v, open); });
+}
+function videoInfoHtml(v, adminOpen){
+  const canDelete = USER && (v.uploaded_by === USER.id || isAdmin());
+  const cs = COMMENTS[v.id] || [], cats = [...vCats(v)].filter(catName), ok = v.review_status === 'approved';
+  const where = vRegion(v) === 'world' ? 'Свят' : 'България';
+  const meta = [`Качено от ${esc(v.uploader_name || 'член')}`, esc(bgDay(Date.parse(v.created_at))), where, v.division && vRegion(v) === 'bg' ? esc(DIVS[v.division] || v.division) : ''].filter(Boolean);
+  const match = [v.match, v.match_date && bgDay(Date.parse(v.match_date)), v.minutes && 'минута ' + v.minutes].filter(Boolean).map(esc).join(' · ');
+  const note = ok || v.committee_note
+    ? `<div class="rcnote${ok ? ' ok' : ''}"><b>${ok ? '✓ Одобрено от Съдийската комисия' : 'Съдийската комисия'}</b>${v.reviewed_at ? `<span class="muted"> · ${esc(bgDay(Date.parse(v.reviewed_at)))}${v.reviewed_by_name ? ' · ' + esc(v.reviewed_by_name) : ''}</span>` : ''}${v.committee_note ? `<p>${esc(v.committee_note)}</p>` : ''}</div>`
+    : '<div class="muted" style="margin-top:8px">Не е проверено от Съдийската комисия.</div>';
+  const comments = cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'член')}</b> · ${esc(new Date(Date.parse(c.created_at)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}
+      ${USER && (c.user_id === USER.id || isAdmin()) ? `<button class="small link" data-cdel="${esc(c.id)}">изтрий</button>` : ''}</div><div>${esc(c.body)}</div></div>`).join('');
+  const form = `<form class="cform" data-vid="${esc(v.id)}"><textarea name="body" maxlength="2000" required placeholder="Напишете коментар…"></textarea><div class="bar"><button class="small primary" type="submit">Публикувай</button></div><div class="msg"></div></form>`;
+  const admin = isAdmin() ? `<details class="vadmin"${adminOpen ? ' open' : ''}><summary>⚙ Подреди клипа</summary>
+      <form class="form vaform" data-vid="${esc(v.id)}">
+        <label>Раздел<select name="region">${Object.entries(VREGION_BG).map(([k, l]) => `<option value="${k}"${vRegion(v) === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        <label>Съдийска комисия<select name="review_status">${Object.entries(VREVIEW_BG).map(([k, l]) => `<option value="${k}"${(v.review_status || 'unchecked') === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        <label>Коментар на Съдийската комисия<textarea name="committee_note" maxlength="4000" placeholder="Решението, правилото и защо">${esc(v.committee_note || '')}</textarea></label>
+        <div class="bar"><button class="small primary" type="submit">Запази</button><span class="msg"></span></div>
+      </form>
+      <div class="catpick"><div class="muted">Категории — отметнете, за да добавите клипа; махнете отметката, за да го извадите:</div>${catChecks('vc-' + v.id, vCats(v), v.id)}</div>
+    </details>` : '';
+  const src = v.video_url && safeUrl(v.video_url) !== '#' ? v.video_url : '';
+  return `<div class="vinfo">
+    <div class="vmeta">${meta.map(m => `<span>${m}</span>`).join('<span>·</span>')}</div>
+    ${match ? `<p class="vmatch">${match}</p>` : ''}
+    ${cats.length ? `<div class="tags">${cats.map(c => `<button class="tag div" data-vcatgo="${c}" title="Всички клипове от тази категория">${esc(catName(c))}</button>`).join('')}</div>` : ''}
+    ${note}
+    ${v.description ? `<p class="desc">${esc(v.description)}</p>` : ''}
+    <div class="actions">
+      <button class="small" data-vcopy="${esc(v.id)}">🔗 Копирай линк към клипа</button>
+      ${v.article_url ? `<a class="btn small" href="${esc(safeUrl(v.article_url))}" target="_blank" rel="noopener noreferrer">Свързана статия</a>` : ''}
+      ${src ? `<a class="btn small" href="${esc(src)}" target="_blank" rel="noopener noreferrer">${driveId(src) ? 'Отвори в Google Drive' : 'Отвори източника'}</a>` : ''}
+      ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Изтрий клипа</button>` : ''}</div>
+    ${admin}
+    <div class="comments"><h3>💬 ${cs.length} ${cs.length === 1 ? 'коментар' : 'коментара'}</h3>${comments}${form}</div>
+  </div>`;
+}
+// the details' buttons and forms, inside the player
+function bindPlayerActions(){
+  const root = VPlayer.root;
+  root.addEventListener('click', e => {
+    const d = e.target.closest('[data-del]'); if (d) { deleteVideo(d.dataset.del); return; }
+    const cd = e.target.closest('[data-cdel]'); if (cd) { deleteComment(cd.dataset.cdel); return; }
+    const cp = e.target.closest('[data-vcopy]');
+    if (cp) {
+      const url = location.origin + location.pathname + '#video-' + cp.dataset.vcopy;
+      const ok = () => toast('Линкът е копиран.');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, () => prompt('Линк към клипа:', url));
+      else prompt('Линк към клипа:', url);
+      return;
+    }
+    const cg = e.target.closest('[data-vcatgo]');
+    if (cg) { VSEL.cat = cg.dataset.vcatgo; VSEL.status = ''; saveVsel(); VPlayer.close(true); VP_PUSHED = false; history.replaceState(null, '', '#videos'); applyView(); }
+  });
+  root.addEventListener('change', e => {
+    const vc = e.target.closest('[data-vc]');
+    if (vc) { const [vid, cid] = vc.dataset.vc.split(':').map(Number); setVideoCat(vid, cid, vc.checked); }
+  });
+  root.addEventListener('submit', e => {
+    const f = e.target;
+    if (f.classList.contains('cform')) { e.preventDefault(); postComment(f); }
+    else if (f.classList.contains('vaform')) { e.preventDefault(); saveVideoAdmin(f); }
+  });
+}
 /* --- admin: move / copy several videos at once --- */
 function renderBulk(){
   const bar = $('#vBulk');
@@ -1759,10 +1933,7 @@ async function setVideoCat(vid, cid, on){
   if (error) { alert('Could not save: ' + error.message); return; }
   const s = VCAT[vid] || (VCAT[vid] = new Set());
   on ? s.add(cid) : s.delete(cid);
-  // the card keeps playing; only the filters and tags are drawn again
-  const card = document.getElementById('v-' + vid);
-  if (card) { const t = card.querySelector('.tags'), html = [...s].filter(catName).map(c => `<button class="tag div" data-vcat="${c}">${esc(catName(c))}</button>`).join('');
-    if (t) t.innerHTML = html; else if (html) card.querySelector('h2').nextElementSibling.insertAdjacentHTML('afterend', `<div class="tags">${html}</div>`); }
+  VPlayer.refreshDetails();
   renderVideoFilters();
   $('#vCatAdmin').dataset.key = '';
   renderCatAdmin();
@@ -1972,16 +2143,19 @@ function initVideosUI(){
     if (c) { VSEL.cat = VSEL.cat === c.dataset.vcat && c.classList.contains('tag') ? '' : c.dataset.vcat; saveVsel(); renderVideos(); if (c.classList.contains('tag')) $('#vFilters').scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
     const d = e.target.closest('[data-del]'); if (d) { deleteVideo(d.dataset.del); return; }
     const cd = e.target.closest('[data-cdel]'); if (cd) { deleteComment(cd.dataset.cdel); return; }
+    const sb = e.target.closest('[data-vselect]');
+    if (sb) { VSELECTING = !(VSELECTING || VPICK.size); if (!VSELECTING) { VPICK.clear(); view.querySelectorAll('[data-pick]').forEach(i => { i.checked = false; i.closest('.vtile').classList.remove('picked'); }); renderBulk(); }
+      $('#videoList').classList.toggle('selecting', VSELECTING); sb.classList.toggle('on', VSELECTING); sb.setAttribute('aria-pressed', VSELECTING); return; }
     if (e.target.closest('[data-act="clearPrefill"]')) { PREFILL = null; renderVideos(); return; }
     const da = e.target.closest('[data-dpall]'); if (da) { view.querySelectorAll('input[name=dp]').forEach(i => i.checked = da.dataset.dpall === '1'); return; }
-    if (e.target.closest('[data-bulk-clear]')) { VPICK.clear(); view.querySelectorAll('[data-pick]').forEach(i => { i.checked = false; i.closest('.vcard').classList.remove('picked'); }); renderBulk(); return; }
-    if (e.target.closest('[data-bulk-all]')) { view.querySelectorAll('[data-pick]').forEach(i => { i.checked = true; VPICK.add(Number(i.dataset.pick)); i.closest('.vcard').classList.add('picked'); }); renderBulk(); return; }
+    if (e.target.closest('[data-bulk-clear]')) { VPICK.clear(); view.querySelectorAll('[data-pick]').forEach(i => { i.checked = false; i.closest('.vtile').classList.remove('picked'); }); renderBulk(); return; }
+    if (e.target.closest('[data-bulk-all]')) { view.querySelectorAll('[data-pick]').forEach(i => { i.checked = true; VPICK.add(Number(i.dataset.pick)); i.closest('.vtile').classList.add('picked'); }); renderBulk(); return; }
     const cm = e.target.closest('[data-cmove]'); if (cm) { catAction('move', cm.closest('.catrow'), cm); return; }
     const cx = e.target.closest('[data-cdelete]'); if (cx) { catAction('delete', cx.closest('.catrow')); return; }
   });
   view.addEventListener('change', e => {
     const p = e.target.closest('[data-pick]');
-    if (p) { const id = Number(p.dataset.pick); p.checked ? VPICK.add(id) : VPICK.delete(id); p.closest('.vcard').classList.toggle('picked', p.checked); renderBulk(); return; }
+    if (p) { const id = Number(p.dataset.pick); p.checked ? VPICK.add(id) : VPICK.delete(id); p.closest('.vtile').classList.toggle('picked', p.checked); renderBulk(); return; }
     const vc = e.target.closest('[data-vc]');
     if (vc) { const [vid, cid] = vc.dataset.vc.split(':').map(Number); setVideoCat(vid, cid, vc.checked); return; }
     const b = e.target.closest('[data-bulk]');
@@ -3399,6 +3573,22 @@ function initUI(){
   bindStoryEvents($('#feed'), render);
 
   initVideosUI();
+  bindPlayerActions();
+  // a clip's tile anywhere on the page (the gallery, a story) opens the player
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-vplay]'); if (!t) return;
+    e.preventDefault(); e.stopPropagation();
+    const q = t.dataset.vq === 'list' ? LAST_Q : String(t.dataset.vq || '').split(',').filter(Boolean).map(Number);
+    openVideo(t.dataset.vplay, q);
+  }, true);
+  // a Google Drive picture that isn't there (yet): a frame of the file instead
+  document.addEventListener('error', e => {
+    const img = e.target; if (!img || img.tagName !== 'IMG' || !img.dataset.vimg) return;
+    const ph = document.createElement('span'); ph.className = 'vph'; ph.dataset.vthumb = img.dataset.vimg;
+    img.replaceWith(ph); fillThumbs(ph.parentNode);
+  }, true);
+  // the pictures of the clips shown in stories (the news feed, the match panels)
+  if (window.MutationObserver) { let mt = 0; new MutationObserver(() => { clearTimeout(mt); mt = setTimeout(() => fillThumbs(document), 120); }).observe(document.querySelector('main'), { childList: true, subtree: true }); }
   $('#accountBox').addEventListener('submit', e => { e.preventDefault(); onAccountSubmit(e.target); });
   $('#accountBox').addEventListener('click', async e => {
     const tab = e.target.closest('[data-tab]'); if (tab) { ACC_TAB = tab.dataset.tab; renderAccount(true); return; }

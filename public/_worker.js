@@ -9,6 +9,8 @@
 //                                 SUPABASE_URL and SUPABASE_ANON_KEY (public by design; data is protected by RLS).
 //   POST /drive/list {url}        the videos in a Google Drive folder shared "anyone with the link" (approved
 //                                 members only), including its subfolders, so a whole folder can be added at once.
+//   /drive/video?id=...           a Google Drive clip of the site's own videos, streamed (with seeking) to the page's
+//                                 own player: Google gives the file to a server but refuses it to another site's page.
 //   POST /ebfu/login, /ebfu/explore   ebfu.net with the member's OWN account (approved members only):
 //                                 log in once, then map the video archive. Passwords are never stored or logged;
 //                                 the ebfu.net session goes back to the member's browser only.
@@ -31,6 +33,7 @@ export default {
     if (url.pathname === '/logo') return handleLogo(request, url, ctx);
     if (url.pathname.startsWith('/ebfu/')) return handleEbfu(request, url, env);
     if (url.pathname === '/drive/list') return handleDrive(request, env);
+    if (url.pathname === '/drive/video') return handleDriveVideo(request, url, env, ctx);
     if (url.pathname === '/config.json') {
       return json({ supabaseUrl: env.SUPABASE_URL || '', supabaseKey: env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY || '' }, 200, 300);
     }
@@ -910,6 +913,54 @@ async function ebfuExplore(session, diag) {
     } else report.notes.push('The camera button runs ' + cam.fn.name + '(); its video address is built inside that function (see cameraFunction).');
   }
   return done();
+}
+
+/* ---------------- /drive/video: a Google Drive clip, for the page's own player ----------------
+   Google Drive hands a file shared "anyone with the link" to a server, but refuses it to a page of another site (it
+   turns away the requests a browser marks cross-site), and its own embedded player can't zoom, slow down or step frame
+   by frame. So the page's player gets the file from here: streamed as it plays, with seeking (Range), never stored.
+   Only the Drive files of the site's own videos are served (the database says which, without showing anything else:
+   video_drive_ok), so this is no open proxy for any Drive file. */
+const DRIVE_OK_SECONDS = 6 * 3600;
+async function handleDriveVideo(request, url, env, ctx) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405);
+  const id = url.searchParams.get('id') || '';
+  if (!/^[\w-]{10,100}$/.test(id)) return text('Not a Google Drive file id', 400);
+  if (!(await driveVideoOk(id, env, ctx))) return text('Not a video of this site', 403);
+  const headers = { 'User-Agent': UA, Accept: '*/*' };
+  const range = request.headers.get('Range');
+  if (range && /^bytes=\d*-\d*$/.test(range)) headers.Range = range;
+  let up;
+  try {
+    up = await fetch('https://drive.usercontent.google.com/download?id=' + encodeURIComponent(id) + '&export=download&confirm=t',
+      { method: request.method, headers, redirect: 'follow' });
+  } catch (e) { return text('Google Drive did not answer: ' + e.message, 502); }
+  const type = up.headers.get('Content-Type') || '';
+  // a refusal comes back as a web page (quota, a file made private): the page then falls back to Drive's own player
+  if (!(up.status === 200 || up.status === 206) || /text\/html/i.test(type)) return text('Google Drive refused the file (' + up.status + ')', up.status === 404 ? 404 : 502);
+  const h = new Headers();
+  for (const k of ['Content-Type', 'Content-Length', 'Content-Range', 'Last-Modified', 'ETag']) { const v = up.headers.get(k); if (v) h.set(k, v); }
+  if (!/^(video|audio)\//i.test(type)) h.set('Content-Type', 'video/mp4');
+  h.set('Accept-Ranges', 'bytes');
+  h.set('Cache-Control', 'private, max-age=3600');
+  h.set('Content-Disposition', 'inline');
+  h.set('X-Content-Type-Options', 'nosniff');
+  return new Response(request.method === 'HEAD' ? null : up.body, { status: up.status, headers: h });
+}
+async function driveVideoOk(id, env, ctx) {
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const key = new Request('https://refvideos.pages.dev/__drive_ok/' + encodeURIComponent(id), { method: 'GET' });
+  if (cache) { const hit = await cache.match(key); if (hit) return (await hit.text()) === '1'; }
+  const base = env.SUPABASE_URL || SB_URL, k = env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY || SB_KEY;
+  let ok;
+  try {
+    const r = await fetch(base + '/rest/v1/rpc/video_drive_ok', { method: 'POST', headers: { apikey: k, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_id: id }), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return false;
+    ok = (await r.json()) === true;
+  } catch (e) { return false; }
+  if (cache) ctx.waitUntil(cache.put(key, new Response(ok ? '1' : '0', { headers: { 'Cache-Control': 'public, max-age=' + (ok ? DRIVE_OK_SECONDS : 300) } })));
+  return ok;
 }
 
 /* ---------------- /drive/list: the videos in a shared Google Drive folder ---------------- */
