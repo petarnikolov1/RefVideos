@@ -109,6 +109,8 @@
   .vp-center>*{pointer-events:auto}
   .vp.idle .vp-center .vp-big{opacity:0;pointer-events:none}
   .vp.zoomed .vp-center{display:none}
+  /* frame by frame: nothing over the picture (the big play / previous / next come back with play or the next clip) */
+  .vp.stepping .vp-center{display:none}
   .vp-big{width:72px;height:72px;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
   .vp-big svg{width:38px;height:38px}
   .vp-big.sm{width:52px;height:52px} .vp-big.sm svg{width:28px;height:28px}
@@ -420,6 +422,7 @@
     ar = 16 / 9;
     POSTER.style.backgroundImage = x.posterBig || x.poster ? `url("${(x.posterBig || x.poster).replace(/"/g, '%22')}")` : 'none';
     POSTER.style.opacity = 1;
+    R.classList.remove('stepping');
     TITLE.textContent = x.title || '';
     R.querySelector('.vp-head h2').textContent = x.title || '';
     POS.textContent = items.length > 1 ? `${idx + 1} / ${items.length}` : '';
@@ -503,6 +506,7 @@
     if (!R || R.hidden) return;
     const paused = mPaused(), loading = mode === 'file' && !paused && vid().readyState < 3 && !failed;
     R.classList.toggle('paused', paused && mode !== 'embed' && mode !== 'none');
+    if (!paused) R.classList.remove('stepping');
     R.querySelectorAll('[data-a="toggle"]').forEach(b => { b.innerHTML = paused ? IC.play : IC.pause; b.setAttribute('aria-label', paused ? 'Пусни' : 'Спри'); });
     const big = CENTER.querySelector('.vp-big:not(.sm)');
     big.hidden = loading || mode === 'embed' || mode === 'none' || !!MSG;
@@ -559,6 +563,7 @@
   function frame(d){
     if (!canFrames()) return;
     mPause();
+    R.classList.add('stepping');
     mSeek(mTime() + d / FPS);
     flash(d < 0 ? '‹ кадър' : 'кадър ›');
   }

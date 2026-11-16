@@ -93,9 +93,12 @@ export function context(rows){
   return { matches, byTeam, nearest };
 }
 
-// the Google News search for one match
+// the Google News searches for one match: the names as phrases ("Рилски спортист" Хебър), and the same words loosely —
+// Google gives different articles for each (on 16 Nov the phrase search left out Gong's report, the loose one had it)
 export const searchQuery = m => `${m._h.q} ${m._a.q}`;
-export const searchUrl = m => N.googleUrl(searchQuery(m), m._t + WINDOW[0], m._t + WINDOW[1]);
+export const searchQueries = m => [...new Set([searchQuery(m), searchQuery(m).replace(/"/g, '')])];
+export const searchUrls = m => searchQueries(m).map(q => N.googleUrl(q, m._t + WINDOW[0], m._t + WINDOW[1]));
+export const searchUrl = m => searchUrls(m)[0];
 
 // the played matches due for a search, newest first (seen: match id → when it was last searched)
 export function due(ctx, seen, now = Date.now()){

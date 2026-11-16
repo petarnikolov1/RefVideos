@@ -103,20 +103,24 @@ async function scanMatches(body: any, started: number) {
   const worker = async () => {
     while (i < todo.length && Date.now() - started < 100000) {
       const m = todo[i++];
-      st.searches++;
-      try {
-        const items = await feed(MS.searchUrl(m), st.via);
-        st.worked++; st.items += items.length; seen[m.id] = Date.now();
-        for (const it of items) {
-          const r = MS.toRow(it, m, ctx, started);
-          if (!r) continue;
-          const ex = rows.get(r.aid);
-          if (!ex) { rows.set(r.aid, r); continue; }
-          if (ex.kind !== 'ref' && r.kind === 'ref') rows.set(r.aid, { ...r, match_id: r.match_id ?? ex.match_id });
-          else if (!ex.match_id && r.match_id) ex.match_id = r.match_id;
-        }
-      } catch (e) { st.failed++; if (st.errors.length < 5) st.errors.push(`${m.home_name} – ${m.away_name}: ` + String((e as Error).message ?? e).slice(0, 140)); }
-      await sleep(300 + Math.random() * 400);
+      let worked = false;
+      for (const url of MS.searchUrls(m)) {
+        st.searches++;
+        try {
+          const items = await feed(url, st.via);
+          st.worked++; st.items += items.length; worked = true;
+          for (const it of items) {
+            const r = MS.toRow(it, m, ctx, started);
+            if (!r) continue;
+            const ex = rows.get(r.aid);
+            if (!ex) { rows.set(r.aid, r); continue; }
+            if (ex.kind !== 'ref' && r.kind === 'ref') rows.set(r.aid, { ...r, match_id: r.match_id ?? ex.match_id });
+            else if (!ex.match_id && r.match_id) ex.match_id = r.match_id;
+          }
+        } catch (e) { st.failed++; if (st.errors.length < 5) st.errors.push(`${m.home_name} – ${m.away_name}: ` + String((e as Error).message ?? e).slice(0, 140)); }
+        await sleep(300 + Math.random() * 400);
+      }
+      if (worked) seen[m.id] = Date.now();
     }
   };
   await Promise.all([worker(), worker()]);

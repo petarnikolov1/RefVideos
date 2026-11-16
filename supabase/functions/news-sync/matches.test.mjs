@@ -38,6 +38,8 @@ const RH = byId['mrbit:16:rilski:hebar'];
 ok(MS.searchQuery(RH) === '"Рилски спортист" Хебър', 'the search: "Рилски спортист" Хебър → ' + MS.searchQuery(RH));
 ok(/after%3A2026-11-12%20before%3A2026-11-22/.test(MS.searchUrl(RH)), 'searched from 3 days before to a week after the kickoff');
 ok(MS.searchQuery(byId['efbet:534548']) === 'Ботев (Локомотив OR Локо)', 'Локомотив is searched as Локомотив or Локо');
+ok(MS.searchQueries(RH).join(' | ') === '"Рилски спортист" Хебър | Рилски спортист Хебър', 'two searches: the names as phrases, and loosely');
+ok(MS.searchQueries(byId['efbet:534543']).length === 1, 'one search when the two would be the same (Левски ЦСКА)');
 
 // the Google News results for the match: [headline - outlet, outlet's address, published (UTC)] → the match it is about, kind
 const item = (t, url, at) => ({ title: t, link: 'https://news.google.com/rss/articles/x', date: new Date(at), desc: '', source: t.slice(t.lastIndexOf(' - ') + 3), srcUrl: url });
