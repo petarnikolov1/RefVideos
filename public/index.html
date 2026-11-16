@@ -171,6 +171,7 @@
   .vtitle{margin:8px 2px 0;font-size:14px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
   .vtile .pick{position:absolute;right:6px;top:6px;z-index:3;background:rgba(0,0,0,.55);border-radius:6px;padding:4px;display:none}
   #videoList.selecting .vtile .pick{display:inline-flex}
+  #videoList.selecting .vnote{display:none}
   .vbar .vsel.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
   .vtile.picked .vthumb{outline:3px solid var(--accent);outline-offset:2px}
   .vstrip{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:8px 0}
@@ -217,6 +218,11 @@
   .cm{padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
   .cm .m{font-size:12px;color:var(--muted);white-space:normal}
   .cform{display:grid;gap:6px;margin-top:8px}
+  .cform .bar{display:flex;gap:6px;flex-wrap:wrap}
+  .comments .vtabs{margin:6px 0 4px}
+  .vtabs .n{font-weight:500;opacity:.75;font-variant-numeric:tabular-nums}
+  .vhint{font-size:12px;color:var(--muted);margin:8px 0 2px}
+  .vnote{position:absolute;right:6px;top:6px;z-index:2;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.62);display:grid;place-items:center;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
   button.link{border:none;background:none;padding:0 4px;color:var(--muted);text-decoration:underline;font-size:12px}
 
   /* results & table (card style after the BFU e-championship) */
@@ -1129,7 +1135,10 @@ function matchMediaHtml(s, MM){
 /* ======================= SUPABASE: ACCOUNTS, VIDEOS, ADMIN ======================= */
 let SB = null, USER = null, PROFILE = null, AUTH = 'loading', RECOVERY = false, VIDEOS = [], USERS = [], PREFILL = null;
 let COMMENTS = {};   // video id -> comments, oldest first
-let VID_VER = 0;     // bumps when videos or comments change (re-draw the Videos list only then)
+let NOTES = {};      // video id -> my own notes, oldest first (the database gives no one anyone else's)
+let NOTE_EDIT = '';  // the note being edited
+let VTAB = (() => { try { return localStorage.getItem('bgRefWatch.vtab') === 'notes' ? 'notes' : 'comments'; } catch (e) { return 'comments'; } })();
+let VID_VER = 0;     // bumps when videos, comments or notes change (re-draw the Videos list only then)
 let CATS_V = [], VCAT = {}, CATV_VER = 0;   // video categories (in order) and video id -> Set of category ids
 let SIGNED = {};     // storage path -> { url, at }: uploaded files play through short-lived signed links (members only)
 let SB_CONF = { url: '', key: '' };
@@ -1177,7 +1186,7 @@ async function handleSession(session){
 // the members' videos, their categories and comments — approved members only (the database enforces it too)
 async function loadVideos(){
   if (!SB) return;
-  if (!approved()) { VIDEOS = []; CATS_V = []; VCAT = {}; COMMENTS = {}; VID_VER++; CATV_VER++; renderAll(); return; }
+  if (!approved()) { VIDEOS = []; CATS_V = []; VCAT = {}; COMMENTS = {}; NOTES = {}; VID_VER++; CATV_VER++; renderAll(); return; }
   const [v, c, i] = await Promise.all([
     SB.from('videos').select('*').order('created_at', { ascending: false }).limit(1000),
     SB.from('video_categories').select('id,name,sort').order('sort', { ascending: true }).order('name', { ascending: true }),
@@ -1192,7 +1201,7 @@ async function loadVideos(){
   else for (const r of i.data || []) (VCAT[r.video_id] || (VCAT[r.video_id] = new Set())).add(r.category_id);
   await signVideos();
   VID_VER++;
-  await loadComments();
+  await Promise.all([loadComments(), loadNotes()]);
   renderAll();
 }
 async function signVideos(){
@@ -1230,6 +1239,47 @@ async function deleteComment(id){
   if (error) { alert('Could not delete: ' + error.message); return; }
   await loadComments();
   renderAll();
+}
+// my own notes on the clips: no one else can read them (the database's rules), I can edit and delete them
+async function loadNotes(){
+  if (!SB || !USER || !VIDEOS.length) { NOTES = {}; return; }
+  const { data, error } = await SB.from('video_notes').select('id,video_id,body,created_at,updated_at')
+    .order('created_at', { ascending: true }).limit(5000);
+  if (error) { log('Could not load notes: ' + error.message); return; }
+  NOTES = {};
+  (data || []).forEach(n => (NOTES[n.video_id] = NOTES[n.video_id] || []).push(n));
+  VID_VER++;
+}
+async function saveNote(form){
+  const body = String(new FormData(form).get('body') || '').trim(), vid = Number(form.dataset.vid), id = form.dataset.nid;
+  const msg = form.querySelector('.msg'), btn = form.querySelector('button[type=submit]');
+  if (!body) return;
+  btn.disabled = true;
+  const { error } = id
+    ? await SB.from('video_notes').update({ body: body.slice(0, 4000) }).eq('id', id)
+    : await SB.from('video_notes').insert({ video_id: vid, body: body.slice(0, 4000) });
+  btn.disabled = false;
+  if (error) { if (msg) { msg.textContent = 'Бележката не е запазена: ' + error.message; msg.className = 'msg err'; } return; }
+  form.reset();
+  if (id) NOTE_EDIT = '';
+  await loadNotes();
+  renderAll();
+}
+async function deleteNote(id){
+  if (!confirm('Да изтрия ли бележката?')) return;
+  const { error } = await SB.from('video_notes').delete().eq('id', id);
+  if (error) { alert('Бележката не е изтрита: ' + error.message); return; }
+  if (NOTE_EDIT === String(id)) NOTE_EDIT = '';
+  await loadNotes();
+  renderAll();
+}
+// comments or notes: the choice is remembered in this browser
+function setVtab(t, box){
+  VTAB = t === 'notes' ? 'notes' : 'comments';
+  try { localStorage.setItem('bgRefWatch.vtab', VTAB); } catch (e) {}
+  if (!box) return;
+  box.querySelectorAll('[data-vtab]').forEach(b => { const on = b.dataset.vtab === VTAB; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  box.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== VTAB; });
 }
 async function loadUsers(){
   if (!SB || !isAdmin()) return;
@@ -1696,6 +1746,7 @@ function videoTile(v, q, pick){
       <span class="vplay">${PLAY_ICON}</span>
       ${x.kind === 'link' ? `<span class="vext">↗ ${esc(x.host || 'линк')}</span>` : d ? `<span class="vdur">${esc(fmtDur(d))}</span>` : ''}
       ${ok ? '<span class="vok" title="Одобрено от Съдийската комисия">✓</span>' : ''}
+      ${(NOTES[v.id] || []).length ? '<span class="vnote" title="Имате бележки към този клип">📝</span>' : ''}
     </button>
     ${pick && isAdmin() ? `<label class="pick" title="Избери за преместване или копиране"><input type="checkbox" data-pick="${esc(v.id)}"${VPICK.has(v.id) ? ' checked' : ''}></label>` : ''}
     <h3 class="vtitle" title="${esc(v.title)}">${esc(v.title)}</h3>
@@ -1751,7 +1802,7 @@ const VREVIEW_BG = { approved: 'Одобрено от Съдийската ко�
 function videoInfo(x, box){
   const v = VIDEOS.find(y => y.id === x.id);
   if (!v) { box.innerHTML = ''; return; }
-  const key = [v.id, VID_VER, CATV_VER, [...vCats(v)].join(','), (COMMENTS[v.id] || []).length, isAdmin(), USER && USER.id].join('|');
+  const key = [v.id, VID_VER, CATV_VER, [...vCats(v)].join(','), (COMMENTS[v.id] || []).length, (NOTES[v.id] || []).length, NOTE_EDIT, isAdmin(), USER && USER.id].join('|');
   if (box.dataset.key === key && box.firstChild) return;
   box.dataset.key = key;
   const open = !!box.querySelector('details.vadmin[open]');
@@ -1766,9 +1817,20 @@ function videoInfoHtml(v, adminOpen){
   const note = ok || v.committee_note
     ? `<div class="rcnote${ok ? ' ok' : ''}"><b>${ok ? '✓ Одобрено от Съдийската комисия' : 'Съдийската комисия'}</b>${v.reviewed_at ? `<span class="muted"> · ${esc(bgDay(Date.parse(v.reviewed_at)))}${v.reviewed_by_name ? ' · ' + esc(v.reviewed_by_name) : ''}</span>` : ''}${v.committee_note ? `<p>${esc(v.committee_note)}</p>` : ''}</div>`
     : '<div class="muted" style="margin-top:8px">Не е проверено от Съдийската комисия.</div>';
-  const comments = cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'член')}</b> · ${esc(new Date(Date.parse(c.created_at)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}
+  const when = s => new Date(Date.parse(s)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  // comments: every member sees them; no one edits them; the author or an admin deletes them
+  const comments = cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'член')}</b> · ${esc(when(c.created_at))}
       ${USER && (c.user_id === USER.id || isAdmin()) ? `<button class="small link" data-cdel="${esc(c.id)}">изтрий</button>` : ''}</div><div>${esc(c.body)}</div></div>`).join('');
   const form = `<form class="cform" data-vid="${esc(v.id)}"><textarea name="body" maxlength="2000" required placeholder="Напишете коментар…"></textarea><div class="bar"><button class="small primary" type="submit">Публикувай</button></div><div class="msg"></div></form>`;
+  // notes: mine only — I add, edit and delete them
+  const ns = NOTES[v.id] || [];
+  const notes = ns.map(n => NOTE_EDIT === String(n.id)
+    ? `<form class="cform nform" id="nedit-${esc(n.id)}" data-nid="${esc(n.id)}" data-vid="${esc(v.id)}"><textarea name="body" maxlength="4000" required>${esc(n.body)}</textarea>
+        <div class="bar"><button class="small primary" type="submit">Запази</button><button class="small" type="button" data-ncancel>Отказ</button></div><div class="msg"></div></form>`
+    : `<div class="cm note"><div class="m">${esc(when(n.created_at))}${Date.parse(n.updated_at) - Date.parse(n.created_at) > 1000 ? ` · редактирана ${esc(when(n.updated_at))}` : ''}
+        <button class="small link" data-nedit="${esc(n.id)}">редактирай</button><button class="small link" data-ndel="${esc(n.id)}">изтрий</button></div><div>${esc(n.body)}</div></div>`).join('');
+  const nform = `<form class="cform nform" id="nnew-${esc(v.id)}" data-vid="${esc(v.id)}"><textarea name="body" maxlength="4000" required placeholder="Бележка само за вас — минута, решение, правило…"></textarea><div class="bar"><button class="small primary" type="submit">Запази бележката</button></div><div class="msg"></div></form>`;
+  const tab = (k, label, n) => `<button role="tab" data-vtab="${k}" class="${VTAB === k ? 'on' : ''}" aria-selected="${VTAB === k}">${label} <span class="n">${n}</span></button>`;
   const admin = isAdmin() ? `<details class="vadmin"${adminOpen ? ' open' : ''}><summary>⚙ Подреди клипа</summary>
       <form class="form vaform" data-vid="${esc(v.id)}">
         <label>Раздел<select name="region">${Object.entries(VREGION_BG).map(([k, l]) => `<option value="${k}"${vRegion(v) === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
@@ -1791,7 +1853,13 @@ function videoInfoHtml(v, adminOpen){
       ${src ? `<a class="btn small" href="${esc(src)}" target="_blank" rel="noopener noreferrer">${driveId(src) ? 'Отвори в Google Drive' : 'Отвори източника'}</a>` : ''}
       ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Изтрий клипа</button>` : ''}</div>
     ${admin}
-    <div class="comments"><h3>💬 ${cs.length} ${cs.length === 1 ? 'коментар' : 'коментара'}</h3>${comments}${form}</div>
+    <div class="comments">
+      <div class="seg vtabs" role="tablist" aria-label="Коментари или бележки">${tab('comments', '💬 Коментари', cs.length)}${tab('notes', '📝 Моите бележки', ns.length)}</div>
+      <div class="vpane" data-pane="comments" role="tabpanel"${VTAB === 'comments' ? '' : ' hidden'}>
+        <p class="vhint">Виждат ги всички членове. Коментарът не се редактира — авторът или администратор може да го изтрие.</p>${comments}${form}</div>
+      <div class="vpane" data-pane="notes" role="tabpanel"${VTAB === 'notes' ? '' : ' hidden'}>
+        <p class="vhint">🔒 Само вие виждате бележките си — никой друг, и администраторите също. Можете да ги редактирате и изтривате.</p>${notes}${nform}</div>
+    </div>
   </div>`;
 }
 // the details' buttons and forms, inside the player
@@ -1800,6 +1868,12 @@ function bindPlayerActions(){
   root.addEventListener('click', e => {
     const d = e.target.closest('[data-del]'); if (d) { deleteVideo(d.dataset.del); return; }
     const cd = e.target.closest('[data-cdel]'); if (cd) { deleteComment(cd.dataset.cdel); return; }
+    const vt = e.target.closest('[data-vtab]'); if (vt) { setVtab(vt.dataset.vtab, vt.closest('.comments')); return; }
+    const ne = e.target.closest('[data-nedit]');
+    if (ne) { NOTE_EDIT = ne.dataset.nedit; VPlayer.refreshDetails();
+      const ta = root.querySelector(`#nedit-${CSS.escape(NOTE_EDIT)} textarea`); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } return; }
+    if (e.target.closest('[data-ncancel]')) { NOTE_EDIT = ''; VPlayer.refreshDetails(); return; }
+    const nd = e.target.closest('[data-ndel]'); if (nd) { deleteNote(nd.dataset.ndel); return; }
     const cp = e.target.closest('[data-vcopy]');
     if (cp) {
       const url = location.origin + location.pathname + '#video-' + cp.dataset.vcopy;
@@ -1817,7 +1891,8 @@ function bindPlayerActions(){
   });
   root.addEventListener('submit', e => {
     const f = e.target;
-    if (f.classList.contains('cform')) { e.preventDefault(); postComment(f); }
+    if (f.classList.contains('nform')) { e.preventDefault(); saveNote(f); }
+    else if (f.classList.contains('cform')) { e.preventDefault(); postComment(f); }
     else if (f.classList.contains('vaform')) { e.preventDefault(); saveVideoAdmin(f); }
   });
 }
@@ -2348,7 +2423,7 @@ function renderAdmin(){
   box.innerHTML = `<div class="card"><h2>Members</h2><p class="muted">${pending.length} waiting for approval · ${USERS.length} total</p>
     <table class="users"><thead><tr><th>Member</th><th>Status</th><th></th></tr></thead><tbody>${pending.concat(USERS.filter(u => !pending.includes(u))).map(rows).join('')}</tbody></table>
     <div class="bar"><button id="btnUsers">Reload</button></div></div>
-    <p class="muted">Approved members can upload videos and comment on them. Admins can delete any video or comment from the Videos page.</p>`;
+    <p class="muted">Approved members can upload videos and comment on them. Admins can delete any video or comment from the Videos page (comments can't be edited, by anyone). Each member can also keep private notes on a clip — no one else sees them, admins included; the member edits or deletes them.</p>`;
 }
 async function setApproved(id, val){
   const { error } = await SB.from('profiles').update({ approved: val }).eq('id', id);

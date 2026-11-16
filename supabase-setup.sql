@@ -8,7 +8,8 @@
 --   videos         clips added by approved members (uploaded files or links, Google Drive included); only approved
 --                  members can see them. Each is Bulgarian or World and "approved by the Referee Committee" or not checked.
 --   video_categories, video_category_items   the Laws-of-the-Game categories (kept by the admin) and which videos are in them
---   video_comments  comments on the videos, approved members only
+--   video_comments  comments on the videos, approved members only (the author or an admin deletes; no one edits)
+--   video_notes    each member's private notes on the videos: only the writer reads, edits or deletes them
 --   article_reads  per-user read marks for news articles
 --   storage bucket "videos" (private: approved members watch through signed links; upload only into their own folder)
 --
@@ -196,6 +197,48 @@ create policy "comments: approved members write" on public.video_comments
 drop policy if exists "comments: author or admin delete" on public.video_comments;
 create policy "comments: author or admin delete" on public.video_comments
   for delete to authenticated using (user_id = (select auth.uid()) or private.is_admin());
+-- (no update policy: a comment can't be edited, by its author or by an admin — only deleted)
+
+-- ───────────────────────── private notes on videos ─────────────────────────
+-- each member's own notes on a clip: only that member can read, add, edit or delete them — no one else, admins included
+create table if not exists public.video_notes (
+  id          bigint generated always as identity primary key,
+  video_id    bigint not null references public.videos(id) on delete cascade,
+  user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  body        text not null check (char_length(btrim(body)) between 1 and 4000),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists video_notes_user_idx on public.video_notes (user_id, video_id, created_at);
+create index if not exists video_notes_video_idx on public.video_notes (video_id);
+alter table public.video_notes enable row level security;
+
+-- a note is always its writer's; an edit changes only the text (and when it was edited)
+create or replace function public.notes_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.user_id := auth.uid(); new.created_at := now(); new.updated_at := now();
+  else
+    new.user_id := old.user_id; new.video_id := old.video_id; new.created_at := old.created_at;
+    new.updated_at := case when new.body is distinct from old.body then now() else old.updated_at end;
+  end if;
+  return new;
+end; $$;
+drop trigger if exists notes_guard on public.video_notes;
+create trigger notes_guard before insert or update on public.video_notes
+  for each row execute function public.notes_guard();
+
+drop policy if exists "notes: own read" on public.video_notes;
+create policy "notes: own read" on public.video_notes for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "notes: approved members write own" on public.video_notes;
+create policy "notes: approved members write own" on public.video_notes
+  for insert to authenticated with check (user_id = (select auth.uid()) and private.is_approved());
+drop policy if exists "notes: own edit" on public.video_notes;
+create policy "notes: own edit" on public.video_notes
+  for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "notes: own delete" on public.video_notes;
+create policy "notes: own delete" on public.video_notes for delete to authenticated using (user_id = (select auth.uid()));
 
 -- ───────────────────────── video categories (Laws of the Game) ─────────────────────────
 -- the admin adds, renames, orders and deletes categories; a video can be in several (copy) or be moved between them
