@@ -141,11 +141,14 @@ export function whichMatch(title, t, ctx, strict = true){
   let unnamed = txt;
   for (const c of N.CLUBS) unnamed = unnamed.replace(new RegExp(c.re.source, 'gu'), blank);
   const has = T => !T ? 0 : (T.club ? named.has(T.k) : T.re.test(txt)) ? 2 : T.loose && T.loose.test(unnamed) ? 1 : 0;
+  // a time on the whole hour is a date without a time, and such dates can be days off (Google dated Gong's report on
+  // the 15 Nov match "11 Nov, 08:00"): a headline naming both teams is then trusted a week either side
+  const dayOnly = t % H === 0, lo = dayOnly ? -7 * DAY : -3 * DAY, hi = dayOnly ? 7 * DAY : 6 * DAY;
   let best = null, top = 0, tie = false;
   for (const m of ctx.matches) {
     const dt = t - m._t;
-    if (dt > 6 * DAY) continue;
-    if (dt < -3 * DAY) break;
+    if (dt > hi) continue;
+    if (dt < lo) break;
     if (!MATCH_LEAGUES.includes(m.league) || !m._h || !m._a) continue;
     const sh = has(m._h), sa = has(m._a);
     // any other club named: another match, or a round-up of the round
@@ -155,7 +158,7 @@ export function whichMatch(title, t, ctx, strict = true){
     // ("Левски II" is not Левски: clubsIn leaves out a club named only as its reserve team)
     let score = 0;
     if (sh && sa) score = 10 + sh + sa;
-    else if (!strict) continue;
+    else if (!strict || dayOnly) continue;          // one team or the venue: only with an exact search and a real time
     else if (sh || sa) {
       const T = sh ? m._h : m._a;
       if (dt >= -2 * DAY && dt <= 3 * DAY && ctx.nearest(T.k, t) === m) score = 5 + (sh || sa);

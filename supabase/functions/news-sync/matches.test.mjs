@@ -50,17 +50,21 @@ const cases = [
   ['Рилски спортист надигра Хебър, но взе само точка с късен гол - Sportal.bg', 'https://sportal.bg', '2026-11-15T15:20:00Z', 'mrbit:16:rilski:hebar', 'match'],
   ['Рилски спортист и Хебър не успяха да се победят в Самоков - Gong.bg', 'https://gong.bg', '2026-11-15T15:05:00Z', 'mrbit:16:rilski:hebar', 'match'],
   ['Рилски спортист защитава домакинската си серия срещу Хебър - Palms Sport', 'https://palmssport.bg', '2026-11-14T08:00:00Z', 'mrbit:16:rilski:hebar', 'match'],
-  ['Хебър взе точка в Самоков, а можеше да си тръгне с три : Вестник Знаме - новини Пазарджик и областта - Zname.info', 'https://www.zname.info', '2026-11-15T18:00:00Z', 'mrbit:16:rilski:hebar', 'match'],
+  ['Хебър взе точка в Самоков, а можеше да си тръгне с три : Вестник Знаме - новини Пазарджик и областта - Zname.info', 'https://www.zname.info', '2026-11-15T18:02:41Z', 'mrbit:16:rilski:hebar', 'match'],
   ['Рилски спортист се пребори за точка срещу Хебър с късна дузпа на Божилов - Palms Sport', 'https://palmssport.bg', '2026-11-15T15:11:39Z', 'mrbit:16:rilski:hebar', 'ref'],
   ['Рилски спортист надигра Хебър, но взе само точка с късен гол - KotaSport', 'https://www.kotasport.com', '2026-11-15T16:00:00Z', 'mrbit:16:rilski:hebar', 'match'],
-  ['Николай Митов след равния в Самоков: Нямаме право да правим такава дузпа (ВИДЕО) - Sportal.bg', 'https://sportal.bg', '2026-11-15T16:30:00Z', 'mrbit:16:rilski:hebar', 'ref'],
+  ['Николай Митов след равния в Самоков: Нямаме право да правим такава дузпа (ВИДЕО) - Sportal.bg', 'https://sportal.bg', '2026-11-15T16:31:00Z', 'mrbit:16:rilski:hebar', 'ref'],
+  // Google's date for Gong's report: a date without a time, four days off
+  ['Рилски спортист и Хебър не успяха да се победят в Самоков - Gong.bg', 'https://gong.bg', '2026-11-11T08:00:00Z', 'mrbit:16:rilski:hebar', 'match'],
+  ['Рилски спортист и Хебър не успяха да се победят в Самоков - Gong.bg', 'https://gong.bg', '2026-11-11T08:07:13Z', null, null],
+  ['Хебър взе точка в Самоков - Gong.bg', 'https://gong.bg', '2026-11-11T08:00:00Z', null, null],
   // other matches the same search brings
   ['Алвеша дебютира начело на Марек в домакинството срещу Черноморец - Palms Sport', 'https://palmssport.bg', '2026-11-14T09:00:00Z', 'mrbit:16:marek:chernomorets', 'match'],
   ['Фратрия спечели драматичен мач с Несебър - Dsport.bg', 'https://dsport.bg', '2026-11-15T15:00:00Z', 'mrbit:16:nesebar:fratria', 'match'],
   ['Хебър удари Марек с 3:1 - marica.bg', 'https://www.marica.bg', '2026-11-08T17:00:00Z', 'mrbit:15:hebar:marek', 'match'],
   ['Георги Йомов се разписа при победа на ЦСКА II над Рилски спортист - ФОКУС', 'https://www.focus-news.net', '2026-11-09T15:00:00Z', 'mrbit:15:cska2:rilski', 'match'],
-  ['Шоколадите се усладиха на Спартак Плевен - KotaSport', 'https://www.kotasport.com', '2026-11-15T16:00:00Z', 'mrbit:16:sportist:spartakpl', 'match'],
-  ['Монтана с ключов успех в Благоевград, изплува от опасната зона - KotaSport', 'https://www.kotasport.com', '2026-11-15T16:00:00Z', 'mrbit:16:pirin:montana', 'match'],
+  ['Шоколадите се усладиха на Спартак Плевен - KotaSport', 'https://www.kotasport.com', '2026-11-15T16:04:12Z', 'mrbit:16:sportist:spartakpl', 'match'],
+  ['Монтана с ключов успех в Благоевград, изплува от опасната зона - KotaSport', 'https://www.kotasport.com', '2026-11-15T16:06:55Z', 'mrbit:16:pirin:montana', 'match'],
   // a refereeing article that is about no single match
   ['Трима елитни съдии с наряди за Втора лига - Dsport.bg', 'https://dsport.bg', '2026-11-13T10:00:00Z', null, 'ref'],
   // left out: round-ups, programmes, tables, quotes that name no team or venue, several clubs, aggregators, betting sites
@@ -101,11 +105,12 @@ ok(W('Левски II падна в Кюстендил', '2026-11-08T18:00:00Z')
 ok(W('Миньор надигра ЦСКА III', '2026-11-07T15:00:00Z') === 'sw3:minyor:tsska-iii', '"ЦСКА III" is not ЦСКА II');
 ok(W('ЦСКА U19 би Левски U19', '2026-11-08T18:00:00Z') === null, 'youth teams: no match');
 ok(W('Хебър на 1/4-финал за Купата на България', '2026-11-16T18:00:00Z') === null, 'a cup tie: not on the Results page');
-ok(W('Хебър подготвя мача', '2026-11-20T10:00:00Z') === 'mrbit:17:hebar:lokgo', 'one team, the day before its next match: that match');
-ok(W('Хебър подготвя мача', '2026-11-12T06:00:00Z') === null, 'one team, more than 3 days after its last match and 2 before its next: none');
-ok(W('Левски след Ференцварош: продължаваме', '2026-11-06T09:00:00Z') === null, 'a club right after a European match: not its league match');
-ok(W('Треньорът след равния в Пазарджик', '2026-11-08T17:00:00Z') === 'mrbit:15:hebar:marek', 'the venue: "в Пазарджик" is Хебър\'s home match');
-ok(W('Треньорът след загубата в София', '2026-11-08T17:00:00Z') === null, '…not "в София" (several clubs play there)');
+ok(W('Хебър подготвя мача', '2026-11-20T10:12:30Z') === 'mrbit:17:hebar:lokgo', 'one team, the day before its next match: that match');
+ok(W('Хебър подготвя мача', '2026-11-12T06:12:30Z') === null, 'one team, more than 3 days after its last match and 2 before its next: none');
+ok(W('Левски след Ференцварош: продължаваме', '2026-11-06T09:14:00Z') === null, 'a club right after a European match: not its league match');
+ok(W('Треньорът след равния в Пазарджик', '2026-11-08T17:21:09Z') === 'mrbit:15:hebar:marek', 'the venue: "в Пазарджик" is Хебър\'s home match');
+ok(W('Хебър подготвя мача', '2026-11-20T10:00:00Z') === null, 'one team with a date but no time (it can be days off): no match');
+ok(W('Треньорът след загубата в София', '2026-11-08T17:21:09Z') === null, '…not "в София" (several clubs play there)');
 
 // when each match is searched: 3 h, 20 h, 2 days and 5 days after the kickoff; never searched → now
 const k = Date.parse(RH.kickoff), dueIds = (seen, at) => MS.due(ctx, seen, at).map(m => m.id);

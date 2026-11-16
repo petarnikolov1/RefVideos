@@ -3443,15 +3443,16 @@ function matchCoverage(m){
     if (!g) groups.set(k, { a, also: [] });
     else if (mediaTier(a.src) > mediaTier(g.a.src)) { g.also.push(g.a); g.a = a; } else g.also.push(a);
   }
-  // a time on the whole hour on the match's day is a date without a time (Google gives some outlets' articles so): after
-  const dayOnly = d => { const x = new Date(d); return !x.getUTCMinutes() && !x.getUTCSeconds() && Math.abs(d - t0) < 864e5; };
-  return [...groups.values()].map(g => Object.assign(g, { tier: mediaTier(g.a.src), pre: g.a.date < t0 - 30 * 60e3 && !dayOnly(g.a.date) }))
+  // a time on the whole hour is a date without a time, and Google's such dates can be days off (Gong's report on a
+  // Sunday match dated the Wednesday before): listed after the match, without the time
+  return [...groups.values()].map(g => Object.assign(g, { tier: mediaTier(g.a.src), pre: g.a.date < t0 - 30 * 60e3 && !dayOnlyTs(g.a.date) }))
     .sort((x, y) => (x.pre - y.pre) || (y.tier - x.tier) || (x.a.date - y.a.date));
 }
+const dayOnlyTs = d => d % 3600e3 === 0;
 const COV_SHOWN = 8;
 function coverageHtml(id, cov){
   const all = FB.covAll.has(id), shown = all ? cov : cov.slice(0, COV_SHOWN);
-  const li = g => `<li><div class="m">${esc(fmtDate(g.a.date))} · ${g.tier >= LEADING ? `<b>${esc(g.a.src)}</b>` : esc(g.a.src)}${
+  const li = g => `<li><div class="m">${esc(dayOnlyTs(g.a.date) ? fmtDay(g.a.date) : fmtDate(g.a.date))} ·${g.tier >= LEADING ? `<b>${esc(g.a.src)}</b>` : esc(g.a.src)}${
       g.also.length ? ` · също ${g.also.map(x => esc(x.src)).join(', ')}` : ''}${isNewArt(g.a) ? ' · <b>new</b>' : ''}</div>
     <a href="${esc(safeUrl(g.a.link))}" data-aid="${esc(g.a.aid)}" target="_blank" rel="noopener noreferrer">${esc(g.a.title)}</a>${isRead(g.a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`;
   const part = (label, list) => list.length ? `<li class="covsec">${label}</li>${list.map(li).join('')}` : '';
