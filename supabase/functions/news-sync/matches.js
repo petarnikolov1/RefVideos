@@ -173,7 +173,7 @@ export function whichMatch(title, t, ctx, strict = true){
 // outlets that are not news about the match: aggregators, social media, betting sites; and headlines that are betting
 // tips or TV listings
 const LOW_SRC = /facebook|instagram|tiktok|youtube|vbox7|novini247|topnovini|unknown|букмейкър|bookmaker|betting|bet365|winbet|залози|прогнози/i;
-const RX_NOT_NEWS = /прогноз\p{L}*|залог\p{L}*|залагани\p{L}*|коефициент\p{L}*|букмейк\p{L}*|бонус\p{L}*|(?:къде|как) да гледам\p{L}*|по коя телевизия|тв програма|телевизионн\p{L}* програма|стрийм\p{L}*|излъчване на живо/iu;
+const RX_NOT_NEWS = /прогноз\p{L}*|залог\p{L}*|залагани\p{L}*|коефициент\p{L}*|букмейк\p{L}*|бонус\p{L}*|(?:къде|как)(?: може)? да гледа\p{L}*|гледайте на живо|по коя телевизия|тв програма|телевизионн\p{L}* програма|стрийм\p{L}*|излъчване на живо/iu;
 // the other sports' leagues (the clubs share names: Рилски спортист and Балкан in basketball, Хебър and Монтана in volleyball)
 const RX_OTHER_LEAGUE = /(?<![\p{L}])(?:НБЛ|НВЛ|Супер\s?[Вв]олей|Евролига\p{L}*|Евробаскет\p{L}*|ФИБА|FIBA|ABA|баскетбол\p{L}*|волейбол\p{L}*)(?![\p{L}])/u;
 
