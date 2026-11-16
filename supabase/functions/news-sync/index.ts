@@ -5,9 +5,13 @@
 //                      searched it rests for a day, then goes through it again to catch anything published late
 //   + intl: true       the same for the international media of the World sections (English-language outlets and the
 //                      English editions of foreign ones; intl.js), with their own schedule and their own place in the season
+//   { matches: true }  each played match of the Bulgarian leagues on its own ("Рилски спортист" Хебър), a few times after
+//                      its kickoff (matches.js): its refereeing articles, and its coverage (kind 'match': shown under the
+//                      match on Results only). + ids: [match ids] searches just those now; + dry: nothing is saved
 // Articles keep the time they were first found (found_at), so the page can mark what is new since a visit.
 import * as N from './news.js';
 import * as INTL from './intl.js';
+import * as MS from './matches.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SECRET = (() => { try { return JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}').default; } catch { return undefined; } })();
@@ -75,6 +79,60 @@ async function scan(tasks: Task[], started: number) {
   for (let k = 0; k < list.length; k += 200) st.inserted += Number(await rpc('news_upsert', { p_rows: list.slice(k, k + 200) }) ?? 0);
   return st;
 }
+// the season's matches of the Bulgarian leagues and the European cups (for each club's nearest match)
+async function seasonMatches() {
+  const rows: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const page = await rest(`football_matches?select=id,league,kickoff,status,home_name,away_name&league=in.(${MS.ALL_LEAGUES.join(',')})` +
+      `&kickoff=gte.${N.SEASON_START}T00:00:00Z&order=kickoff.asc,id.asc&offset=${from}&limit=1000`);
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
+  return rows;
+}
+async function scanMatches(body: any, started: number) {
+  const ctx = MS.context(await seasonMatches());
+  const state = (await rpc('news_state_get', { p_k: 'matches' }).catch(() => null)) ?? {};
+  const seen: Record<string, number> = state.seen ?? {};
+  const ids = Array.isArray(body.ids) ? body.ids.map(String) : null;
+  const todo = ids ? ctx.matches.filter(m => ids.includes(m.id)) : MS.due(ctx, seen, started).slice(0, Math.max(1, Math.min(Number(body.max ?? 40), 80)));
+  const st = { matches: todo.length, due: ids ? undefined : MS.due(ctx, seen, started).length, searches: 0, worked: 0, failed: 0, items: 0,
+    ref: 0, coverage: 0, linked: 0, inserted: 0, via: {} as Record<string, number>, errors: [] as string[], sample: [] as string[] };
+  const rows = new Map<string, any>();
+  let i = 0;
+  const worker = async () => {
+    while (i < todo.length && Date.now() - started < 100000) {
+      const m = todo[i++];
+      st.searches++;
+      try {
+        const items = await feed(MS.searchUrl(m), st.via);
+        st.worked++; st.items += items.length; seen[m.id] = Date.now();
+        for (const it of items) {
+          const r = MS.toRow(it, m, ctx, started);
+          if (!r) continue;
+          const ex = rows.get(r.aid);
+          if (!ex) { rows.set(r.aid, r); continue; }
+          if (ex.kind !== 'ref' && r.kind === 'ref') rows.set(r.aid, { ...r, match_id: r.match_id ?? ex.match_id });
+          else if (!ex.match_id && r.match_id) ex.match_id = r.match_id;
+        }
+      } catch (e) { st.failed++; if (st.errors.length < 5) st.errors.push(`${m.home_name} – ${m.away_name}: ` + String((e as Error).message ?? e).slice(0, 140)); }
+      await sleep(300 + Math.random() * 400);
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  const list = [...rows.values()];
+  for (const r of list) { if (r.kind === 'ref') st.ref++; else st.coverage++; if (r.match_id) st.linked++; }
+  const byId = new Map(ctx.matches.map(m => [m.id, m]));
+  st.sample = list.filter(r => r.match_id).slice(0, Number(body.n ?? 12)).map(r => { const m = byId.get(r.match_id);
+    return `${r.kind} | ${m ? m.home_name + ' – ' + m.away_name : r.match_id} | ${r.src} | ${r.title}`; });
+  if (!body.dry) {
+    for (let k = 0; k < list.length; k += 200) st.inserted += Number(await rpc('news_upsert', { p_rows: list.slice(k, k + 200) }) ?? 0);
+    // forget matches from before the season
+    for (const id of Object.keys(seen)) if (!byId.has(id)) delete seen[id];
+    await rpc('news_state_set', { p_k: 'matches', p_v: { seen } });
+  } else (st as any).rows = list.slice(0, 60).map(r => ({ kind: r.kind, match: r.match_id, src: r.src, title: r.title, at: r.published_at }));
+  return st;
+}
 const googleTasks = (from: number, to: number): Task[] => N.GOOGLE_QUERIES.map(q => ({ kind: 'google', q, url: N.googleUrl(q.q, from, to) }));
 const intlTasks = (from: number, to: number): Task[] => INTL.INTL_QUERIES.map(q => ({ kind: 'google', q, url: INTL.intlUrl(q, from, to) }));
 const INTL_LANGS = INTL.LANGS as string[];                 // English only
@@ -105,16 +163,23 @@ Deno.serve(async (req) => {
     out.mode = 'reclassify';                        // passes, and move the rest to their current section / competitions
     const rows: any[] = [];
     for (let from = 0; ; from += 1000) {
-      const page = await rest(`news_articles?select=aid,title,descr,src,link,scope,divs,comps,clubs,hinted,lang&order=aid&offset=${from}&limit=1000`);
+      const page = await rest(`news_articles?select=aid,title,descr,src,link,scope,divs,comps,clubs,hinted,lang,kind,match_id&order=aid&offset=${from}&limit=1000`);
       rows.push(...page);
       if (page.length < 1000) break;
     }
     const drop: any[] = [], move: any[] = [];
     for (const r of rows) {
+      // a match's coverage is not about refereeing and stays as it is (only a non-Bulgarian one is removed); a refereeing
+      // article that no longer passes but belongs to a match becomes that match's coverage instead of being removed
+      if (r.kind === 'match') { if (N.notBulgarian(r.title, r.src, r.link)) drop.push(r); continue; }
       const a = OLD_LANGS.includes(r.lang) ? null
         // the outlet's name stands in for its address: "Premier League", "Bundesliga | official website" say the league
         : INTL_LANGS.includes(r.lang) ? (INTL.looksEnglish(r.title) ? INTL.analyzeIntl(r.title, [r.descr, r.src].filter(Boolean).join(' · '), r.lang) : null)
         : N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
+      if (!a && r.match_id && r.scope === 'bg' && !N.notBulgarian(r.title, r.src, r.link)) {
+        move.push({ aid: r.aid, title: r.title, from: 'ref', to: 'match ' + r.match_id, patch: { kind: 'match', cats: ['match'] } });
+        continue;
+      }
       if (!a) { drop.push(r); continue; }
       // a Bulgarian article keeps its divisions when they came from the search that found it (hinted), or when the analysis
       // finds none of its own; otherwise it takes the new ones ("„Пирин“ (Рз)" is a Third League club, not Втора лига's Пирин)
@@ -138,6 +203,10 @@ Deno.serve(async (req) => {
     out.removedByLang = drop.reduce((o: Record<string, number>, r) => { o[r.lang ?? 'null'] = (o[r.lang ?? 'null'] ?? 0) + 1; return o; }, {});
     out.sample = [...drop.filter(r => !OLD_LANGS.includes(r.lang)), ...drop.filter(r => OLD_LANGS.includes(r.lang))].slice(0, 40).map(r => `${r.lang ?? '-'} | ${r.title}`);
     out.movedSample = move.slice(0, 40).map(m => `${m.from} → ${m.to} | ${m.title}`);
+  } else if (body.matches) {
+    out.mode = 'matches';
+    Object.assign(out, await scanMatches(body, started));
+    if (body.dry) { out.seconds = Math.round((Date.now() - started) / 100) / 10; return Response.json(out); }
   } else if (body.recent) {
     out.mode = body.intl ? 'intl-recent' : 'recent';
     const tasks = body.intl ? intlTasks(started - 3 * 864e5, started + 864e5) : [...googleTasks(started - 3 * 864e5, started + 864e5),
@@ -159,7 +228,7 @@ Deno.serve(async (req) => {
     await rpc('news_state_set', { p_k: SK, p_v: next >= wins.length
       ? { idx: 0, done_at: new Date().toISOString(), cycles: Number(state.cycles ?? 0) + 1 }
       : { ...state, idx: next } });
-  } else return Response.json({ ok: false, error: 'say recent or backfill' }, { status: 400 });
+  } else return Response.json({ ok: false, error: 'say recent, backfill or matches' }, { status: 400 });
 
   out.seconds = Math.round((Date.now() - started) / 100) / 10;
   await rpc('news_log', { details: out }).catch(() => {});

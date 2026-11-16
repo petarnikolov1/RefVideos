@@ -161,7 +161,7 @@ export const RX = {
 
 // A club's name also names other clubs of other towns ("Пирин" (Рз) is Пирин Разлог, "Септември (Симитли)", "Левски Лом"):
 // a club's name followed by another town, in brackets or not, is not that club. OWN_TOWN: each club's own town and its short forms
-const OWN_TOWN = { cska2: 'София|Сф', ludo2: 'Разград|Рз', botev2: 'Пловдив|Пд', levski: 'София|Сф', cska: 'София|Сф', cska48: 'София|Сф', ludo: 'Разград|Рз', chm: 'Варна|Вн', lokpd: 'Пловдив|Пд', loksf: 'София|Сф',
+export const OWN_TOWN = { cska2: 'София|Сф', ludo2: 'Разград|Рз', botev2: 'Пловдив|Пд', levski: 'София|Сф', cska: 'София|Сф', cska48: 'София|Сф', ludo: 'Разград|Рз', chm: 'Варна|Вн', lokpd: 'Пловдив|Пд', loksf: 'София|Сф',
   botpd: 'Пловдив|Пд', botvr: 'Враца|Вр', slavia: 'София|Сф', arda: 'Кърджали|Кж', septemvri: 'София|Сф', spartakvn: 'Варна|Вн', dunav: 'Русе|Рс',
   beroe: 'Стара Загора|Ст\\. Загора|СЗ', dobrudzha: 'Добрич|Дб', montana: 'Монтана|Мн', fratria: 'Бенковски|Варна|Вн', yantra: 'Габрово|Гб', vihren: 'Сандански',
   etar: 'Велико Търново|В\\. Търново|ВТ', hebar: 'Пазарджик|Пз', maritsa: 'Пловдив|Пд', pirin: 'Благоевград|Бл', litex: 'Ловеч|Лч', sportist: 'Своге',
@@ -225,7 +225,7 @@ const RX_DUBAL = /((?:[Дд]убъл(?:а|ът)?|[Вв]тори(?:я|ят)?\s+о
 const CLUB_FIRST = new Set(CLUBS.map(c => c.label.split(' ')[0]));        // "дубъла на Ботев": the first word of a club's name is enough
 const blank = x => ' '.repeat(x.length);
 const TEAM_TEXT = new Map();
-function teamText(t){
+export function teamText(t){
   t = String(t || '');
   let s = TEAM_TEXT.get(t);
   if (s !== undefined) return s;

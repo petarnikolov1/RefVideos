@@ -359,6 +359,10 @@
   .mnewsbox{padding:2px 0 6px}
   .mnewsbox .card{margin:8px 0}
   .mnewsbox .mnhead{font-size:12px;color:var(--muted);margin:10px 2px 0}
+  .mnewsbox .mcov{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 14px;margin-top:6px}
+  .mcov li{overflow-wrap:anywhere}
+  .mcov .covsec{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:9px 0 2px;border-bottom:none}
+  .mcov .more{padding:4px 0}
   @media (max-width:560px){ .mnwrap{margin:-10px 8px 12px} .mnews .hl{display:none} }
   /* the referees on a match card, the whole crew behind a button; players who sit the match out */
   .mref{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px}
@@ -685,10 +689,12 @@ function loadScript(src){
 
 /* ======================= NEWS (saved by the server) ======================= */
 const NEWS = { loading: false, at: 0, err: '', count: 0, newest: 0 };
-const NEWS_COLS = 'aid,title,link,descr,src,published_at,found_at,scope,divs,comps,cats,score,hinted,clubs,vh,lang';
+const NEWS_COLS = 'aid,title,link,descr,src,published_at,found_at,scope,divs,comps,cats,score,hinted,clubs,vh,lang,match_id';
+// match: the match the article is about, when the per-match search could tell (football_matches.id)
 const fromRow = r => ({ aid: r.aid, title: r.title, link: r.link || '', desc: r.descr || '', src: r.src || '',
   date: Date.parse(r.published_at), found: Date.parse(r.found_at), scope: r.scope, divs: r.divs || ['unk'], comps: r.comps || [],
-  cats: (r.cats && r.cats.length) ? r.cats : ['other'], score: r.score || 1, hinted: !!r.hinted, clubs: r.clubs || [], vh: !!r.vh, lang: r.lang || '' });
+  cats: (r.cats && r.cats.length) ? r.cats : ['other'], score: r.score || 1, hinted: !!r.hinted, clubs: r.clubs || [], vh: !!r.vh, lang: r.lang || '',
+  match: r.match_id || '' });
 // "Съдия" is also a judge: a headline about a court, the judiciary or a police investigation, with nothing about football in
 // it, is not about referees ("екипажът на „Челси 3“ е разпитан пред съдия", "Висшия съдебен съвет от квотата на съдиите в
 // Монтана", "Спортният арбитраж решава…"). The news search leaves these out too; this also hides those saved before.
@@ -2359,7 +2365,7 @@ const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\s+/, '').replace
 const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига', sw3: 'Трета лига Югозапад' };
 const VIDEO_LEAGUES = ['efbet', 'mrbit'];   // the leagues whose match reports are looked for on YouTube
 const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set(), oth: {},
-  comps: null, compsLoading: false, last: {}, want: '', mnOpen: new Set(), goMatch: '', refSel: {} };
+  comps: null, compsLoading: false, last: {}, want: '', mnOpen: new Set(), goMatch: '', refSel: {}, covAll: new Set() };
 // the Results sections: the Bulgarian leagues, then the world competitions (read from ESPN by the world-sync job)
 const RSECT = [['bg', 'България'], ['top5', 'Топ 5 лиги'], ['euro', 'Евротурнири'], ['nat', 'Национални отбори']];
 const isWorld = lg => !LEAGUES[lg];
@@ -2903,6 +2909,7 @@ function renderResults(force){
   if (!FB.round[lg] || !rounds.includes(FB.round[lg])) FB.round[lg] = defaultRound(ms);
   const r = FB.round[lg];
   const list = ms.filter(m => m.round === r).sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)) || a.home_name.localeCompare(b.home_name));
+  loadMatchCoverage(lg, list);
   const days = list.map(m => m.kickoff).filter(Boolean).sort();
   const span = days.length ? (() => { const a = sofiaParts(days[0]), b = sofiaParts(days[days.length - 1]); return a.d === b.d && a.m === b.m ? `${a.d} ${a.m}` : `${a.d} ${a.m} – ${b.d} ${b.m}`; })() : '';
   const withVid = list.filter(m => m.short_video || m.long_video || otherVids(m).length).length, finished = list.filter(m => m.status === 'finished').length;
@@ -2970,6 +2977,8 @@ function initFootballUI(){
   $('#resultsBox').addEventListener('click', e => {
     const mn = e.target.closest('button[data-mnews]');
     if (mn) { toggleMatchNews(mn.dataset.mnews); return; }
+    const ca = e.target.closest('button[data-covall]');
+    if (ca) { const id = ca.dataset.covall; FB.covAll.has(id) ? FB.covAll.delete(id) : FB.covAll.add(id); refreshMatchNews(); return; }
     if (e.target.closest('.mnewsbox')) return;      // clicks inside the stories are handled by bindStoryEvents
     const cb = e.target.closest('button[data-crew]');
     if (cb) {   // in place, so a playing video keeps playing
@@ -3300,6 +3309,8 @@ function matchNewsIndex(){
     return hits;
   }
   const byMatch = new Map(), byStory = new Map();
+  // the match the per-match search found an article for ("Николай Митов след равния в Самоков…" names no team)
+  const mById = new Map(MIDX.matches.filter(m => m._t).map(m => [String(m.id), m]));
   const info = a => ({ bg: artSide(a) !== 'world', world: a.scope === 'world', eur: (a.divs || []).includes('eur'), comps: a.comps || [], cats: a.cats || [], t0: a.date });
   for (const s of buildStories()) {
     // each headline on its own; a match counts for the story when at least a quarter of its headlines that name a team point to it
@@ -3307,8 +3318,10 @@ function matchNewsIndex(){
     let named = 0;
     for (const a of s.arts) {
       if (DUP.has(a.aid)) continue;
-      const h = hitsOf(a.title, info(a));
+      const own = a.match && mById.get(a.match);
+      const h = hitsOf(a.title, info(a)) || (own ? new Map() : null);
       if (!h) continue;
+      if (own) h.set(a.match, own);
       named++;
       h.forEach((m, id) => count.set(id, { m, n: (count.has(id) ? count.get(id).n : 0) + 1 }));
     }
@@ -3401,17 +3414,67 @@ function openRound(id){
   RES_KEY = '';
   if (VIEW === 'results') renderResults(true); else go('results');
 }
-// the strip under a match card: how much was written about it; a tap opens the stories, stacked like the news feed
+// A match's own coverage (the report, the preview, the coaches after it) from the per-match search (news-sync
+// { matches: true }): not about refereeing, so it is not in the news feed, only here. Loaded a round at a time.
+const MCOV = { byMatch: new Map(), at: new Map(), busy: false };
+async function loadMatchCoverage(lg, ms){
+  if (!SB || !LEAGUES[lg] || MCOV.busy) return;
+  const ids = ms.map(m => String(m.id)).filter(id => Date.now() - (MCOV.at.get(id) || 0) > 10 * 60e3);
+  if (!ids.length) return;
+  MCOV.busy = true;
+  try {
+    const { data, error } = await SB.rpc('news_for_matches', { p_ids: ids });
+    if (error) throw error;
+    ids.forEach(id => { MCOV.byMatch.set(id, []); MCOV.at.set(id, Date.now()); });
+    for (const r of data || []) { const a = fromRow(r); if (MCOV.byMatch.has(a.match)) MCOV.byMatch.get(a.match).push(a); }
+  } catch (e) {
+    log('The match coverage could not be loaded: ' + (e.message || e));
+    ids.forEach(id => MCOV.at.set(id, Date.now() - 5 * 60e3));      // tried again in 5 minutes
+  }
+  MCOV.busy = false;
+  refreshMatchNews();
+}
+// one row per headline (a re-post on another site is listed beside it), the best-known outlet first
+function matchCoverage(m){
+  const t0 = Date.parse(m.kickoff) || 0, groups = new Map();
+  for (const a of MCOV.byMatch.get(String(m.id)) || []) {
+    if (S.articles[a.aid]) continue;                  // became a refereeing article: it is in the stories above
+    const k = norm(a.title), g = groups.get(k);
+    if (!g) groups.set(k, { a, also: [] });
+    else if (mediaTier(a.src) > mediaTier(g.a.src)) { g.also.push(g.a); g.a = a; } else g.also.push(a);
+  }
+  return [...groups.values()].map(g => Object.assign(g, { tier: mediaTier(g.a.src), pre: g.a.date < t0 - 30 * 60e3 }))
+    .sort((x, y) => (x.pre - y.pre) || (y.tier - x.tier) || (x.a.date - y.a.date));
+}
+const COV_SHOWN = 8;
+function coverageHtml(id, cov){
+  const all = FB.covAll.has(id), shown = all ? cov : cov.slice(0, COV_SHOWN);
+  const li = g => `<li><div class="m">${esc(fmtDate(g.a.date))} · ${g.tier >= LEADING ? `<b>${esc(g.a.src)}</b>` : esc(g.a.src)}${
+      g.also.length ? ` · също ${g.also.map(x => esc(x.src)).join(', ')}` : ''}${isNewArt(g.a) ? ' · <b>new</b>' : ''}</div>
+    <a href="${esc(safeUrl(g.a.link))}" data-aid="${esc(g.a.aid)}" target="_blank" rel="noopener noreferrer">${esc(g.a.title)}</a>${isRead(g.a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`;
+  const part = (label, list) => list.length ? `<li class="covsec">${label}</li>${list.map(li).join('')}` : '';
+  return `<div class="mnhead">📰 За мача</div>
+    <ul class="arts mcov">${part('След мача', shown.filter(g => !g.pre))}${part('Преди мача', shown.filter(g => g.pre))}${
+      cov.length > COV_SHOWN ? `<li><button class="more" data-covall="${esc(id)}">${all ? 'По-малко ▴' : `Още ${cov.length - COV_SHOWN} ▾`}</button></li>` : ''}</ul>`;
+}
+// the strip under a match card: how much was written about it; a tap opens the refereeing stories, stacked like the
+// news feed, and the match's own coverage under them
 const MN_HTML = {};
 function matchNewsStrip(lg, m){
-  const id = String(m.id), idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(id)) || [];
-  if (!ss.length) return `<div class="mnews none">${m.status === 'finished' || m.status === 'live' ? 'Няма статии за съдийството в този мач' : 'Още няма статии за този мач'}</div>`;
-  const n = ss.reduce((a, s) => a + s.arts.length, 0), open = FB.mnOpen.has(id), fresh = ss.some(s => s.hasNew);
-  const top = ss.slice().sort((a, b) => b.score - a.score || b.date - a.date)[0];
-  return `<button class="mnews${open ? ' open' : ''}" data-mnews="${esc(id)}" aria-expanded="${open}" title="Статиите за съдийството в този мач">
-      <span class="ic" aria-hidden="true">📰</span><b>${n} ${n === 1 ? 'статия' : 'статии'}</b>${ss.length > 1 && ss.length < n ? `<span class="tc">· ${ss.length} теми</span>` : ''}${fresh ? '<span class="badge new">NEW</span>' : ''}
-      <span class="hl">${esc(top.rep.title)}</span><span class="chev">${open ? 'Скрий ▴' : 'Виж ▾'}</span></button>
-    ${open ? `<div class="mnewsbox">${ss.map(storyCard).join('')}</div>` : ''}`;
+  const id = String(m.id), idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(id)) || [], cov = LEAGUES[lg] ? matchCoverage(m) : [];
+  const played = m.status === 'finished' || m.status === 'live';
+  if (!ss.length && !cov.length) return `<div class="mnews none">${!played ? 'Още няма статии за този мач' : LEAGUES[lg] ? 'Няма статии за този мач' : 'Няма статии за съдийството в този мач'}</div>`;
+  const nRef = ss.reduce((a, s) => a + s.arts.length, 0), nCov = cov.reduce((a, g) => a + 1 + g.also.length, 0), n = nRef + nCov;
+  const open = FB.mnOpen.has(id), fresh = ss.some(s => s.hasNew) || cov.some(g => isNewArt(g.a));
+  // the headline shown: the best-known outlet's; a refereeing story first among equals
+  const tops = ss.map(s => ({ t: s.rep.title, tier: mediaTier(s.rep.src), ref: 1, score: s.score, date: s.date }))
+    .concat(cov.map(g => ({ t: g.a.title, tier: g.tier, ref: 0, score: 0, date: g.pre ? 0 : g.a.date })));
+  const top = tops.sort((a, b) => (b.tier - a.tier) || (b.ref - a.ref) || (b.score - a.score) || (b.date - a.date))[0];
+  const sub = nRef && nCov ? `<span class="tc">· ⚖ ${nRef} за съдийството</span>` : ss.length > 1 && ss.length < n ? `<span class="tc">· ${ss.length} теми</span>` : '';
+  return `<button class="mnews${open ? ' open' : ''}" data-mnews="${esc(id)}" aria-expanded="${open}" title="Статиите за този мач">
+      <span class="ic" aria-hidden="true">📰</span><b>${n} ${n === 1 ? 'статия' : 'статии'}</b>${sub}${fresh ? '<span class="badge new">NEW</span>' : ''}
+      <span class="hl">${esc(top.t)}</span><span class="chev">${open ? 'Скрий ▴' : 'Виж ▾'}</span></button>
+    ${open ? `<div class="mnewsbox">${ss.length && cov.length ? '<div class="mnhead">⚖ Съдийството</div>' : ''}${ss.map(storyCard).join('')}${cov.length ? coverageHtml(id, cov) : ''}</div>` : ''}`;
 }
 function mnWrap(lg, m){
   const id = String(m.id), h = matchNewsStrip(lg, m);

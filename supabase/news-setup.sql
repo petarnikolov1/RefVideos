@@ -44,7 +44,28 @@ create table if not exists private.news_sync_log (id bigint generated always as 
 -- the language of an article: bg, or en / es / it / de / fr for the international media
 alter table public.news_articles add column if not exists lang text;
 
+-- each match of the Bulgarian leagues is also searched on its own (news-sync { matches: true }, supabase/functions/news-sync/matches.js):
+--   kind 'ref'   an article about refereeing (the news feed), as before
+--   kind 'match' a match's own coverage (report, preview, reactions) that isn't about refereeing: shown only under
+--                its match on Results, read through news_for_matches; the feed's query doesn't see these rows
+--   match_id     the match the article is about (football_matches.id), when the per-match search could tell
+alter table public.news_articles add column if not exists kind text not null default 'ref';
+alter table public.news_articles add column if not exists match_id text;
+do $$ begin
+  alter table public.news_articles add constraint news_articles_kind_check check (kind in ('ref', 'match'));
+exception when duplicate_object then null; end $$;
+create index if not exists news_articles_match_idx on public.news_articles (match_id) where match_id is not null;
+drop policy if exists "news: public read" on public.news_articles;
+create policy "news: public read" on public.news_articles for select using (kind = 'ref');
+create or replace function public.news_for_matches(p_ids text[]) returns setof public.news_articles
+language sql stable security definer set search_path = '' as $$
+  select * from public.news_articles where kind = 'match' and match_id = any(p_ids) order by published_at limit 3000;
+$$;
+revoke execute on function public.news_for_matches(text[]) from public;
+grant execute on function public.news_for_matches(text[]) to anon, authenticated, service_role;
+
 -- add found articles; an article already saved keeps its first-found time and gains any new information
+-- (a match's coverage that turns out to be about refereeing becomes a 'ref' article; the first match found is kept)
 create or replace function public.news_upsert(p_rows jsonb) returns int
 language plpgsql security definer set search_path = '' as $$
 declare n int;
@@ -58,13 +79,14 @@ begin
       array(select jsonb_array_elements_text(coalesce(r->'cats', '[]'))) cats,
       array(select jsonb_array_elements_text(coalesce(r->'clubs', '[]'))) clubs,
       coalesce((r->>'score')::int, 1) score, coalesce((r->>'hinted')::boolean, false) hinted, coalesce((r->>'vh')::boolean, false) vh,
-      nullif(r->>'lang', '') lang
+      nullif(r->>'lang', '') lang,
+      case when r->>'kind' = 'match' then 'match' else 'ref' end kind, nullif(r->>'match_id', '') match_id
     from jsonb_array_elements(p_rows) r
     where coalesce(r->>'aid', '') <> '' and coalesce(r->>'title', '') <> '' and r->>'scope' in ('bg', 'world')
-    order by r->>'aid', (r->>'published_at')::timestamptz
+    order by r->>'aid', (coalesce(r->>'kind', 'ref') = 'match'), (r->>'published_at')::timestamptz
   ), ins as (
-    insert into public.news_articles as a (aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh, lang)
-    select aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh, lang from src
+    insert into public.news_articles as a (aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh, lang, kind, match_id)
+    select aid, title, link, descr, src, published_at, scope, divs, comps, cats, score, hinted, clubs, vh, lang, kind, match_id from src
     on conflict (aid) do update set
       descr = case when a.descr = '' then excluded.descr else a.descr end,
       published_at = least(a.published_at, excluded.published_at),
@@ -74,11 +96,14 @@ begin
                else a.divs end,
       hinted = a.hinted and (excluded.hinted or excluded.divs = '{unk}'),
       comps = array(select distinct x from unnest(a.comps || excluded.comps) x),
-      cats = coalesce(nullif(array(select distinct x from unnest(a.cats || excluded.cats) x where x <> 'other'), '{}'), '{other}'),
+      cats = coalesce(nullif(array(select distinct x from unnest(a.cats || excluded.cats) x where x <> 'other'
+               and (x <> 'match' or (a.kind = 'match' and excluded.kind = 'match'))), '{}'), '{other}'),
       clubs = array(select distinct x from unnest(a.clubs || excluded.clubs) x),
       score = greatest(a.score, excluded.score),
       vh = a.vh or excluded.vh,
       lang = coalesce(a.lang, excluded.lang),
+      kind = case when a.kind = 'ref' or excluded.kind = 'ref' then 'ref' else 'match' end,
+      match_id = coalesce(a.match_id, excluded.match_id),
       updated_at = now()
     returning (xmax = 0) as inserted
   )
@@ -133,6 +158,15 @@ select cron.schedule('news-intl-backfill', '3-59/6 * * * *', $job$
     url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/news-sync',
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-region', 'us-east-1', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
     body := '{"backfill": true, "intl": true}'::jsonb,
+    timeout_milliseconds := 150000);
+$job$);
+-- each played match of the Bulgarian leagues on its own: 3 h, 20 h, 2 days and 5 days after its kickoff (and once for
+-- the matches played before this search existed), up to 40 matches a run, newest first
+select cron.schedule('news-matches', '15,45 * * * *', $job$
+  select net.http_post(
+    url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/news-sync',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-region', 'eu-west-2', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
+    body := '{"matches": true}'::jsonb,
     timeout_milliseconds := 150000);
 $job$);
 -- the articles' own addresses for the ones found through Google News (Google's links can't be opened from a server):
