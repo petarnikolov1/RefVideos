@@ -97,7 +97,7 @@ async function scanMatches(body: any, started: number) {
   const ids = Array.isArray(body.ids) ? body.ids.map(String) : null;
   const todo = ids ? ctx.matches.filter(m => ids.includes(m.id)) : MS.due(ctx, seen, started).slice(0, Math.max(1, Math.min(Number(body.max ?? 30), 60)));
   const st = { matches: todo.length, due: ids ? undefined : MS.due(ctx, seen, started).length, searches: 0, worked: 0, failed: 0, items: 0,
-    ref: 0, coverage: 0, linked: 0, inserted: 0, via: {} as Record<string, number>, errors: [] as string[], sample: [] as string[] };
+    ref: 0, coverage: 0, linked: 0, inserted: 0, via: {} as Record<string, number>, errors: [] as string[], sample: [] as string[], why: [] as any[] };
   const rows = new Map<string, any>();
   let i = 0;
   const worker = async () => {
@@ -111,6 +111,9 @@ async function scanMatches(body: any, started: number) {
           st.worked++; st.items += items.length; worked = true;
           for (const it of items) {
             const r = MS.toRow(it, m, ctx, started, s.strict);
+            // why: show what became of the results whose headline has these words (with dry)
+            if (body.why && String(it.title).includes(String(body.why)) && st.why.length < 20)
+              st.why.push({ search: s.q.slice(0, 60), title: it.title, date: it.date instanceof Date && isFinite(it.date.getTime()) ? it.date.toISOString() : String(it.date), got: r ? `${r.kind} ${r.match_id}` : null });
             if (!r) continue;
             const ex = rows.get(r.aid);
             if (!ex) { rows.set(r.aid, r); continue; }
