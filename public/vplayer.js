@@ -109,6 +109,7 @@
   .vp-center>*{pointer-events:auto}
   .vp.idle .vp-center .vp-big{opacity:0;pointer-events:none}
   .vp.zoomed .vp-center{display:none}
+  .vp-center .vp-big[disabled]{visibility:hidden}
   /* frame by frame: nothing over the picture (the big play / previous / next come back with play or the next clip) */
   .vp.stepping .vp-center{display:none}
   .vp-big{width:72px;height:72px;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
@@ -510,7 +511,8 @@
     R.querySelectorAll('[data-a="toggle"]').forEach(b => { b.innerHTML = paused ? IC.play : IC.pause; b.setAttribute('aria-label', paused ? 'Пусни' : 'Спри'); });
     const big = CENTER.querySelector('.vp-big:not(.sm)');
     big.hidden = loading || mode === 'embed' || mode === 'none' || !!MSG;
-    CENTER.querySelectorAll('.vp-big.sm').forEach(b => { b.hidden = big.hidden || !paused; });
+    // previous / next beside the big play-pause, playing or paused (they fade with it while a clip plays)
+    CENTER.querySelectorAll('.vp-big.sm').forEach(b => { b.hidden = big.hidden; });
     let sp = CENTER.querySelector('.vp-spin');
     if (loading && !sp) { sp = document.createElement('div'); sp.className = 'vp-spin'; CENTER.appendChild(sp); }
     if (!loading && sp) sp.remove();
@@ -748,7 +750,8 @@
   function onClick(e){
     const r = e.target.closest('[data-rate]');
     if (r) { setRate(Number(r.dataset.rate)); hideMenu(); return; }
-    const t = e.target.closest('[data-tab]');
+    // the tab buttons only (the list under them is not a tab: a clip in it opens the clip)
+    const t = e.target.closest('.vp-tabs [data-tab]');
     if (t && SIDE.contains(t)) { tab = t.dataset.tab; drawSide(); return; }
     const q = e.target.closest('[data-qi]');
     if (q) { show(Number(q.dataset.qi)); if (R.classList.contains('full')) { sideOpen = false; R.classList.remove('sideon'); } return; }
@@ -816,8 +819,8 @@
     if (!R) return;
     SIDE.querySelectorAll('[data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-selected', b.dataset.tab === tab); });
     if (tab === 'queue') {
-      const keep = PANE.querySelector('.vp-q') && PANE.dataset.tab === 'queue' ? PANE.scrollTop : null;
-      PANE.dataset.tab = 'queue';
+      const keep = PANE.querySelector('.vp-q') && PANE.dataset.view === 'queue' ? PANE.scrollTop : null;
+      PANE.dataset.view = 'queue';
       PANE.innerHTML = `<div class="vp-auto${auto ? ' on' : ''}" role="switch" aria-checked="${auto}" tabindex="0"><span>Пускай следващото автоматично</span><span class="vp-sw"></span></div>
         <ul class="vp-q">${items.map((x, i) => { const d = DUR[x.id];
           return `<li><button class="vp-qi${i === idx ? ' on' : ''}${playable(x) ? '' : ' skip'}" data-qi="${i}">
@@ -834,8 +837,8 @@
       if (keep != null) PANE.scrollTop = keep;
       if (on) { const r = on.getBoundingClientRect(), pr = PANE.getBoundingClientRect(); if (r.top < pr.top || r.bottom > pr.bottom) PANE.scrollTop += r.top - pr.top - 8; }
     } else {
-      if (PANE.dataset.tab !== 'info' || PANE.dataset.id !== String(it() && it().id)) PANE.innerHTML = '<div class="vp-info"></div>';
-      PANE.dataset.tab = 'info'; PANE.dataset.id = String(it() && it().id);
+      if (PANE.dataset.view !== 'info' || PANE.dataset.id !== String(it() && it().id)) PANE.innerHTML = '<div class="vp-info"></div>';
+      PANE.dataset.view = 'info'; PANE.dataset.id = String(it() && it().id);
       if (opt.details && it()) try { opt.details(it(), PANE.querySelector('.vp-info')); } catch (e) { PANE.querySelector('.vp-info').textContent = String(e); }
     }
   }
