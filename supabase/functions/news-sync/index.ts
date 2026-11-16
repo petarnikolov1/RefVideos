@@ -95,7 +95,7 @@ async function scanMatches(body: any, started: number) {
   const state = (await rpc('news_state_get', { p_k: 'matches' }).catch(() => null)) ?? {};
   const seen: Record<string, number> = state.seen ?? {};
   const ids = Array.isArray(body.ids) ? body.ids.map(String) : null;
-  const todo = ids ? ctx.matches.filter(m => ids.includes(m.id)) : MS.due(ctx, seen, started).slice(0, Math.max(1, Math.min(Number(body.max ?? 40), 80)));
+  const todo = ids ? ctx.matches.filter(m => ids.includes(m.id)) : MS.due(ctx, seen, started).slice(0, Math.max(1, Math.min(Number(body.max ?? 30), 60)));
   const st = { matches: todo.length, due: ids ? undefined : MS.due(ctx, seen, started).length, searches: 0, worked: 0, failed: 0, items: 0,
     ref: 0, coverage: 0, linked: 0, inserted: 0, via: {} as Record<string, number>, errors: [] as string[], sample: [] as string[] };
   const rows = new Map<string, any>();
@@ -104,13 +104,13 @@ async function scanMatches(body: any, started: number) {
     while (i < todo.length && Date.now() - started < 100000) {
       const m = todo[i++];
       let worked = false;
-      for (const url of MS.searchUrls(m)) {
+      for (const s of MS.searches(m)) {
         st.searches++;
         try {
-          const items = await feed(url, st.via);
+          const items = await feed(s.url, st.via);
           st.worked++; st.items += items.length; worked = true;
           for (const it of items) {
-            const r = MS.toRow(it, m, ctx, started);
+            const r = MS.toRow(it, m, ctx, started, s.strict);
             if (!r) continue;
             const ex = rows.get(r.aid);
             if (!ex) { rows.set(r.aid, r); continue; }

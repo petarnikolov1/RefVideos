@@ -35,11 +35,12 @@ const ctx = MS.context(rows);
 const byId = Object.fromEntries(ctx.matches.map(m => [m.id, m]));
 const RH = byId['mrbit:16:rilski:hebar'];
 
-ok(MS.searchQuery(RH) === '"Рилски спортист" Хебър', 'the search: "Рилски спортист" Хебър → ' + MS.searchQuery(RH));
+ok(MS.searchQuery(RH) === '"Рилски спортист" "Хебър"', 'the strict search: "Рилски спортист" "Хебър" → ' + MS.searchQuery(RH));
 ok(/after%3A2026-11-12%20before%3A2026-11-22/.test(MS.searchUrl(RH)), 'searched from 3 days before to a week after the kickoff');
-ok(MS.searchQuery(byId['efbet:534548']) === 'Ботев (Локомотив OR Локо)', 'Локомотив is searched as Локомотив or Локо');
-ok(MS.searchQueries(RH).join(' | ') === '"Рилски спортист" Хебър | Рилски спортист Хебър', 'two searches: the names as phrases, and loosely');
-ok(MS.searchQueries(byId['efbet:534543']).length === 1, 'one search when the two would be the same (Левски ЦСКА)');
+ok(MS.searchQuery(byId['efbet:534548']) === '"Ботев" ("Локомотив" OR "Локо")', 'Локомотив is searched as Локомотив or Локо');
+const S3 = MS.searches(RH);
+ok(S3.length === 3 && S3[0].strict && !S3[1].strict && !S3[2].strict, 'three searches: strict, loose, and the leading outlets');
+ok(S3[1].q === 'Рилски спортист Хебър' && /^Рилски спортист Хебър \(site:gong\.bg OR site:sportal\.bg OR /.test(S3[2].q), 'loose: ' + S3[1].q + ' · outlets: ' + S3[2].q.slice(0, 60) + '…');
 
 // the Google News results for the match: [headline - outlet, outlet's address, published (UTC)] → the match it is about, kind
 const item = (t, url, at) => ({ title: t, link: 'https://news.google.com/rss/articles/x', date: new Date(at), desc: '', source: t.slice(t.lastIndexOf(' - ') + 3), srcUrl: url });
@@ -79,6 +80,13 @@ for (const [t, url, at, want, kind] of cases) {
   const got = r ? `${r.kind} ${r.match_id}` : 'left out';
   ok(r ? r.kind === kind && r.match_id === want : kind === null, `${t.replace(/ - [^-]+$/, '')} → ${got}`);
 }
+// from a loose search only a headline naming both teams counts (other sports share the clubs' names)
+const L = (t, url, at) => { const r = MS.toRow(item(t, url, at), RH, ctx, now, false); return r ? `${r.kind} ${r.match_id}` : 'left out'; };
+ok(L(cases[1][0], cases[1][1], cases[1][2]) === 'match mrbit:16:rilski:hebar', 'loose search: Gong\'s report (both teams) is kept');
+ok(L(cases[3][0], cases[3][1], cases[3][2]) === 'left out', 'loose search: "Хебър взе точка в Самоков" (one team) is not');
+ok(L('Рилски спортист се справи със Спортинг в Самоков - Sportal.bg', 'https://sportal.bg', '2026-11-15T19:00:00Z') === 'left out', 'loose search: Рилски спортист\'s basketball game in Самоков is not the football match');
+ok(L(cases[6][0], cases[6][1], cases[6][2]) === 'ref null', 'loose search: a refereeing headline naming only the venue is still a refereeing article, without a match');
+ok(MS.toRow(item('Рилски спортист надигра Хебър в мач от НБЛ - Sportal.bg', 'https://sportal.bg', '2026-11-15T19:00:00Z'), RH, ctx, now) === null, 'the other sports\' leagues: left out (НБЛ)');
 const sportal = MS.toRow(item(cases[0][0], cases[0][1], cases[0][2]), RH, ctx, now);
 ok(sportal.title === 'Рилски спортист надигра Хебър, но взе само точка с късен гол' && sportal.src === 'Sportal.bg' && sportal.divs.join() === 'd2' &&
   sportal.clubs.join() === 'rilski,hebar' && sportal.cats.join() === 'match', 'a coverage row: headline, outlet, Втора лига, both clubs, cats "match"');

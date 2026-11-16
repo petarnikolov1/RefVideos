@@ -38,9 +38,13 @@ const TEAM_KEY = {
   'Levski Sofia': 'levski', 'CSKA Sofia': 'cska', 'Ludogorets Razgrad': 'ludo', 'Ludogorets': 'ludo', 'CSKA 1948 Sofia': 'cska48', 'CSKA 1948': 'cska48',
   'Lokomotiv Plovdiv': 'lokpd', 'Cherno More Varna': 'chm', 'Arda Kardzhali': 'arda', 'Botev Plovdiv': 'botpd', 'Slavia Sofia': 'slavia',
 };
-// how the search names a club (Google News): the word the media use, or the full name where one word says too little
-const SEARCH_AS = { chm: '"Черно море"', rilski: '"Рилски спортист"', strumska: '"Струмска слава"', slivnishki: '"Сливнишки герой"',
-  cska48: '"ЦСКА 1948"', lokpd: '(Локомотив OR Локо)', loksf: '(Локомотив OR Локо)', lokgo: '(Локомотив OR Локо)' };
+// how the search names a club (Google News): the word the media use, or the full name where one word says too little;
+// several: any of them
+const SEARCH_AS = { chm: ['Черно море'], rilski: ['Рилски спортист'], strumska: ['Струмска слава'], slivnishki: ['Сливнишки герой'],
+  cska48: ['ЦСКА 1948'], lokpd: ['Локомотив', 'Локо'], loksf: ['Локомотив', 'Локо'], lokgo: ['Локомотив', 'Локо'] };
+// the leading outlets, searched on their own too: Google gives only so many articles a search, and the big sites'
+// reports are the ones that matter most (on 16 Nov Gong's report was only in this search)
+const LEADING_SITES = ['gong.bg', 'sportal.bg', 'blitz.bg', 'topsport.bg', 'dsport.bg', '7sport.net', 'bta.bg', 'bntnews.bg', 'btvnovinite.bg', '24chasa.bg'];
 
 const CS = p => new RegExp('(?<![\\p{L}\\p{N}])(?:' + p + ')(?![\\p{L}])', 'u');
 const escRx = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -56,7 +60,7 @@ export function team(name){
   const k = TEAM_KEY[name] || TEAM_KEY[teamName(name)];
   if (k && CLUB[k]) {
     const c = CLUB[k];
-    return { k, club: true, re: c.re, loose: looseWord(c), q: SEARCH_AS[k] || c.label.split(' ')[0],
+    return { k, club: true, re: c.re, loose: looseWord(c), q: SEARCH_AS[k] || [c.label.split(' ')[0]],
       town: String(N.OWN_TOWN[k] || '').split('|')[0].replace(/\\/g, ''), reserve: /2$/.test(k) };
   }
   // a team the club list doesn't have (the Third League's reserve teams, "Национал (София)"): by its own name
@@ -65,7 +69,7 @@ export function team(name){
   if (!n || /^[A-Za-z]/.test(n)) return null;                        // a foreign club (ESPN's names)
   const base = (r ? r[1] : n).replace(/\s+\d{4}$/, '');
   const pat = escRx(base) + '(?:\\s*\\d{4})?' + (r ? `\\s*(?:${r[2]}|${r[2] === 'II' ? 2 : 3})(?![\\p{L}\\p{N}])` : '');
-  return { k: 'x:' + n, club: false, re: CS(pat), loose: null, q: `"${base}"`, town, reserve: !!r };
+  return { k: 'x:' + n, club: false, re: CS(pat), loose: null, q: [base], town, reserve: !!r };
 }
 
 // everything a run needs about the season's matches: each match's two teams, every team's matches, the towns
@@ -93,12 +97,20 @@ export function context(rows){
   return { matches, byTeam, nearest };
 }
 
-// the Google News searches for one match: the names as phrases ("Рилски спортист" Хебър), and the same words loosely —
-// Google gives different articles for each (on 16 Nov the phrase search left out Gong's report, the loose one had it)
-export const searchQuery = m => `${m._h.q} ${m._a.q}`;
-export const searchQueries = m => [...new Set([searchQuery(m), searchQuery(m).replace(/"/g, '')])];
-export const searchUrls = m => searchQueries(m).map(q => N.googleUrl(q, m._t + WINDOW[0], m._t + WINDOW[1]));
-export const searchUrl = m => searchUrls(m)[0];
+// The Google News searches for one match; Google gives different articles for each:
+//  · strict: both names exactly ("Рилски спортист" "Хебър") — the articles mention both clubs, so a headline that names
+//    only one of them, or only the venue, can be trusted to be this football match;
+//  · loose: the same words, and the same words on the leading outlets only. These find more (other sports too: Рилски
+//    спортист plays basketball, Хебър volleyball), so from them only a headline that names both teams is kept.
+const side = (T, quote) => { const a = T.q.map(x => quote ? `"${x}"` : x); return a.length > 1 ? `(${a.join(' OR ')})` : a[0]; };
+export const searchQuery = m => `${side(m._h, true)} ${side(m._a, true)}`;
+export function searches(m){
+  const loose = `${side(m._h, false)} ${side(m._a, false)}`;
+  return [{ q: searchQuery(m), strict: true }, { q: loose, strict: false },
+    { q: `${loose} (${LEADING_SITES.map(s => 'site:' + s).join(' OR ')})`, strict: false }]
+    .map(s => ({ ...s, url: N.googleUrl(s.q, m._t + WINDOW[0], m._t + WINDOW[1]) }));
+}
+export const searchUrl = m => searches(m)[0].url;
 
 // the played matches due for a search, newest first (seen: match id → when it was last searched)
 export function due(ctx, seen, now = Date.now()){
@@ -118,15 +130,15 @@ const RX_RESERVES = /(?<![\p{L}])дублиращ\p{L}*/iu;
 const RX_WOMEN = /(?<![\p{L}])(?:жени(?:те)?|дами(?:те)?|женск\p{L}*)(?![\p{L}])/iu;
 
 // which match a headline is about (published at t), or null. Scores: both teams named 10+, one team 5+, the venue 3;
-// two matches with the same score: neither
-export function whichMatch(title, t, ctx){
+// two matches with the same score: neither. strict false (a loose search's result): both teams named only
+export function whichMatch(title, t, ctx, strict = true){
   title = String(title || '');
   if (RX_YOUTH.test(title) || N.RX.cup.test(title) || RX_WOMEN.test(title)) return null;
-  const txt = N.teamText(title), strict = new Set(N.clubsIn(title));
+  const txt = N.teamText(title), named = new Set(N.clubsIn(title));
   // the loose names are looked for where no club is named in full ("Локомотив София" is not also a loose "Локо")
   let unnamed = txt;
   for (const c of N.CLUBS) unnamed = unnamed.replace(new RegExp(c.re.source, 'gu'), blank);
-  const has = T => !T ? 0 : (T.club ? strict.has(T.k) : T.re.test(txt)) ? 2 : T.loose && T.loose.test(unnamed) ? 1 : 0;
+  const has = T => !T ? 0 : (T.club ? named.has(T.k) : T.re.test(txt)) ? 2 : T.loose && T.loose.test(unnamed) ? 1 : 0;
   let best = null, top = 0, tie = false;
   for (const m of ctx.matches) {
     const dt = t - m._t;
@@ -141,6 +153,7 @@ export function whichMatch(title, t, ctx){
     // ("Левски II" is not Левски: clubsIn leaves out a club named only as its reserve team)
     let score = 0;
     if (sh && sa) score = 10 + sh + sa;
+    else if (!strict) continue;
     else if (sh || sa) {
       const T = sh ? m._h : m._a;
       if (dt >= -2 * DAY && dt <= 3 * DAY && ctx.nearest(T.k, t) === m) score = 5 + (sh || sa);
@@ -156,9 +169,12 @@ export function whichMatch(title, t, ctx){
 // tips or TV listings
 const LOW_SRC = /facebook|instagram|tiktok|youtube|vbox7|novini247|topnovini|unknown|букмейкър|bookmaker|betting|bet365|winbet|залози|прогнози/i;
 const RX_NOT_NEWS = /прогноз\p{L}*|залог\p{L}*|залагани\p{L}*|коефициент\p{L}*|букмейк\p{L}*|бонус\p{L}*|(?:къде|как) да гледам\p{L}*|по коя телевизия|тв програма|телевизионн\p{L}* програма|стрийм\p{L}*|излъчване на живо/iu;
+// the other sports' leagues (the clubs share names: Рилски спортист and Балкан in basketball, Хебър and Монтана in volleyball)
+const RX_OTHER_LEAGUE = /(?<![\p{L}])(?:НБЛ|НВЛ|Супер\s?[Вв]олей|Евролига\p{L}*|Евробаскет\p{L}*|ФИБА|FIBA|ABA|баскетбол\p{L}*|волейбол\p{L}*)(?![\p{L}])/u;
 
-// one search result → a row for news_articles (or null). m: the match that was searched
-export function toRow(raw, m, ctx, now = Date.now()){
+// one search result → a row for news_articles (or null). m: the match that was searched; strict: from the search that
+// names both clubs exactly
+export function toRow(raw, m, ctx, now = Date.now(), strict = true){
   const q = { q: '', ctx: 'bg', div: LEAGUE_DIV[m.league] || null };
   let title = String(raw.title || '').replace(/\s+/g, ' ').trim(), src = String(raw.source || '').trim();
   const i = title.lastIndexOf(' - ');
@@ -166,13 +182,13 @@ export function toRow(raw, m, ctx, now = Date.now()){
   if (!title) return null;
   let d = raw.date instanceof Date ? raw.date.getTime() : NaN;
   if (!isFinite(d) || d > now + DAY) d = now;
-  const match = whichMatch(title, d, ctx);
+  const match = whichMatch(title, d, ctx, strict);
   // about refereeing: an ordinary news article (the feed), now knowing its match
   const ref = N.toArticle(raw, 'google', q, now);
   if (ref) return { ...ref, kind: 'ref', match_id: match ? match.id : null };
   if (!match) return null;
   if (d < Date.parse(N.SEASON_START + 'T00:00:00Z') || N.notBulgarian(title, src, raw.link)) return null;
-  if (LOW_SRC.test(src) || LOW_SRC.test(raw.srcUrl || '') || RX_NOT_NEWS.test(title) || N.RX.otherSport.test(title)) return null;
+  if (LOW_SRC.test(src) || LOW_SRC.test(raw.srcUrl || '') || RX_NOT_NEWS.test(title) || N.RX.otherSport.test(title) || RX_OTHER_LEAGUE.test(title)) return null;
   if (RX_RESERVES.test(title) && !match._h.reserve && !match._a.reserve) return null;
   let desc = String(raw.desc || '').trim();
   const bare = src && desc.endsWith(src) ? desc.slice(0, -src.length).trim() : desc;
