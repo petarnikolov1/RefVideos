@@ -131,30 +131,44 @@ const RX_YOUTH = /(?<![\p{L}\p{N}])(?:[UУ]\s?-?(?:1[0-9]|2[0-3])(?![\p{N}])|д�
 const RX_RESERVES = /(?<![\p{L}])дублиращ\p{L}*/iu;
 const RX_WOMEN = /(?<![\p{L}])(?:жени(?:те)?|дами(?:те)?|женск\p{L}*)(?![\p{L}])/iu;
 
+// a pattern made global once, for blanking out what it matches (the Edge Function's CPU time is short)
+const GLOBAL = new Map();
+const gre = re => { let g = GLOBAL.get(re.source); if (!g) GLOBAL.set(re.source, g = new RegExp(re.source, 'gu')); return g; };
+
 // which match a headline is about (published at t), or null. Scores: both teams named 10+, one team 5+, the venue 3;
-// two matches with the same score: neither. strict false (a loose search's result): both teams named only
+// two matches with the same score: neither. strict false (a loose search's result): both teams named only.
+// The same headline comes back from many searches in a run: the answer is kept (ctx.seenTitles)
 export function whichMatch(title, t, ctx, strict = true){
   title = String(title || '');
+  const key = (strict ? 's' : 'l') + t + '|' + title, memo = ctx.seenTitles || (ctx.seenTitles = new Map());
+  if (memo.has(key)) return memo.get(key);
+  const m = findMatch(title, t, ctx, strict);
+  memo.set(key, m);
+  return m;
+}
+function findMatch(title, t, ctx, strict){
   if (RX_YOUTH.test(title) || N.RX.cup.test(title) || RX_WOMEN.test(title)) return null;
   const txt = N.teamText(title), named = new Set(N.clubsIn(title));
   // the loose names are looked for where no club is named in full ("Локомотив София" is not also a loose "Локо")
-  let unnamed = txt;
-  for (const c of N.CLUBS) unnamed = unnamed.replace(new RegExp(c.re.source, 'gu'), blank);
-  const has = T => !T ? 0 : (T.club ? named.has(T.k) : T.re.test(txt)) ? 2 : T.loose && T.loose.test(unnamed) ? 1 : 0;
+  let unnamed = null;
+  const unnamedText = () => { if (unnamed === null) { unnamed = txt; for (const c of N.CLUBS) unnamed = unnamed.replace(gre(c.re), blank); } return unnamed; };
+  const seen = new Map();
+  const has = T => { if (!T) return 0; if (seen.has(T.k)) return seen.get(T.k);
+    const s = (T.club ? named.has(T.k) : T.re.test(txt)) ? 2 : T.loose && T.loose.test(unnamedText()) ? 1 : 0;
+    seen.set(T.k, s); return s; };
   // a time on the whole hour is a date without a time, and such dates can be days off (Google dated Gong's report on
   // the 15 Nov match "11 Nov, 08:00"): a headline naming both teams is then trusted a week either side
   const dayOnly = t % H === 0, lo = dayOnly ? -7 * DAY : -3 * DAY, hi = dayOnly ? 7 * DAY : 6 * DAY;
   let best = null, top = 0, tie = false;
-  for (const m of ctx.matches) {
-    const dt = t - m._t;
-    if (dt > hi) continue;
+  // the matches are in time order: start at the first one inside the window
+  const L = ctx.matches, from = t - hi;
+  let i = 0, j = L.length;
+  while (i < j) { const k = (i + j) >> 1; if (L[k]._t < from) i = k + 1; else j = k; }
+  for (; i < L.length; i++) {
+    const m = L[i], dt = t - m._t;
     if (dt < lo) break;
     if (!MATCH_LEAGUES.includes(m.league) || !m._h || !m._a) continue;
     const sh = has(m._h), sa = has(m._a);
-    // any other club named: another match, or a round-up of the round
-    let rest = txt;
-    for (const [T, s] of [[m._h, sh], [m._a, sa]]) if (s) rest = rest.replace(new RegExp((s === 2 ? T.re : T.loose).source, 'gu'), blank);
-    if (N.clubsIn(rest).length) continue;
     // ("Левски II" is not Левски: clubsIn leaves out a club named only as its reserve team)
     let score = 0;
     if (sh && sa) score = 10 + sh + sa;
@@ -163,9 +177,13 @@ export function whichMatch(title, t, ctx, strict = true){
       const T = sh ? m._h : m._a;
       if (dt >= -2 * DAY && dt <= 3 * DAY && ctx.nearest(T.k, t) === m) score = 5 + (sh || sa);
     } else if (m._venue && dt >= -H && dt <= 3 * DAY && m._venue.test(title)) score = 3;
-    if (!score) continue;
+    if (!score || score < top) continue;
+    // any other club named: another match, or a round-up of the round
+    let rest = txt;
+    for (const [T, s] of [[m._h, sh], [m._a, sa]]) if (s) rest = rest.replace(gre(s === 2 ? T.re : T.loose), blank);
+    if (N.clubsIn(rest).length) continue;
     if (score > top) { best = m; top = score; tie = false; }
-    else if (score === top && best !== m) tie = true;
+    else if (best !== m) tie = true;
   }
   return tie ? null : best;
 }
@@ -178,8 +196,16 @@ const RX_NOT_NEWS = /прогноз\p{L}*|залог\p{L}*|залагани\p{L}
 const RX_OTHER_LEAGUE = /(?<![\p{L}])(?:НБЛ|НВЛ|Супер\s?[Вв]олей|Евролига\p{L}*|Евробаскет\p{L}*|ФИБА|FIBA|ABA|баскетбол\p{L}*|волейбол\p{L}*)(?![\p{L}])/u;
 
 // one search result → a row for news_articles (or null). m: the match that was searched; strict: from the search that
-// names both clubs exactly
+// names both clubs exactly. An article found again in the same run gets the same answer without the work (ctx.rows)
 export function toRow(raw, m, ctx, now = Date.now(), strict = true){
+  const memo = ctx.rows || (ctx.rows = new Map());
+  const key = [strict ? 1 : 0, LEAGUE_DIV[m.league], raw.date instanceof Date ? raw.date.getTime() : '', raw.title, raw.source, raw.srcUrl].join('|');
+  if (memo.has(key)) return memo.get(key);
+  const r = makeRow(raw, m, ctx, now, strict);
+  memo.set(key, r);
+  return r;
+}
+function makeRow(raw, m, ctx, now, strict){
   const q = { q: '', ctx: 'bg', div: LEAGUE_DIV[m.league] || null };
   let title = String(raw.title || '').replace(/\s+/g, ' ').trim(), src = String(raw.source || '').trim();
   const i = title.lastIndexOf(' - ');
@@ -187,11 +213,12 @@ export function toRow(raw, m, ctx, now = Date.now(), strict = true){
   if (!title) return null;
   let d = raw.date instanceof Date ? raw.date.getTime() : NaN;
   if (!isFinite(d) || d > now + DAY) d = now;
+  // only what is about a match: the refereeing searches find the rest (and the refereeing filter is the costly part)
   const match = whichMatch(title, d, ctx, strict);
+  if (!match) return null;
   // about refereeing: an ordinary news article (the feed), now knowing its match
   const ref = N.toArticle(raw, 'google', q, now);
-  if (ref) return { ...ref, kind: 'ref', match_id: match ? match.id : null };
-  if (!match) return null;
+  if (ref) return { ...ref, kind: 'ref', match_id: match.id };
   if (d < Date.parse(N.SEASON_START + 'T00:00:00Z') || N.notBulgarian(title, src, raw.link)) return null;
   if (LOW_SRC.test(src) || LOW_SRC.test(raw.srcUrl || '') || RX_NOT_NEWS.test(title) || N.RX.otherSport.test(title) || RX_OTHER_LEAGUE.test(title)) return null;
   if (RX_RESERVES.test(title) && !match._h.reserve && !match._a.reserve) return null;

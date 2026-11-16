@@ -95,13 +95,15 @@ async function scanMatches(body: any, started: number) {
   const state = (await rpc('news_state_get', { p_k: 'matches' }).catch(() => null)) ?? {};
   const seen: Record<string, number> = state.seen ?? {};
   const ids = Array.isArray(body.ids) ? body.ids.map(String) : null;
-  const todo = ids ? ctx.matches.filter(m => ids.includes(m.id)) : MS.due(ctx, seen, started).slice(0, Math.max(1, Math.min(Number(body.max ?? 30), 60)));
+  const todo = ids ? ctx.matches.filter(m => ids.includes(m.id)) : MS.due(ctx, seen, started).slice(0, Math.max(1, Math.min(Number(body.max ?? 24), 60)));
   const st = { matches: todo.length, due: ids ? undefined : MS.due(ctx, seen, started).length, searches: 0, worked: 0, failed: 0, items: 0,
     ref: 0, coverage: 0, linked: 0, inserted: 0, via: {} as Record<string, number>, errors: [] as string[], sample: [] as string[], why: [] as any[] };
   const rows = new Map<string, any>();
-  let i = 0;
+  // the Edge Function has little CPU time: the matching stops taking new matches after 0.9 s of work (the rest are
+  // still due and come next run)
+  let i = 0, busy = 0;
   const worker = async () => {
-    while (i < todo.length && Date.now() - started < 100000) {
+    while (i < todo.length && Date.now() - started < 100000 && busy < 900) {
       const m = todo[i++];
       let worked = false;
       for (const s of MS.searches(m, started)) {
@@ -109,6 +111,7 @@ async function scanMatches(body: any, started: number) {
         try {
           const items = await feed(s.url, st.via);
           st.worked++; st.items += items.length; worked = true;
+          const t1 = performance.now();
           for (const it of items) {
             const r = MS.toRow(it, m, ctx, started, s.strict);
             // why: show what became of the results whose headline has these words (with dry)
@@ -120,6 +123,7 @@ async function scanMatches(body: any, started: number) {
             if (ex.kind !== 'ref' && r.kind === 'ref') rows.set(r.aid, { ...r, match_id: r.match_id ?? ex.match_id });
             else if (!ex.match_id && r.match_id) ex.match_id = r.match_id;
           }
+          busy += performance.now() - t1;
         } catch (e) { st.failed++; if (st.errors.length < 5) st.errors.push(`${m.home_name} – ${m.away_name}: ` + String((e as Error).message ?? e).slice(0, 140)); }
         await sleep(300 + Math.random() * 400);
       }
@@ -128,6 +132,7 @@ async function scanMatches(body: any, started: number) {
   };
   await Promise.all([worker(), worker()]);
   const list = [...rows.values()];
+  (st as any).done = i; (st as any).busyMs = Math.round(busy);
   for (const r of list) { if (r.kind === 'ref') st.ref++; else st.coverage++; if (r.match_id) st.linked++; }
   const byId = new Map(ctx.matches.map(m => [m.id, m]));
   st.sample = list.filter(r => r.match_id).slice(0, Number(body.n ?? 12)).map(r => { const m = byId.get(r.match_id);

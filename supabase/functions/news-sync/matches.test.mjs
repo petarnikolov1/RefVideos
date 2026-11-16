@@ -65,8 +65,8 @@ const cases = [
   ['Георги Йомов се разписа при победа на ЦСКА II над Рилски спортист - ФОКУС', 'https://www.focus-news.net', '2026-11-09T15:00:00Z', 'mrbit:15:cska2:rilski', 'match'],
   ['Шоколадите се усладиха на Спартак Плевен - KotaSport', 'https://www.kotasport.com', '2026-11-15T16:04:12Z', 'mrbit:16:sportist:spartakpl', 'match'],
   ['Монтана с ключов успех в Благоевград, изплува от опасната зона - KotaSport', 'https://www.kotasport.com', '2026-11-15T16:06:55Z', 'mrbit:16:pirin:montana', 'match'],
-  // a refereeing article that is about no single match
-  ['Трима елитни съдии с наряди за Втора лига - Dsport.bg', 'https://dsport.bg', '2026-11-13T10:00:00Z', null, 'ref'],
+  // a refereeing article about no single match: the refereeing searches find it, not this one
+  ['Трима елитни съдии с наряди за Втора лига - Dsport.bg', 'https://dsport.bg', '2026-11-13T10:00:00Z', null, null],
   // left out: round-ups, programmes, tables, quotes that name no team or venue, several clubs, aggregators, betting sites
   ['На върха във Втора лига става все по-интересно - Sportal.bg', 'https://sportal.bg', '2026-11-15T19:00:00Z', null, null],
   ['Тройна битка за върха в Mr Bit Втора лига (резултати) - Gong.bg', 'https://gong.bg', '2026-11-15T17:00:00Z', null, null],
@@ -91,7 +91,7 @@ const L = (t, url, at) => { const r = MS.toRow(item(t, url, at), RH, ctx, now, f
 ok(L(cases[1][0], cases[1][1], cases[1][2]) === 'match mrbit:16:rilski:hebar', 'loose search: Gong\'s report (both teams) is kept');
 ok(L(cases[3][0], cases[3][1], cases[3][2]) === 'left out', 'loose search: "Хебър взе точка в Самоков" (one team) is not');
 ok(L('Рилски спортист се справи със Спортинг в Самоков - Sportal.bg', 'https://sportal.bg', '2026-11-15T19:00:00Z') === 'left out', 'loose search: Рилски спортист\'s basketball game in Самоков is not the football match');
-ok(L(cases[6][0], cases[6][1], cases[6][2]) === 'ref null', 'loose search: a refereeing headline naming only the venue is still a refereeing article, without a match');
+ok(L(cases[6][0], cases[6][1], cases[6][2]) === 'left out', 'loose search: a refereeing headline naming only the venue is left to the refereeing searches');
 ok(MS.toRow(item('Рилски спортист надигра Хебър в мач от НБЛ - Sportal.bg', 'https://sportal.bg', '2026-11-15T19:00:00Z'), RH, ctx, now) === null, 'the other sports\' leagues: left out (НБЛ)');
 const sportal = MS.toRow(item(cases[0][0], cases[0][1], cases[0][2]), RH, ctx, now);
 ok(sportal.title === 'Рилски спортист надигра Хебър, но взе само точка с късен гол' && sportal.src === 'Sportal.bg' && sportal.divs.join() === 'd2' &&
