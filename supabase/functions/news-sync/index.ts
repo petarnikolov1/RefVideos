@@ -104,7 +104,7 @@ async function scanMatches(body: any, started: number) {
     while (i < todo.length && Date.now() - started < 100000) {
       const m = todo[i++];
       let worked = false;
-      for (const s of MS.searches(m)) {
+      for (const s of MS.searches(m, started)) {
         st.searches++;
         try {
           const items = await feed(s.url, st.via);

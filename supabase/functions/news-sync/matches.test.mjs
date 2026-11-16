@@ -36,7 +36,8 @@ const byId = Object.fromEntries(ctx.matches.map(m => [m.id, m]));
 const RH = byId['mrbit:16:rilski:hebar'];
 
 ok(MS.searchQuery(RH) === '"Рилски спортист" "Хебър"', 'the strict search: "Рилски спортист" "Хебър" → ' + MS.searchQuery(RH));
-ok(/after%3A2026-11-12%20before%3A2026-11-22/.test(MS.searchUrl(RH)), 'searched from 3 days before to a week after the kickoff');
+ok(/after%3A2026-11-12%20before%3A2026-11-22/.test(MS.searchUrl(RH, Date.parse('2026-12-01T00:00:00Z'))), 'searched from 3 days before to a week after the kickoff');
+ok(/after%3A2026-11-12%20before%3A2026-11-17/.test(MS.searchUrl(RH, Date.parse('2026-11-16T10:00:00Z'))), '…but never past tomorrow (Google drops a "before:" in the future)');
 ok(MS.searchQuery(byId['efbet:534548']) === '"Ботев" ("Локомотив" OR "Локо")', 'Локомотив is searched as Локомотив or Локо');
 const S3 = MS.searches(RH);
 ok(S3.length === 3 && S3[0].strict && !S3[1].strict && !S3[2].strict, 'three searches: strict, loose, and the leading outlets');

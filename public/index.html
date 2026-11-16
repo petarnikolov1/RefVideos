@@ -3443,7 +3443,9 @@ function matchCoverage(m){
     if (!g) groups.set(k, { a, also: [] });
     else if (mediaTier(a.src) > mediaTier(g.a.src)) { g.also.push(g.a); g.a = a; } else g.also.push(a);
   }
-  return [...groups.values()].map(g => Object.assign(g, { tier: mediaTier(g.a.src), pre: g.a.date < t0 - 30 * 60e3 }))
+  // a time on the whole hour on the match's day is a date without a time (Google gives some outlets' articles so): after
+  const dayOnly = d => { const x = new Date(d); return !x.getUTCMinutes() && !x.getUTCSeconds() && Math.abs(d - t0) < 864e5; };
+  return [...groups.values()].map(g => Object.assign(g, { tier: mediaTier(g.a.src), pre: g.a.date < t0 - 30 * 60e3 && !dayOnly(g.a.date) }))
     .sort((x, y) => (x.pre - y.pre) || (y.tier - x.tier) || (x.a.date - y.a.date));
 }
 const COV_SHOWN = 8;

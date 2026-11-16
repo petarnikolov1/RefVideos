@@ -104,13 +104,15 @@ export function context(rows){
 //    спортист plays basketball, Хебър volleyball), so from them only a headline that names both teams is kept.
 const side = (T, quote) => { const a = T.q.map(x => quote ? `"${x}"` : x); return a.length > 1 ? `(${a.join(' OR ')})` : a[0]; };
 export const searchQuery = m => `${side(m._h, true)} ${side(m._a, true)}`;
-export function searches(m){
-  const loose = `${side(m._h, false)} ${side(m._a, false)}`;
+// The window ends tomorrow at the latest: given a "before:" in the future, Google drops the dates altogether and
+// answers with older articles (on 16 Nov, "before:2026-11-22" gave July's and left out the match's own reports)
+export function searches(m, now = Date.now()){
+  const loose = `${side(m._h, false)} ${side(m._a, false)}`, to = Math.min(m._t + WINDOW[1], now + DAY);
   return [{ q: searchQuery(m), strict: true }, { q: loose, strict: false },
     { q: `${loose} (${LEADING_SITES.map(s => 'site:' + s).join(' OR ')})`, strict: false }]
-    .map(s => ({ ...s, url: N.googleUrl(s.q, m._t + WINDOW[0], m._t + WINDOW[1]) }));
+    .map(s => ({ ...s, url: N.googleUrl(s.q, m._t + WINDOW[0], to) }));
 }
-export const searchUrl = m => searches(m)[0].url;
+export const searchUrl = (m, now) => searches(m, now)[0].url;
 
 // the played matches due for a search, newest first (seen: match id → when it was last searched)
 export function due(ctx, seen, now = Date.now()){
