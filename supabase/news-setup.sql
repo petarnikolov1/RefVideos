@@ -162,7 +162,7 @@ select cron.schedule('news-intl-backfill', '3-59/6 * * * *', $job$
 $job$);
 -- each played match of the Bulgarian leagues on its own: 3 h, 20 h, 2 days and 5 days after its kickoff (and once for
 -- the matches played before this search existed), up to 24 matches a run (fewer when the matching takes long), newest first
-select cron.schedule('news-matches', '15,45 * * * *', $job$
+select cron.schedule('news-matches', '4-59/10 * * * *', $job$
   select net.http_post(
     url := 'https://zinuspouctowujhocevy.supabase.co/functions/v1/news-sync',
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-region', 'eu-west-2', 'x-sync-key', (select decrypted_secret from vault.decrypted_secrets where name = 'football_sync_key')),
