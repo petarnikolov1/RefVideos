@@ -123,6 +123,8 @@
   .vp-flash.on{opacity:1}
   .vp-badges{position:absolute;right:10px;top:58px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;z-index:3}
   .vp-badge{display:flex;align-items:center;gap:2px;background:rgba(0,0,0,.62);border-radius:18px;padding:0 0 0 11px;font-weight:700;font-size:13px;height:34px}
+  button.vp-badge.mute{appearance:none;border:0;color:#fff;font:inherit;font-weight:700;font-size:13px;gap:6px;padding:0 13px 0 9px;cursor:pointer;background:rgba(220,38,38,.85)}
+  button.vp-badge.mute svg{width:18px;height:18px;fill:currentColor}
   .vp-badge .vp-btn{width:34px;height:34px}
   .vp-badge .vp-btn svg{width:19px;height:19px}
   .vp-badge.rate{padding:0 11px;color:#04201c;background:var(--vpa)}
@@ -195,7 +197,9 @@
   let R, ST, LAYER, POSTER, FRAME, SHIELD, CENTER, FLASH, BADGES, MENU, NEXTC, MSG, NOTE, SIDE, PANE, TITLE, POS, SEEK, BUF, PLAYED, KNOB, TIP, TIME;
   const V = [];
   let items = [], idx = 0, opt = {}, mode = '', cur = 0, tab = 'queue';
-  let rate = 1, auto = load(K.auto) !== false, loop = false, vol = load(K.vol) || { v: 1, m: false };
+  // the sound as last left: muted or not (a stored volume that makes no sense is full volume: the player has no volume slider)
+  const vol0 = load(K.vol) || {};
+  let rate = 1, auto = load(K.auto) !== false, loop = false, vol = { v: isFinite(vol0.v) && vol0.v > 0.05 ? Math.min(1, vol0.v) : 1, m: vol0.m === true };
   let sideWanted = load(K.side) !== false, sideOpen = false;
   let z = { s: 1, x: 0, y: 0 }, ar = 16 / 9;
   let yt = null, ytReady = null, ytTime = 0, ytDur = 0, ytState = -1;
@@ -536,7 +540,9 @@
     TIME.style.visibility = canRate() ? '' : 'hidden';
     // what is changed from normal stays on screen: the speed and the zoom
     BADGES.innerHTML = (z.s > 1.01 ? `<div class="vp-badge">${z.s.toFixed(1)}×<button class="vp-btn" data-a="zreset" aria-label="Нормален размер" title="Нормален размер (0)">${IC.reset}</button></div>` : '')
-      + (rate !== 1 && canRate() ? `<div class="vp-badge rate">${rateLabel(rate)}</div>` : '');
+      + (rate !== 1 && canRate() ? `<div class="vp-badge rate">${rateLabel(rate)}</div>` : '')
+      // muted (remembered from before): said plainly, and one tap brings the sound back
+      + (vol.m && (mode === 'file' || mode === 'yt') ? `<button class="vp-badge mute" data-a="unmute" title="Пусни звука (M)">${IC.mute}Без звук · пусни звука</button>` : '');
   }
   function tick(){
     raf = requestAnimationFrame(tick);
@@ -772,6 +778,7 @@
     else if (a === 'loop') { loop = !loop; flash(loop ? 'Повтаря клипа' : 'Без повторение'); paintButtons(); }
     else if (a === 'auto') setAuto(!auto);
     else if (a === 'mute') { vol.m = !vol.m; save(K.vol, vol); applyVol(); paintButtons(); }
+    else if (a === 'unmute') { vol.m = false; save(K.vol, vol); applyVol(); paintButtons(); flash('Звук'); }
     else if (a === 'fs') toggleFs();
     else if (a === 'close') close();
     else if (a === 'side') toggleSide();

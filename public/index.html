@@ -2111,6 +2111,10 @@ async function submitUpload(form){
     // 3. the file: compressed when it is too big (or not MP4/WebM/MOV), then uploaded with progress
     if (hasFile) {
       let blob = file;
+      // a recording without sound (a screen recorder set to record the picture only): say so before uploading
+      say('Checking the video…');
+      if ((await hasSound(file)) === false && !confirm('This recording has NO SOUND — the file has no audio track (the screen recorder probably was not set to record sound).\n\nUpload it anyway, without sound?'))
+        return say('Not uploaded: the recording has no sound. Record it again with sound (in Windows Game Bar: Settings → Captures → "Capture audio"), then upload it.', 'err');
       if (file.size > MAX_UPLOAD_MB * 1048576 || !/^video\/(mp4|webm|quicktime)$/.test(file.type)) {
         say('Compressing the video in your browser… 0%');
         bar(0);
@@ -2169,6 +2173,16 @@ async function putFile(path, blob, onProgress){
 // Re-encode a recording in the browser (WebCodecs, via Mediabunny) so it fits the upload limit: H.264 MP4 up to 720p,
 // 30 frames a second, with the bitrate worked out from its length (5 minutes ≈ 1.2 Mbit/s).
 let MB_LIB = null;
+// whether a video file has a sound track: true / false, or null when it can't be told (the reader didn't load, a
+// format it doesn't know) — then nothing is said
+async function hasSound(file){
+  try {
+    const M = await (MB_LIB || (MB_LIB = import(MEDIABUNNY).catch(e => { MB_LIB = null; throw e; })));
+    const input = new M.Input({ formats: M.ALL_FORMATS, source: new M.BlobSource(file) });
+    if (!(await input.getPrimaryVideoTrack())) return null;
+    return !!(await input.getPrimaryAudioTrack());
+  } catch (e) { return null; }
+}
 async function compressVideo(file, onProgress){
   if (typeof VideoEncoder === 'undefined') throw new Error('This browser cannot compress video. Use Chrome, Edge or Safari, or add the video from Google Drive.');
   const M = await (MB_LIB || (MB_LIB = import(MEDIABUNNY).catch(e => { MB_LIB = null; throw new Error('The video compressor could not be loaded: ' + e.message); })));
@@ -2195,6 +2209,10 @@ async function compressVideo(file, onProgress){
       video: { width, codec, quality: new M.Quality({ bitrate: vb }), forceTranscode: true, ...(fps > 31 ? { frameRate: 30 } : {}) },
       audio: { codec: acodec, quality: new M.Quality({ bitrate: audioBits }), forceTranscode: true } });
     if (!conv.isValid) throw new Error('The browser cannot read this video (' + conv.discardedTracks.map(t => t.reason.replace(/_/g, ' ')).join(', ') + '). Add it from Google Drive instead.');
+    // the sound can't be kept (a sound format this browser can't read or write): ask, don't drop it without a word
+    const lost = conv.discardedTracks.find(t => t.track && t.track.type === 'audio');
+    if (lost && factor === 1 && !confirm(`This browser can't keep the video's sound while compressing it (${String(lost.reason).replace(/_/g, ' ')}).\n\nUpload it WITHOUT sound? (Or press Cancel and add it from Google Drive, which keeps the sound.)`))
+      throw new Error('Not uploaded: the sound could not be kept. Add the video from Google Drive instead.');
     conv.onProgress = p => onProgress(Math.min(1, p));
     await conv.execute();
     return new Blob([output.target.buffer], { type: 'video/mp4' });
