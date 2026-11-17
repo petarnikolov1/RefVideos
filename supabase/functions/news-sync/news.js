@@ -151,7 +151,22 @@ export const RX = {
   ruFoot:    new RegExp('(?<![\\p{L}])(?:(?:ЦСКА|Спартак|Локомотив|Динамо|Торпедо)\\s*[(,]?\\s*(?:Москва|М)(?![\\p{L}])|Зенит|Краснодар|Ростов|Ахмат|Оренбург|Химки|' +
     'Крил(?:ия|я) Советов|РПЛ|руск(?:ата|ия|ото)? (?:висша лига|премиер лига|премиър лига|първенство|шампионат|футбол))(?![\\p{L}])', 'u'),
   foreign:   rx(`англи${W}|англичан${W}|испан${W}|итали${W}|герман${W}|франц${W}|френск${W}|португал${W}|холанд${W}|нидерланд${W}|турск${W}|турци${W}|гърц${W}|гръцк${W}|румън${W}|сръбск${W}|сърби${W}|хърват${W}|руск${W}|русия|украин${W}|украйн${W}|шотланд${W}|белги${W}|саудит${W}|млс${E}|mls${E}|бразил${W}|аржентин${W}|мексик${W}|фифа${E}|fifa${E}|уефа${E}|uefa${E}|москва|истанбул|атина|солун|букурещ|белград|загреб|маями|кипър${W}|кипърск${W}|израел${W}|полск${W}|полша|чехи${W}|чешк${W}|австри${W}|швейцар${W}|унгар${W}|европейск${W}`),
-  otherSport:rx(`баскетбол${W}|волейбол${W}|хандбал${W}|футзал${W}|плаж${W} футбол${W}|мини-?футбол${W}|хокей${W}|тенис${W}|бокс${W}|mma${E}|формула 1|ръгби|водна топка`),
+  otherSport:rx(`баскетбол${W}|волейбол${W}|хандбал${W}|футзал${W}|плаж${W} футбол${W}|мини-?футбол${W}|хокей${W}|тенис${W}|бокс${W}|mma${E}|формула 1|ръгби|водна топка|` +
+    `карате|джудо|таекуондо|кикбокс${W}|шахмат${W}|гимнасти${W}|плуван${W}|колоезд${W}|биатлон${W}|бадминтон|сумо${E}|вдигане на тежести|кану-каяк|гребан${W}|фехтов${W}|лека атлетика`),
+  // the other countries, their people and their football (the big ones are in "foreign"): a headline about Denmark, Japan or
+  // Wales is not Bulgarian football, whichever Bulgarian site wrote it
+  foreignMore: rx(`дания${E}|датск${W}|датчан${W}|норвеги${W}|норвежк${W}|норвежец${W}|норвежц${W}|швеци${W}|шведск${W}|финланди${W}|финландск${W}|финландец${W}|финландц${W}|` +
+    `исланди${W}|исландск${W}|исландец${W}|исландц${W}|ирланди${W}|ирландск${W}|ирландец${W}|ирландц${W}|уелс${W}|албани${W}|албанск${W}|албанец${W}|албанц${W}|сан марино|` +
+    `андор${W}|малта${E}|малтийск${W}|люксембург${W}|лихтенщайн${W}|гибралтар${W}|фарьорск${W}|естони${W}|естонск${W}|латви${W}|латвийск${W}|литва${E}|литовск${W}|` +
+    `беларус${W}|молдов${W}|грузия${E}|грузинск${W}|армени${W}|арменск${W}|азербайджан${W}|казахстан${W}|словаки${W}|словашк${W}|словени${W}|словенск${W}|босн${W}|` +
+    `херцеговин${W}|черна гора|черногор${W}|северна македония|косов${W}|япони${W}|японск${W}|японец${W}|японц${W}|корея${E}|корейск${W}|китай${W}|инди(?:я|йск)${W}|` +
+    `иран${E}|иранск${W}|ирак${E}|иракск${W}|катар${W}|оае${E}|емирств${W}|сащ${E}|американ${W}|америка${E}|канад${W}|австрали${W}|нова зеландия|ямайк${W}|` +
+    `мароко|марокан${W}|египет${W}|египетск${W}|нигери${W}|сенегал${W}|алжир${W}|тунис${W}|камерун${W}|кот д.ивоар|бряг на слоновата кост|уругва${W}|колумби${W}|` +
+    `еквадор${W}|парагва${W}|венецуел${W}|боливи${W}|копа либертадорес|либертадорес`),
+  // Bulgaria itself: the national team, "българин", "трикольор" — a foreign country next to it is Bulgaria's match
+  bgNat:     rx(`българ${W}|трикольор${W}`),
+  // not football at all, whatever town or club name it has ("кражба на златни накити в Кюстендил")
+  crime:     rx(`накити|наркоти${W}|дрога${E}|убийств${W}|убит${W}|изнасил${W}|катастроф${W}|кражб${W} на (?!точк|гол|победа|мач)`),
   court:     rx(`прокурат${W}|съд${E}|съда${E}|съдът|подсъдим${W}|обвиняем${W}|присъд${W}|осъд${W}|дело${E}|делото|адвокат${W}|районн${W} съд|градск${W} съд|апелатив${W}|мярка за неотклонение`),
   video:     rx(`видео${W}|video${E}|клип${W}|кадри${E}|вижте${E}|гледайте`),
   // a Bulgarian referee without a name: "български съдия", "наш рефер", "съдия №1 у нас", "варненски съдия", "българинът"
@@ -278,6 +293,21 @@ export const WORLD = [
 const TOP5 = ['eng', 'esp', 'ita', 'ger', 'fra'];
 // Czech and Slovak football, by the town written with a capital ("Славия Прага"; "на прага на" is Bulgarian for "on the verge of")
 const FOREIGN_CS = CS(['Прага', 'Пилзен', 'Острава', 'Братислава']);
+// foreign football by its names (written with a capital): clubs outside the five big leagues, and players, coaches and
+// referees that only foreign football has ("Ямал", "Анчелоти": Bulgarian sites write about them every day)
+const FOREIGN_NAMES = CS(['Порто', 'Бенфика', 'Брага', 'Спортинг \\(?Лисабон\\)?', 'Аякс', 'ПСВ', 'Фейенорд', 'Селтик', 'Рейнджърс', 'Галатасарай', 'Фенербахче',
+  'Бешикташ', 'Трабзонспор', 'Олимпиакос', 'Панатинайкос', 'ПАОК', 'АЕК', 'Хайдук', 'Динамо Загреб', 'Цървена звезда', 'ФКСБ', 'Стяуа', 'ЧФР Клуж', 'Шахтьор',
+  'Динамо Киев', 'Ред Бул', 'Залцбург', 'Брюж', 'Андерлехт', 'Генк', 'Копенхаген', 'Малмьо', 'Молде', 'Буде[ /-]Глимт', 'Легия', 'Лех Познан', 'Ракув',
+  'Ференцварош', 'Маккаби', 'Апоел', 'Омония', 'Ягелония', 'Пафос', 'Шериф', 'Карабах', 'Тенерифе', 'Реал Сарагоса', 'Реал Хаен', 'Ал[ -]Насър', 'Ал[ -]Хилал',
+  'Ал[ -]Ахли', 'Ал[ -]Итихад', 'Интер Маями',
+  'Ямал', 'Анчелоти', 'Рафиня', 'Мбапе', 'Меси', 'Роналдо', 'Холанд', 'Винисиус', 'Белингам', 'Левандовски', 'Гуардиола', 'Моуриньо', 'Клоп', 'Артета',
+  'Симеоне', 'Неймар', 'Салах', 'Кейн', 'Модрич', 'Педри', 'Гави', 'Араухо', 'Кубарси', 'Лукаку', 'Лаутаро', 'Дибала', 'Де Брюйне', 'Палмър', 'Мареска',
+  'Луис Енрике', 'Конте', 'Алегри', 'Индзаги', 'Тухел', 'Постекоглу', 'Тен Хаг', 'Аморим', 'Амурим', 'Дембеле', 'Кварацхелия', 'Осимен', 'Ван Дайк', 'Куртоа',
+  'Вирц', 'Мусиала', 'Гьокереш', '[ШЧ]аби Алонсо', 'Флик', 'Слот', 'Марчиняк', 'Орсато', 'Турпен', 'Летексие'].map(n => n + '\\p{L}{0,3}'));
+// a foreign league's tiers are not Bulgaria's ("в испанската трета дивизия" is not Трета лига)
+const FOREIGN_TIER = new RegExp(B + '(?:испан|италиан|англ|герман|франц|португал|холанд|турск|гръцк|румън|сръбск|руск|хърват|кипърск|полск|чешк)\\p{L}* ' +
+  '(?:(?:трет|втор|първ)\\p{L}* (?:дивизи|лига|ниво)|(?:шест|пет|четвърт)\\p{L}* (?:дивизи|ниво))\\p{L}*', 'giu');
+const isForeign = s => RX.foreign.test(s) || RX.foreignMore.test(s) || FOREIGN_CS.test(s) || FOREIGN_NAMES.test(s);
 const WGT = { red: 3, penalty: 3, offside: 2, var: 3, foul: 2, committee: 2, discipline: 2, fights: 3, dispute: 3 };
 const DIRECT = ['red', 'penalty', 'offside', 'var', 'foul'];       // decisions a referee makes on the pitch
 
@@ -288,8 +318,8 @@ const FREE_KICK = new RegExp(B + '(?:(?:директно |пряко )?(?:от|�
 // Is this headline (and description) about refereeing? Returns the classification, or null to leave it out.
 export function analyze(title, desc, q) {
   title = String(title).replace(FREE_KICK, ' '); desc = String(desc || '').replace(FREE_KICK, ' ');
-  const t = title + ' \n ' + (desc || '');
-  const L1 = RX.league1.test(t), L2 = RX.league2.test(t), L3 = RX.league3.test(t), CUP = RX.cup.test(t);
+  const t = title + ' \n ' + (desc || ''), tl = t.replace(FOREIGN_TIER, ' ');
+  const L1 = RX.league1.test(tl), L2 = RX.league2.test(tl), L3 = RX.league3.test(tl), CUP = RX.cup.test(tl);
   const anyLeague = L1 || L2 || L3 || CUP;
   if (RX.otherSport.test(t) && !anyLeague) return null;                       // basketball, volleyball…
   const ru = RX.ruFoot.test(t);
@@ -300,12 +330,20 @@ export function analyze(title, desc, q) {
   const bgSignal = anyLeague || named || refName || RX.bgOrg.test(t);
   const comps = WORLD.filter(w => w.lg.test(t) || (w.cl && w.cl.test(t))).map(w => w.k);
 
+  // the headline decides whose football it is: one about a foreign country, club or player with nothing Bulgarian in it
+  // (a Bulgarian club, referee, league, the BFS, Bulgaria) is not Bulgarian news, whatever its description names
+  const titleL = title.replace(FOREIGN_TIER, ' ');
+  const bgTitle = RX.league1.test(titleL) || RX.league2.test(titleL) || RX.league3.test(titleL) || RX.cup.test(titleL) || clubsIn(title).length > 0 ||
+    CLUBS.some(c => c.re.test(title) && !(ru && c.k === 'cska')) || REFNAMES.test(title) || RX.bgOrg.test(title) || RX.bgRef.test(title) || RX.bgNat.test(title);
+  const foreignTitle = isForeign(title) || RX.ruFoot.test(title);
+
   let scope;
-  if (anyLeague) scope = 'bg';
+  if (anyLeague && !(foreignTitle && !bgTitle)) scope = 'bg';
   // a Bulgarian club named next to a big league is a Bulgarian story; the European cups and national teams are World
-  else if (comps.length) scope = (named && comps.every(c => TOP5.includes(c))) ? 'bg' : 'world';
-  else if (RX.euro.test(t)) return null;                                     // qualifiers of some other competition
-  else if ((RX.foreign.test(t) || FOREIGN_CS.test(t) || ru) && !named && !refName) return null;      // other foreign football
+  else if (comps.length) scope = (named && bgTitle && comps.every(c => TOP5.includes(c))) ? 'bg' : 'world';
+  else if (foreignTitle && !bgTitle) return null;                             // foreign football, in a Bulgarian paper
+  else if (RX.euro.test(t) && !bgTitle) return null;                         // qualifiers of some other competition
+  else if ((isForeign(t) || ru) && !named && !refName && !RX.bgNat.test(t)) return null;      // other foreign football
   else if (bgSignal || (q && q.ctx === 'bg')) scope = 'bg';
   else return null;
 
@@ -322,6 +360,7 @@ export function analyze(title, desc, q) {
   if (!foot) return null;
   if (RX.court.test(t) && !(refName || comps.length || cats.some(c => DIRECT.includes(c)) || RX.foot.test(title))) return null;
   if (COURT.test(title) && !FOOTBALL.test(title)) return null;
+  if (RX.crime.test(title) && !RX.foot.test(title) && !RX.referee.test(title)) return null;
   // 3. player / manager / club stories (transfers, injuries, contracts, coaching changes, interviews…)
   //    only stay when the headline itself is about a referee or a decision on the pitch
   if (RX.personal.test(title) && !(RX.referee.test(title) || REFNAMES.test(title) || DIRECT.some(c => RX[c].test(title)) || RX.dispRef.test(title))) return null;
@@ -334,13 +373,14 @@ export function analyze(title, desc, q) {
   const onlyPenalty = cats.every(c => c === 'penalty' || c === 'dispute') && RX.penalty.test(title);
   if (onlyPenalty && RX.penExec.test(title) && !disputed) return null;
   if (RX.live.test(title) && !refInTitle) return null;
-  if (scope === 'world' && !(refHit || cats.some(c => DIRECT.includes(c)))) return null;
+  // (a Bulgarian referee's appointment abroad counts: "Българинът … ще ръководи мача в испанската трета дивизия")
+  if (scope === 'world' && !(refHit || cats.some(c => DIRECT.includes(c)) || RX.bgRef.test(title))) return null;
 
   const divs = [];
   let hinted = false;
   // a World story about a Bulgarian club (Левски in the Europa League) or a Bulgarian referee (Гидженов in the Nations
   // League) is shown in the Bulgaria tab too: division "eur"
-  if (scope === 'world' && (clubsIn(title).length || REFNAMES.test(title) || RX.bgRef.test(title))) divs.push('eur');
+  if (scope === 'world' && (clubsIn(title).length || REFNAMES.test(title) || RX.bgRef.test(title) || RX.bgNat.test(title))) divs.push('eur');
   if (scope === 'bg') {
     if (L1) divs.push('d1'); if (L2) divs.push('d2'); if (L3) divs.push('d3'); if (CUP) divs.push('cup');
     if (!divs.length) for (const d of new Set(clubs.map(k => CLUBS.find(c => c.k === k).div))) divs.push(d);

@@ -215,6 +215,9 @@ Deno.serve(async (req) => {
     out.removedByLang = drop.reduce((o: Record<string, number>, r) => { o[r.lang ?? 'null'] = (o[r.lang ?? 'null'] ?? 0) + 1; return o; }, {});
     out.sample = [...drop.filter(r => !OLD_LANGS.includes(r.lang)), ...drop.filter(r => OLD_LANGS.includes(r.lang))].slice(0, 40).map(r => `${r.lang ?? '-'} | ${r.title}`);
     out.movedSample = move.slice(0, 40).map(m => `${m.from} → ${m.to} | ${m.title}`);
+    // list: everything taken out of the Bulgarian feed (removed, or moved to World), to read before it is done for real
+    if (body.list) out.fromBg = [...drop.filter(r => r.scope === 'bg' && r.kind !== 'match').map(r => `removed | ${r.src} | ${r.title}`),
+      ...move.filter(m => m.from.startsWith('bg:') && m.to.startsWith('world:')).map(m => `to World | ${m.title}`)];
   } else if (body.matches) {
     out.mode = 'matches';
     Object.assign(out, await scanMatches(body, started));
