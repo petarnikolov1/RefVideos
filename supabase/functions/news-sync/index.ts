@@ -161,11 +161,13 @@ Deno.serve(async (req) => {
   if (body.test) {                                  // try one search and show what it gives (no saving); lang: en (ed: en / us)
     const via: Record<string, number> = {};
     try {
-      const q = body.lang ? { q: String(body.test), ctx: 'intl', lang: String(body.lang), ed: String(body.ed ?? 'en') } : { q: String(body.test), ctx: 'loose' };
+      // ctx: 'bg' tries it as one of the Bulgarian searches (site:sportal.bg …), where a headline counts as Bulgarian unless it says otherwise
+      const q = body.lang ? { q: String(body.test), ctx: 'intl', lang: String(body.lang), ed: String(body.ed ?? 'en') }
+        : { q: String(body.test), ctx: body.ctx === 'bg' ? 'bg' : 'loose', div: body.div ?? null };
       const url = body.lang ? INTL.intlUrl(q, started - 7 * 864e5, started + 864e5) : N.googleUrl(String(body.test), started - 7 * 864e5, started + 864e5);
       const items = await feed(url, via, body.lang);
       out.test = { via, items: items.length, sample: items.slice(0, Number(body.n ?? 8)).map(it => ({ title: it.title, src: it.source, srcUrl: it.srcUrl,
-        kept: !!N.toArticle(it, 'google', q), outlet: body.lang ? INTL.topOutlet(String(body.lang), it.srcUrl, it.source) : undefined,
+        kept: !!N.toArticle(it, 'google', q), as: (N.toArticle(it, 'google', q) as any)?.scope, outlet: body.lang ? INTL.topOutlet(String(body.lang), it.srcUrl, it.source) : undefined,
         english: body.lang ? INTL.looksEnglish(it.title.replace(/ - [^-]+$/, ''), INTL.bilingual(it.srcUrl)) : undefined })) };
     } catch (e) { out.test = { via, error: String((e as Error).message ?? e) }; }
     return Response.json(out);
@@ -188,7 +190,8 @@ Deno.serve(async (req) => {
         // the outlet's name stands in for its address: "Premier League", "Bundesliga | official website" say the league
         : INTL_LANGS.includes(r.lang) ? (INTL.looksEnglish(r.title) ? INTL.analyzeIntl(r.title, [r.descr, r.src].filter(Boolean).join(' · '), r.lang) : null)
         : N.notBulgarian(r.title, r.src, r.link) ? null : N.analyze(r.title, r.descr, { ctx: r.scope === 'world' ? 'world' : 'bg' });
-      if (!a && r.match_id && r.scope === 'bg' && !N.notBulgarian(r.title, r.src, r.link)) {
+      // (not when it isn't football at all: "…кражба на златни накити в Кюстендил" named a town that is also a club)
+      if (!a && r.match_id && r.scope === 'bg' && !N.notBulgarian(r.title, r.src, r.link) && !N.RX.crime.test(r.title) && !N.RX.otherSport.test(r.title)) {
         move.push({ aid: r.aid, title: r.title, from: 'ref', to: 'match ' + r.match_id, patch: { kind: 'match', cats: ['match'] } });
         continue;
       }

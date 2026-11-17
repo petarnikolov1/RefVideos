@@ -341,7 +341,7 @@ export function analyze(title, desc, q) {
   if (anyLeague && !(foreignTitle && !bgTitle)) scope = 'bg';
   // a Bulgarian club named next to a big league is a Bulgarian story; the European cups and national teams are World
   else if (comps.length) scope = (named && bgTitle && comps.every(c => TOP5.includes(c))) ? 'bg' : 'world';
-  else if (foreignTitle && !bgTitle) return null;                             // foreign football, in a Bulgarian paper
+  else if (foreignTitle && !bgTitle && !RX.bgNat.test(desc)) return null;    // foreign football, in a Bulgarian paper
   else if (RX.euro.test(t) && !bgTitle) return null;                         // qualifiers of some other competition
   else if ((isForeign(t) || ru) && !named && !refName && !RX.bgNat.test(t)) return null;      // other foreign football
   else if (bgSignal || (q && q.ctx === 'bg')) scope = 'bg';
@@ -380,7 +380,7 @@ export function analyze(title, desc, q) {
   let hinted = false;
   // a World story about a Bulgarian club (Левски in the Europa League) or a Bulgarian referee (Гидженов in the Nations
   // League) is shown in the Bulgaria tab too: division "eur"
-  if (scope === 'world' && (clubsIn(title).length || REFNAMES.test(title) || RX.bgRef.test(title) || RX.bgNat.test(title))) divs.push('eur');
+  if (scope === 'world' && (clubsIn(title).length || REFNAMES.test(title) || RX.bgRef.test(title))) divs.push('eur');
   if (scope === 'bg') {
     if (L1) divs.push('d1'); if (L2) divs.push('d2'); if (L3) divs.push('d3'); if (CUP) divs.push('cup');
     if (!divs.length) for (const d of new Set(clubs.map(k => CLUBS.find(c => c.k === k).div))) divs.push(d);

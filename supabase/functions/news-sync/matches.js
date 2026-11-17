@@ -221,6 +221,7 @@ function makeRow(raw, m, ctx, now, strict){
   if (ref) return { ...ref, kind: 'ref', match_id: match.id };
   if (d < Date.parse(N.SEASON_START + 'T00:00:00Z') || N.notBulgarian(title, src, raw.link)) return null;
   if (LOW_SRC.test(src) || LOW_SRC.test(raw.srcUrl || '') || RX_NOT_NEWS.test(title) || N.RX.otherSport.test(title) || RX_OTHER_LEAGUE.test(title)) return null;
+  if (N.RX.crime.test(title) && !N.RX.foot.test(title)) return null;            // a town that is also a club: "…накити в Кюстендил"
   if (RX_RESERVES.test(title) && !match._h.reserve && !match._a.reserve) return null;
   let desc = String(raw.desc || '').trim();
   const bare = src && desc.endsWith(src) ? desc.slice(0, -src.length).trim() : desc;

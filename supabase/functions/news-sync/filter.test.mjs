@@ -152,6 +152,7 @@ for (const t of [
 ]) { const r = N.analyze(t, '', bgQ); ok(!!r && (r.scope === 'bg' || r.divs.includes('eur')), 'Bulgarian: ' + t + (r ? ' → ' + r.scope + ' ' + r.divs : ' → left out')); }
 ok(!(N.analyze('Българинът Александър Ангелов ще ръководи мача в испанската трета дивизия', '', bgQ) || { divs: [] }).divs.includes('d3'),
   '"испанската трета дивизия" is not Трета лига');
+ok(!(N.analyze('Сърбин ще ръководи последния мач на България в Лигата на нациите', '', bgQ) || { divs: [] }).divs.includes('eur'), "Bulgaria's national team stays in World only (as before)");
 // not football
 for (const t of ['Карате клуб „Добруджа“ вече има трима съдии', '23-годишен благоевградчанин остава в ареста за кражба на златни накити в Кюстендил'])
   ok(!N.analyze(t, '', bgQ), 'not football: ' + t);
