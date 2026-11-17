@@ -417,6 +417,40 @@
   .mlink{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:3px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));background:color-mix(in srgb,var(--accent) 9%,var(--card));color:var(--text)}
   .mlink:hover{border-color:var(--accent)}
   .mlink b{font-variant-numeric:tabular-nums}
+  /* the forum: documents, films, training */
+  .ftabs>button{font-size:13.5px}
+  .fhint{font-size:13px;color:var(--muted);margin:8px 2px 0}
+  .fsbar{display:flex;gap:8px;align-items:center;margin-top:12px}
+  .fsbar input{flex:1;min-width:0}
+  .fsbar button{flex:0 0 auto;white-space:nowrap}
+  .fnewbox .fform{margin-top:0}
+  .fpost{padding:14px 16px}
+  .fpost.pinned{border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
+  .fph{display:flex;gap:8px;align-items:flex-start}
+  .fph h2{font-size:16.5px;margin:0;line-height:1.35;font-weight:650;overflow-wrap:anywhere}
+  .fmeta{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .fbody{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 0;font-size:14.5px}
+  .fbody a,.fcomments a,.flinks a{color:var(--accent)}
+  .ffiles{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:6px}
+  .ffile{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:6px 10px;align-items:center;padding:7px 8px 7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+  .fext{font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:4px 0;border-radius:6px;color:#fff;background:#64748b;width:44px;text-align:center}
+  .fext.pdf{background:#c5221f} .fext.doc{background:#2b579a} .fext.ppt{background:#c43e1c} .fext.xls{background:#1e7145}
+  .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+  .fsize{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .facts{display:flex;gap:6px}
+  @media (max-width:560px){ .ffile{grid-template-columns:auto minmax(0,1fr) auto} .facts{grid-column:1/-1;justify-content:flex-end} }
+  .fimgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .fimgs img{height:110px;width:auto;max-width:100%;border-radius:8px;display:block;object-fit:cover;background:var(--chip)}
+  .fpost .vgrid{margin:12px 0 4px}
+  .flinks{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:4px;font-size:14px}
+  .flinks li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fpost .actions .on{border-color:var(--accent)}
+  .fpost .actions .n{opacity:.7;margin-left:2px;font-variant-numeric:tabular-nums}
+  select.small{font:inherit;font-size:13px;padding:4px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);max-width:100%}
+  .fcomments{margin-top:12px;border-top:1px solid var(--line);padding-top:4px}
+  .fkeep{display:flex;flex-wrap:wrap;gap:6px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0}
+  .fkeep legend{font-size:13px;color:var(--muted);padding:0 4px}
+  .finfo-t{font-size:15px;margin:8px 0 0}
   table.users{width:100%;border-collapse:collapse;font-size:14px}
   table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   footer{padding:10px 0 40px;font-size:12px;color:var(--muted)}
@@ -494,6 +528,7 @@
     <div id="vBulk" hidden></div>
   </section>
 
+  <section id="view-forum" hidden><div id="forumBox"></div></section>
   <section id="view-account" hidden><div id="accountBox"></div></section>
   <section id="view-admin" hidden><div id="adminBox"></div></section>
 </main>
@@ -1182,6 +1217,7 @@ async function handleSession(session){
   AUTH = 'ready';
   renderAll();
   loadVideos();          // the members' videos depend on who is logged in
+  Forum.load();          // and so does the forum
 }
 // the members' videos, their categories and comments — approved members only (the database enforces it too)
 async function loadVideos(){
@@ -1291,7 +1327,7 @@ async function loadUsers(){
 
 /* ======================= UI: NAVIGATION ======================= */
 let VIEW = 'bg';
-const VIEWS = ['bg', 'world', 'results', 'videos', 'account', 'admin'];
+const VIEWS = ['bg', 'world', 'results', 'videos', 'forum', 'account', 'admin'];
 function go(v){ if (location.hash !== '#' + v) location.hash = v; else applyView(); }
 let SCROLL_TO = null;
 function applyView(){
@@ -1301,10 +1337,13 @@ function applyView(){
   if (vid && VPlayer.isOpen()) { const c = VPlayer.current(); if (c && c.id === vid) return; }
   PENDING_VID = vid;
   SCROLL_TO = v === 'table' ? 'standings' : null;
-  VIEW = v.startsWith('video-') ? 'videos' : v === 'table' ? 'results' : VIEWS.includes(v) ? v : 'bg';   // the table now sits under the results
+  if (v.startsWith('post-')) Forum.want(v.slice(5));                  // #post-12 opens that forum post
+  VIEW = v.startsWith('video-') ? 'videos' : v === 'table' ? 'results' : v === 'forum-play' || v.startsWith('post-') ? 'forum'
+    : VIEWS.includes(v) ? v : 'bg';   // the table now sits under the results
   if (VIEW === 'admin' && !isAdmin() && AUTH !== 'loading') VIEW = 'account';
   $('#view-news').hidden = !(VIEW === 'bg' || VIEW === 'world');
   $('#view-videos').hidden = VIEW !== 'videos';
+  $('#view-forum').hidden = VIEW !== 'forum';
   $('#view-account').hidden = VIEW !== 'account';
   $('#view-admin').hidden = VIEW !== 'admin';
   $('#view-results').hidden = VIEW !== 'results';
@@ -1318,6 +1357,7 @@ function renderNav(){
   const nb = stories.filter(s => s.bg).length, nw = stories.filter(s => s.world).length;
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
   const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', approved() ? VIDEOS.length : null],
+    ['forum', 'Forum', approved() ? Forum.count() : null],
     ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
   if (isAdmin()) items.push(['admin', 'Admin', pending || null]);
   const nav = $('#nav'), html = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
@@ -1336,6 +1376,7 @@ function renderAll(){
   if (VIEW === 'bg' || VIEW === 'world') render();
   else if (VIEW === 'results') { renderResults(); refreshMatchNews(); }
   else if (VIEW === 'videos') renderVideos();
+  else if (VIEW === 'forum') Forum.render();
   else if (VIEW === 'account') renderAccount();
   else if (VIEW === 'admin') renderAdmin();
 }
@@ -1824,7 +1865,7 @@ function openVideo(id, ids, fromHash){
 }
 // new data while the player is open (a comment, the admin's changes, a deleted clip): the clip playing goes on
 function syncPlayer(){
-  if (!window.VPlayer || !VPlayer.isOpen()) return;
+  if (!window.VPlayer || !VPlayer.isOpen() || Forum.playing()) return;   // the forum's videos keep their own queue
   const k = [VID_VER, CATV_VER].join('|');
   if (k === VP_SYNC) return;
   VP_SYNC = k;
@@ -2188,16 +2229,16 @@ async function submitUpload(form){
     say((path ? 'Upload failed: ' : '') + (e.message || e), 'err');
   } finally { btn.disabled = false; bar(null); }
 }
-// upload straight to Supabase Storage, so the progress can be shown
-async function putFile(path, blob, onProgress){
+// upload straight to Supabase Storage, so the progress can be shown (the members' videos, or another bucket: the forum's)
+async function putFile(path, blob, onProgress, bucket = 'videos', type = ''){
   const { data } = await SB.auth.getSession();
   const token = data.session && data.session.access_token;
   await new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
-    x.open('POST', SB_CONF.url + '/storage/v1/object/videos/' + path.split('/').map(encodeURIComponent).join('/'));
+    x.open('POST', SB_CONF.url + '/storage/v1/object/' + bucket + '/' + path.split('/').map(encodeURIComponent).join('/'));
     x.setRequestHeader('Authorization', 'Bearer ' + token);
     x.setRequestHeader('apikey', SB_CONF.key);
-    x.setRequestHeader('Content-Type', blob.type || 'video/mp4');
+    x.setRequestHeader('Content-Type', type || blob.type || 'video/mp4');
     x.setRequestHeader('x-upsert', 'false');
     x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
     x.onload = () => { if (x.status < 300) resolve(); else { let m = 'HTTP ' + x.status; try { const j = JSON.parse(x.responseText); m = j.message || j.error || m; } catch (e) {} reject(new Error(m)); } };
@@ -2305,6 +2346,402 @@ function initVideosUI(){
     else if (f.classList.contains('catrow')) { e.preventDefault(); catAction('rename', f); }
   });
 }
+
+/* ======================= UI: FORUM ======================= */
+// Material for the referees' preparation, for approved members only (the database enforces it): Документи (the Laws of
+// the Game, regulations, presentations), Документални и филми, and Тренировки. Members post a text, files (documents,
+// pictures, short videos — 50 MB each) and links (YouTube, Google Drive, Vimeo…); the author edits or deletes a post, an
+// admin pins it, moves it to another section or deletes it. Comments as on the videos: no one edits them, the author or
+// an admin deletes them. Forum = { load, render, init, want, playing, count }.
+const Forum = (() => {
+  const CATS = [
+    { k: 'docs', label: 'Документи', icon: '📄', hint: 'Правилата на играта, наредби, указания, презентации — PDF, Word, PowerPoint.' },
+    { k: 'films', label: 'Документални и филми', icon: '🎬', hint: 'Документални, игрални и кратки филми и видеа за подготовка.' },
+    { k: 'training', label: 'Тренировки', icon: '🏃', hint: 'Тренировъчни програми, упражнения, физическа подготовка.' },
+  ];
+  const CAT = Object.fromEntries(CATS.map(c => [c.k, c]));
+  const BUCKET = 'forum', MAX_MB = 50, MAX_FILES = 30;
+  // what can be uploaded, by the file's extension (a browser often gives no type for .docx or .pptx)
+  const TYPES = {
+    pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ppt: 'application/vnd.ms-powerpoint', pps: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', ppsx: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    odt: 'application/vnd.oasis.opendocument.text', odp: 'application/vnd.oasis.opendocument.presentation', ods: 'application/vnd.oasis.opendocument.spreadsheet',
+    rtf: 'application/rtf', txt: 'text/plain', csv: 'text/csv',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+    mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+  };
+  const ACCEPT = Object.keys(TYPES).map(e => '.' + e).join(',');
+  // Word, PowerPoint and Excel open in Microsoft's online viewer (it reads the file through a short-lived link);
+  // it takes files up to about 10 MB, bigger ones are downloaded
+  const OFFICE = /^(?:docx?|pptx?|ppsx?|xlsx?)$/, OFFICE_MAX = 10 * 1048576;
+  const GROUP = { pdf: 'pdf', doc: 'doc', docx: 'doc', odt: 'doc', rtf: 'doc', txt: 'doc', ppt: 'ppt', pps: 'ppt', pptx: 'ppt', ppsx: 'ppt', odp: 'ppt',
+    xls: 'xls', xlsx: 'xls', ods: 'xls', csv: 'xls' };
+
+  const S = { posts: [], comments: {}, ver: 0, loaded: false, err: '', signed: {} };
+  const load_ = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const save_ = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  let cat = CAT[load_('bgRefWatch.fcat')] ? load_('bgRefWatch.fcat') : 'docs';
+  let editing = 0, formOpen = false, pending = 0, pushed = false, isPlaying = false, KEY = '', query = '';
+  const open = new Set();     // posts whose comments are shown
+  const THUMBS = {};          // video id -> a picture made from the file (VPlayer keeps them in this browser too)
+
+  const extOf = n => ((String(n || '').match(/\.([a-z0-9]{2,5})$/i) || [])[1] || '').toLowerCase();
+  const isVideoFile = f => /^video\//.test(f.type || TYPES[extOf(f.name)] || '');
+  const isImage = f => /^image\//.test(f.type || TYPES[extOf(f.name)] || '');
+  const size = b => !b ? '' : b < 1048576 ? Math.max(1, Math.round(b / 1024)) + ' KB' : (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + ' MB';
+  const signed = p => (S.signed[p] || {}).url || '';
+  const when = s => new Date(Date.parse(s)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const day = s => new Date(Date.parse(s)).toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' });
+  const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+  // a file name the storage accepts (Latin letters, digits, . _ -): the real name is kept in the post
+  const keyName = n => { const e = extOf(n), b = String(n || '').replace(/\.[a-z0-9]{2,5}$/i, '').normalize('NFKD').replace(/[^\w.-]+/g, '_').replace(/_+/g, '_').replace(/^[_.]+|[_.]+$/g, '').slice(0, 60);
+    return (b || 'file') + (e ? '.' + e : ''); };
+  const linkify = t => esc(t).replace(/https:\/\/[^\s<>"']+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u.length > 60 ? u.slice(0, 57) + '…' : u}</a>`);
+
+  /* ───────────── data ───────────── */
+  async function load(){
+    if (!SB || !approved()) { S.posts = []; S.comments = {}; S.signed = {}; S.loaded = false; S.ver++; return; }
+    const [p, c] = await Promise.all([
+      SB.from('forum_posts').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }).limit(2000),
+      SB.from('forum_comments').select('id,post_id,user_id,author_name,body,created_at').order('created_at', { ascending: true }).limit(20000),
+    ]);
+    if (p.error) { S.err = p.error.message; log('Could not load the forum: ' + p.error.message); S.ver++; renderAll(); return; }
+    S.err = ''; S.loaded = true; S.posts = p.data || [];
+    S.comments = {};
+    if (c.error) log('Could not load the forum comments: ' + c.error.message);
+    else for (const x of c.data || []) (S.comments[x.post_id] || (S.comments[x.post_id] = [])).push(x);
+    await sign();
+    S.ver++;
+    renderAll();
+  }
+  // the files open through signed links that last 6 hours; they are renewed after 5
+  async function sign(){
+    const now = Date.now();
+    const need = [...new Set(S.posts.flatMap(p => (p.files || []).map(f => f.path)))].filter(x => x && (!S.signed[x] || now - S.signed[x].at > 5 * 3600e3));
+    if (!need.length) return false;
+    const { data, error } = await SB.storage.from(BUCKET).createSignedUrls(need, 6 * 3600);
+    if (error) { log('Could not open the forum files: ' + error.message); return false; }
+    for (const r of data || []) if (r.signedUrl && r.path) S.signed[r.path] = { url: r.signedUrl, at: now };
+    return true;
+  }
+  setInterval(async () => { if (S.loaded && approved() && await sign()) { S.ver++; if (VIEW === 'forum') render(); } }, 20 * 60e3);
+
+  /* ───────────── what a post shows ───────────── */
+  // the videos of a post, as the player plays them: its video files, then its video links. A Google Drive file is a
+  // video in Документални и филми; elsewhere it is a link (it may be a document), and opens on Google Drive.
+  function videos(p){
+    const out = [], n = (p.files || []).filter(isVideoFile).length + (p.links || []).length;
+    const name = (t, i) => t || (n > 1 ? `${i + 1}. ${p.title}` : p.title);
+    (p.files || []).forEach((f, i) => {
+      if (!isVideoFile(f)) return;
+      const s = signed(f.path), base = { id: `f${p.id}-f${i}`, title: name(f.name.replace(/\.[a-z0-9]{2,5}$/i, ''), out.length) };
+      out.push(s ? { ...base, kind: 'file', src: s, cors: true, thumbKey: 'fo:' + f.path }
+        : { ...base, kind: 'link', msg: 'Файлът не може да се отвори в момента. Опитайте пак след малко.' });
+    });
+    (p.links || []).forEach((u, i) => {
+      if (driveId(u) && p.category !== 'films') return;
+      const x = vItem({ id: `f${p.id}-l${i}`, title: name('', out.length), video_url: u });
+      if (x.kind !== 'link') out.push(x);
+    });
+    return out;
+  }
+  const plainLinks = p => (p.links || []).filter(u => (driveId(u) && p.category !== 'films') || vItem({ id: 0, video_url: u }).kind === 'link');
+
+  function fileRow(f){
+    const e = extOf(f.name), s = signed(f.path);
+    const view = !s ? '' : ['pdf', 'txt', 'csv'].includes(e) ? s
+      : OFFICE.test(e) && (f.size || 0) <= OFFICE_MAX ? 'https://view.officeapps.live.com/op/view.aspx?src=' + encodeURIComponent(s) : '';
+    const dl = s ? s + (s.includes('?') ? '&' : '?') + 'download=' + encodeURIComponent(f.name) : '';
+    return `<li class="ffile"><span class="fext ${GROUP[e] || ''}">${esc(e.toUpperCase() || 'FILE')}</span>
+      <span class="fname" title="${esc(f.name)}">${esc(f.name)}</span><span class="fsize">${esc(size(f.size))}</span>
+      <span class="facts">${view ? `<a class="btn small" href="${esc(view)}" target="_blank" rel="noopener noreferrer">Отвори</a>` : ''}${dl
+        ? `<a class="btn small${view ? '' : ' primary'}" href="${esc(dl)}" download="${esc(f.name)}" rel="noopener">Изтегли</a>` : '<span class="muted">…</span>'}</span></li>`;
+  }
+  function tile(p, x, i){
+    return `<article class="vtile" data-key="ft ${esc(x.id)}">
+      <button class="vthumb" data-fplay="${esc(p.id)}" data-fi="${i}" aria-label="${esc(x.title)}">
+        ${x.poster || THUMBS[x.id] ? `<img src="${esc(x.poster || THUMBS[x.id])}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`
+          : `<span class="vph" data-fthumb="${esc(p.id)}:${i}">${x.kind === 'link' ? '↗' : ''}</span>`}
+        <span class="vplay">${PLAY_ICON}</span>${x.host ? `<span class="vext">${esc(x.host)}</span>` : ''}</button>
+      <h3 class="vtitle" title="${esc(x.title)}">${esc(x.title)}</h3></article>`;
+  }
+  function commentsHtml(p){
+    const cs = S.comments[p.id] || [];
+    return `<div class="fcomments">
+      <p class="vhint">Виждат ги всички одобрени членове. Коментарът не се редактира — авторът или администратор може да го изтрие.</p>
+      ${cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'член')}</b> · ${esc(when(c.created_at))}
+        ${USER && (c.user_id === USER.id || isAdmin()) ? `<button class="small link" data-fcdel="${esc(c.id)}">изтрий</button>` : ''}</div><div>${linkify(c.body)}</div></div>`).join('')}
+      <form class="cform fcform" id="fc-${esc(p.id)}" data-post="${esc(p.id)}"><textarea name="body" maxlength="4000" required placeholder="Напишете коментар…"></textarea>
+        <div class="bar"><button class="small primary" type="submit">Публикувай</button></div><div class="msg" role="status"></div></form>
+    </div>`;
+  }
+  function card(p){
+    if (editing === p.id) return `<article class="card fpost editing" id="post-${esc(p.id)}" data-key="fp ${esc(p.id)}">${form(p)}</article>`;
+    const mine = !!(USER && p.user_id === USER.id), admin = isAdmin(), cs = S.comments[p.id] || [];
+    const files = p.files || [], docs = files.filter(f => !isVideoFile(f) && !isImage(f)), imgs = files.filter(isImage);
+    const vids = videos(p), links = plainLinks(p), edited = Date.parse(p.updated_at) - Date.parse(p.created_at) > 60e3;
+    const shown = open.has(p.id);
+    return `<article class="card fpost${p.pinned ? ' pinned' : ''}" id="post-${esc(p.id)}" data-key="fp ${esc(p.id)}">
+      <div class="fph">${p.pinned ? '<span class="fpin" title="Закачено най-горе">📌</span>' : ''}<h2>${esc(p.title)}</h2></div>
+      <div class="fmeta">${esc(p.author_name || 'член')} · ${esc(day(p.created_at))}${edited ? ' · редактирано' : ''}</div>
+      ${p.body ? `<div class="fbody">${linkify(p.body)}</div>` : ''}
+      ${docs.length ? `<ul class="ffiles">${docs.map(fileRow).join('')}</ul>` : ''}
+      ${imgs.length ? `<div class="fimgs">${imgs.map(f => { const s = signed(f.path);
+        return s ? `<a href="${esc(s)}" target="_blank" rel="noopener noreferrer" title="${esc(f.name)}"><img src="${esc(s)}" alt="${esc(f.name)}" loading="lazy" decoding="async"></a>` : ''; }).join('')}</div>` : ''}
+      ${vids.length ? `<div class="vgrid">${vids.map((x, i) => tile(p, x, i)).join('')}</div>` : ''}
+      ${links.length ? `<ul class="flinks">${links.map(u => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer">↗ ${esc(driveId(u) || /drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\//.test(u) ? 'Google Drive' : host(u))}</a>
+        <span class="muted">${esc(u.replace(/^https:\/\/(www\.)?/, '').slice(0, 70))}</span></li>`).join('')}</ul>` : ''}
+      <div class="actions">
+        <button class="small${shown ? ' on' : ''}" data-fcm="${esc(p.id)}" aria-expanded="${shown}">💬 Коментари <span class="n">${cs.length}</span></button>
+        <button class="small" data-fcopy="${esc(p.id)}">🔗 Линк</button>
+        ${mine ? `<button class="small" data-fedit="${esc(p.id)}">Редактирай</button>` : ''}
+        ${admin ? `<button class="small" data-fpin="${esc(p.id)}">${p.pinned ? 'Откачи' : '📌 Закачи'}</button>
+          <select class="small fmove" data-fmove="${esc(p.id)}" aria-label="Премести в раздел">${CATS.map(c => `<option value="${c.k}"${c.k === p.category ? ' selected' : ''}>${c.k === p.category ? 'Раздел: ' : 'Премести в '}${esc(c.label)}</option>`).join('')}</select>` : ''}
+        ${mine || admin ? `<button class="small" data-fdel="${esc(p.id)}">Изтрий</button>` : ''}
+      </div>
+      ${shown ? commentsHtml(p) : ''}
+    </article>`;
+  }
+  // the new post's form, or a post being edited
+  function form(p){
+    const id = p ? p.id : 0, c = p ? p.category : cat, k = id ? 'fe-' + id : 'fnew';
+    const keep = p ? (p.files || []) : [];
+    return `<form class="form fform" id="${k}" data-id="${id}" data-key="${k}">
+      ${id ? '<b>Редактиране на публикацията</b>' : ''}
+      <label>Раздел<select name="category">${CATS.map(x => `<option value="${x.k}"${x.k === c ? ' selected' : ''}>${x.icon} ${esc(x.label)}</option>`).join('')}</select></label>
+      <label>Заглавие<input type="text" name="title" maxlength="200" required value="${esc(p ? p.title : '')}" placeholder="Например: Правила на играта 2026/27"></label>
+      <label>Текст<textarea name="body" maxlength="10000" rows="4" placeholder="За какво е, за кого, как да се използва…">${esc(p ? p.body || '' : '')}</textarea></label>
+      ${keep.length ? `<fieldset class="fkeep"><legend>Прикачени файлове — отметнете тези, които да се махнат</legend>${keep.map((f, i) =>
+        `<label class="ck"><input type="checkbox" name="drop" value="${i}"> ${esc(f.name)} <span class="muted">${esc(size(f.size))}</span></label>`).join('')}</fieldset>` : ''}
+      <label>${id ? 'Добави файлове' : 'Файлове'} — PDF, Word, PowerPoint, Excel, снимки или кратки видеа, до ${MAX_MB} MB всеки
+        <input type="file" name="files" multiple accept="${ACCEPT}"></label>
+      <label>Линкове, по един на ред — YouTube, Google Drive, Vimeo, Facebook, Vbox7, сайтове
+        <textarea name="links" rows="3" placeholder="https://www.youtube.com/watch?v=…&#10;https://drive.google.com/file/d/…/view">${esc(p ? (p.links || []).join('\n') : '')}</textarea></label>
+      <p class="muted small">Дълъг филм: качете го в Google Drive (споделен „Всеки с линка“) или в YouTube и поставете линка — на сайта се качват файлове до ${MAX_MB} MB, а мястото е ограничено.</p>
+      <div class="bar"><button class="primary" type="submit">${id ? 'Запази' : 'Публикувай'}</button>${id ? '<button type="button" data-fcancel>Отказ</button>' : ''}</div>
+      <div class="prog" hidden><div></div></div>
+      <div class="msg" role="status"></div>
+    </form>`;
+  }
+
+  /* ───────────── the page ───────────── */
+  function match(p, q){
+    if (!q) return true;
+    return norm([p.title, p.body, p.author_name, ...(p.files || []).map(f => f.name), ...(p.links || [])].join(' ')).includes(q);
+  }
+  function render(){
+    const box = $('#forumBox'); if (!box) return;
+    const member = approved();
+    let html;
+    if (AUTH === 'off' || AUTH === 'error') html = '<div class="warn">Форумът има нужда от връзката с базата данни, която не е настроена на този сайт.</div>';
+    else if (AUTH === 'loading') html = '<p class="muted">Зареждане…</p>';
+    else if (!USER) html = `<div class="card"><b>Само за членове</b><p class="muted">Форумът — документи, филми и тренировки за подготовка на съдиите — е за членовете, одобрени от администратора. <a href="#account">Влезте или се регистрирайте</a>.</p></div>`;
+    else if (!member) html = `<div class="card"><b>Очаква одобрение</b><p class="muted">Профилът ви е регистриран. След като администраторът го одобри, ще виждате форума и ще можете да публикувате.</p></div>`;
+    if (html) { KEY = ''; if (box._html !== html) box.innerHTML = box._html = html; return; }
+    box._html = '';
+    // a #post-12 link: that post's section, its comments open
+    const want = pending && S.posts.find(p => p.id === pending);
+    if (want) { cat = want.category; open.add(want.id); save_('bgRefWatch.fcat', cat); }
+    const q = norm(query);
+    const key = [S.ver, cat, q, editing, formOpen, [...open].join(','), USER.id, isAdmin(), S.err, S.loaded].join('|');
+    if (key !== KEY || !box.querySelector('#fList')) {
+      KEY = key;
+      const list = S.posts.filter(p => p.category === cat && match(p, q));
+      const counts = Object.fromEntries(CATS.map(c => [c.k, S.posts.filter(p => p.category === c.k && match(p, q)).length]));
+      const c = CAT[cat];
+      patchHtml(box, `
+        <p class="intro">Материали за подготовка на съдиите — само за одобрените членове.</p>
+        <div class="seg ftabs" role="tablist" aria-label="Раздели на форума">${CATS.map(x => `<button role="tab" data-fcat="${x.k}" class="${x.k === cat ? 'on' : ''}" aria-selected="${x.k === cat}">${x.icon} ${esc(x.label)}<span class="n">${counts[x.k]}</span></button>`).join('')}</div>
+        <p class="fhint">${esc(c.hint)}</p>
+        <div class="fsbar"><input id="fq" type="search" placeholder="Търси във форума…" aria-label="Търси във форума">
+          <button class="primary${formOpen ? ' on' : ''}" data-fnew aria-expanded="${formOpen}">${formOpen ? '✕ Затвори' : '＋ Нова публикация'}</button></div>
+        ${formOpen ? `<div class="card fnewbox" data-key="fnewbox">${form(null)}</div>` : ''}
+        ${S.err ? `<div class="warn">Форумът не се зареди: ${esc(S.err)}</div>` : ''}
+        <div id="fList" data-key="fList">${!S.loaded && !S.err ? '<p class="muted">Зареждане…</p>'
+          : list.length ? list.map(card).join('')
+          : `<div class="empty">${q ? 'Нищо не е намерено в този раздел.' : `Още няма публикации в „${esc(c.label)}“.`}</div>`}</div>`);
+      fillThumbs(box);
+    }
+    const fq = box.querySelector('#fq'); if (fq && fq.value !== query && document.activeElement !== fq) fq.value = query;
+    if (want) {
+      pending = 0;
+      const el = document.getElementById('post-' + want.id);
+      if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    }
+  }
+  function fillThumbs(root){
+    root.querySelectorAll('[data-fthumb]:not([data-done])').forEach(el => {
+      el.dataset.done = '1';
+      const [pid, i] = el.dataset.fthumb.split(':').map(Number), p = S.posts.find(x => x.id === pid);
+      const x = p && videos(p)[i]; if (!x || x.kind === 'link') return;
+      VPlayer.thumb({ ...x, poster: null }).then(u => { if (u) THUMBS[x.id] = u; if (!u || !el.isConnected) return; const img = new Image(); img.alt = ''; img.src = u; el.replaceWith(img); });
+    });
+  }
+
+  /* ───────────── playing a post's videos ───────────── */
+  function play(pid, i){
+    const p = S.posts.find(x => x.id === pid), items = p ? videos(p) : [];
+    if (!items.length) return;
+    isPlaying = true;
+    if (location.hash !== '#forum-play') { history.pushState({ vp: 1 }, '', '#forum-play'); pushed = true; } else pushed = false;
+    VPlayer.open({ items, index: Math.min(i, items.length - 1), details: (x, box) => { box.innerHTML = infoHtml(p); },
+      onClose: silent => {
+        isPlaying = false;
+        if (silent) { pushed = false; return; }
+        if (pushed) { pushed = false; history.back(); } else history.replaceState(null, '', '#forum');
+      } });
+  }
+  function infoHtml(p){
+    const docs = (p.files || []).filter(f => !isVideoFile(f) && !isImage(f));
+    return `<div class="vinfo">
+      <div class="vmeta"><span>${esc(CAT[p.category].icon + ' ' + CAT[p.category].label)}</span><span>·</span><span>${esc(p.author_name || 'член')}</span><span>·</span><span>${esc(day(p.created_at))}</span></div>
+      <h3 class="finfo-t">${esc(p.title)}</h3>
+      ${p.body ? `<p class="desc">${linkify(p.body)}</p>` : ''}
+      ${docs.length ? `<ul class="ffiles">${docs.map(fileRow).join('')}</ul>` : ''}
+      <div class="actions"><button class="small" data-fgo="${esc(p.id)}">Към публикацията и коментарите</button></div></div>`;
+  }
+
+  /* ───────────── saving ───────────── */
+  async function submit(f){
+    const fd = new FormData(f), id = Number(f.dataset.id) || 0, old = id ? S.posts.find(p => p.id === id) : null;
+    const msg = f.querySelector('.msg'), btn = f.querySelector('button[type=submit]'), prog = f.querySelector('.prog');
+    const say = (t, cls) => { msg.textContent = t; msg.className = 'msg ' + (cls || ''); };
+    const bar = x => { prog.hidden = x == null; if (x != null) prog.firstElementChild.style.width = Math.round(x * 100) + '%'; };
+    const title = String(fd.get('title') || '').trim(), body = String(fd.get('body') || '').trim();
+    const category = CAT[fd.get('category')] ? String(fd.get('category')) : cat;
+    const links = [...new Set(String(fd.get('links') || '').split(/\s+/).map(s => s.trim()).filter(Boolean))];
+    const add = fd.getAll('files').filter(x => x && x.size);
+    const drop = new Set(fd.getAll('drop').map(Number));
+    const keep = old ? (old.files || []).filter((x, i) => !drop.has(i)) : [];
+    const gone = old ? (old.files || []).filter((x, i) => drop.has(i)).map(x => x.path) : [];
+    if (title.length < 2) return say('Напишете заглавие.', 'err');
+    const bad = links.find(l => !/^https:\/\/\S+$/i.test(l));
+    if (bad) return say('Линковете трябва да започват с https:// — проверете: ' + bad.slice(0, 80), 'err');
+    if (links.length > MAX_FILES) return say(`Най-много ${MAX_FILES} линка в една публикация.`, 'err');
+    if (!body && !links.length && !add.length && !keep.length) return say('Добавете текст, файл или линк.', 'err');
+    if (keep.length + add.length > MAX_FILES) return say(`Най-много ${MAX_FILES} файла в една публикация.`, 'err');
+    const wrong = add.find(x => !TYPES[extOf(x.name)]);
+    if (wrong) return say(`„${wrong.name}“ не може да се качи: качват се PDF, Word, PowerPoint, Excel, OpenDocument, текст, снимки и видеа MP4, WebM, MOV.`, 'err');
+    const big = add.find(x => x.size > MAX_MB * 1048576);
+    if (big) return say(`„${big.name}“ е ${size(big.size)} — най-много ${MAX_MB} MB.${isVideoFile({ name: big.name }) ? ' Качете видеото в Google Drive (споделено „Всеки с линка“) или в YouTube и поставете линка.' : ''}`, 'err');
+    btn.disabled = true;
+    const up = [];
+    try {
+      // the files, one after another, with the progress of them all
+      const total = add.reduce((a, x) => a + x.size, 0) || 1;
+      let done = 0;
+      for (const [i, x] of add.entries()) {
+        const e = extOf(x.name), path = `${USER.id}/${Date.now()}-${i}-${keyName(x.name)}`;
+        say(add.length > 1 ? `Качване ${i + 1} от ${add.length}: ${x.name}…` : `Качване: ${x.name}…`);
+        bar(done / total);
+        await putFile(path, x, p => bar((done + p * x.size) / total), BUCKET, TYPES[e]);
+        done += x.size;
+        up.push({ path, name: String(x.name).slice(0, 255), size: x.size, type: TYPES[e] });
+      }
+      bar(null);
+      say('Запазване…');
+      const row = { category, title: title.slice(0, 200), body: body ? body.slice(0, 10000) : null, links, files: [...keep, ...up] };
+      const r = id ? await SB.from('forum_posts').update(row).eq('id', id).select('id') : await SB.from('forum_posts').insert(row).select('id');
+      if (r.error) throw r.error;
+      if (!r.data || !r.data.length) throw new Error('публикацията не е запазена (нямате права за нея)');
+      // what was taken off an edited post goes from the storage too
+      if (gone.length) { const { error } = await SB.storage.from(BUCKET).remove(gone); if (error) log('Forum files not removed: ' + error.message); }
+      const newId = r.data[0].id;
+      if (id) editing = 0; else { f.reset(); formOpen = false; }
+      cat = category; save_('bgRefWatch.fcat', cat);
+      pending = newId;
+      await load();
+      toast(id ? 'Публикацията е запазена.' : 'Публикувано във форума.');
+    } catch (e) {
+      if (up.length) await SB.storage.from(BUCKET).remove(up.map(x => x.path));
+      bar(null);
+      say('Не е запазено: ' + (e.message || e), 'err');
+    } finally { btn.disabled = false; }
+  }
+  async function remove(id){
+    const p = S.posts.find(x => x.id === id); if (!p) return;
+    const n = (p.files || []).length;
+    if (!confirm(`Да изтрия ли публикацията „${p.title}“${n ? ` и ${n === 1 ? 'файла ѝ' : `${n}-те ѝ файла`}` : ''}? Коментарите също се изтриват.`)) return;
+    const { error } = await SB.from('forum_posts').delete().eq('id', id);
+    if (error) { alert('Не е изтрита: ' + error.message); return; }
+    if (n) { const r = await SB.storage.from(BUCKET).remove(p.files.map(f => f.path)); if (r.error) log('Forum files not removed: ' + r.error.message); }
+    open.delete(id);
+    await load();
+    toast('Публикацията е изтрита.');
+  }
+  async function setPost(id, patch, done){
+    const { data, error } = await SB.from('forum_posts').update(patch).eq('id', id).select('id');
+    if (error || !data || !data.length) { alert('Не е запазено: ' + (error ? error.message : 'нямате права')); return; }
+    await load();
+    if (done) toast(done);
+  }
+  async function comment(f){
+    const body = String(new FormData(f).get('body') || '').trim(), pid = Number(f.dataset.post);
+    const msg = f.querySelector('.msg'), btn = f.querySelector('button[type=submit]');
+    if (!body) return;
+    btn.disabled = true;
+    const { error } = await SB.from('forum_comments').insert({ post_id: pid, body: body.slice(0, 4000) });
+    btn.disabled = false;
+    if (error) { msg.textContent = 'Коментарът не е публикуван: ' + error.message; msg.className = 'msg err'; return; }
+    f.reset();
+    await load();
+  }
+  async function uncomment(id){
+    if (!confirm('Да изтрия ли коментара?')) return;
+    const { error } = await SB.from('forum_comments').delete().eq('id', id);
+    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    await load();
+  }
+
+  /* ───────────── events ───────────── */
+  function init(){
+    const view = $('#view-forum');
+    view.addEventListener('click', e => {
+      const t = e.target;
+      const c = t.closest('[data-fcat]'); if (c) { cat = c.dataset.fcat; save_('bgRefWatch.fcat', cat); editing = 0;
+        const sel = view.querySelector('#fnew select[name=category]'); if (sel && !sel.dataset.touched) sel.value = cat; render(); return; }
+      if (t.closest('[data-fnew]')) { formOpen = !formOpen; render(); if (formOpen) { const i = view.querySelector('#fnew input[name=title]'); if (i) i.focus(); } return; }
+      const pl = t.closest('[data-fplay]'); if (pl) { play(Number(pl.dataset.fplay), Number(pl.dataset.fi) || 0); return; }
+      const cm = t.closest('[data-fcm]'); if (cm) { const id = Number(cm.dataset.fcm); open.has(id) ? open.delete(id) : open.add(id); render();
+        if (open.has(id)) { const ta = view.querySelector(`#fc-${id} textarea`); if (ta) ta.focus({ preventScroll: true }); } return; }
+      const cp = t.closest('[data-fcopy]');
+      if (cp) { const url = location.origin + location.pathname + '#post-' + cp.dataset.fcopy, ok = () => toast('Линкът е копиран.');
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, () => prompt('Линк към публикацията:', url)); else prompt('Линк към публикацията:', url); return; }
+      const ed = t.closest('[data-fedit]'); if (ed) { editing = Number(ed.dataset.fedit); render(); const i = view.querySelector(`#fe-${editing} input[name=title]`); if (i) i.focus(); return; }
+      if (t.closest('[data-fcancel]')) { const id = editing; editing = 0; render(); const el = document.getElementById('post-' + id); if (el) el.scrollIntoView({ block: 'nearest' }); return; }
+      const d = t.closest('[data-fdel]'); if (d) { remove(Number(d.dataset.fdel)); return; }
+      const pn = t.closest('[data-fpin]'); if (pn) { const p = S.posts.find(x => x.id === Number(pn.dataset.fpin)); if (p) setPost(p.id, { pinned: !p.pinned }, p.pinned ? 'Откачено.' : 'Закачено най-горе.'); return; }
+      const cd = t.closest('[data-fcdel]'); if (cd) { uncomment(Number(cd.dataset.fcdel)); return; }
+    });
+    view.addEventListener('change', e => {
+      const mv = e.target.closest('[data-fmove]');
+      if (mv) { const id = Number(mv.dataset.fmove), c = mv.value; setPost(id, { category: c }, `Преместено в „${CAT[c].label}“.`).then(() => { cat = c; save_('bgRefWatch.fcat', cat); pending = id; render(); }); return; }
+      if (e.target.matches('#fnew select[name=category]')) e.target.dataset.touched = '1';
+    });
+    view.addEventListener('input', e => { if (e.target.id === 'fq') { query = e.target.value; render(); } });
+    view.addEventListener('submit', e => {
+      const f = e.target;
+      if (f.classList.contains('fform')) { e.preventDefault(); submit(f); }
+      else if (f.classList.contains('fcform')) { e.preventDefault(); comment(f); }
+    });
+    // inside the player: back to the post
+    document.addEventListener('click', e => {
+      const g = e.target.closest('.vp [data-fgo]'); if (!g) return;
+      const id = Number(g.dataset.fgo);
+      VPlayer.close(true); pushed = false; open.add(id); pending = id;
+      history.replaceState(null, '', '#forum'); applyView();
+    });
+  }
+
+  return {
+    load, render, init,
+    want: id => { pending = Number(id) || 0; },
+    playing: () => isPlaying && VPlayer.isOpen(),
+    count: () => S.posts.length,
+  };
+})();
 
 /* ======================= UI: ACCOUNT ======================= */
 let ACC_TAB = 'login', ACC_KEY = '';
@@ -3765,6 +4202,7 @@ function initUI(){
   bindStoryEvents($('#feed'), render);
 
   initVideosUI();
+  Forum.init();
   bindPlayerActions();
   // a clip's tile anywhere on the page (the gallery, a story) opens the player
   document.addEventListener('click', e => {
@@ -3821,7 +4259,7 @@ setInterval(() => {
 }, 20e3);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
 
-window.BGRW = { loadNews, buildStories, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
+window.BGRW = { forum: Forum, loadNews, buildStories, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
 })();
 </script>
 </body>

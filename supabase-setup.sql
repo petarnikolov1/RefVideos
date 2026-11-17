@@ -328,12 +328,128 @@ create policy "videos bucket: owner or admin delete" on storage.objects
   for delete to authenticated
   using (bucket_id = 'videos' and ((storage.foldername(name))[1] = (select auth.uid())::text or private.is_admin()));
 
+-- ───────────────────────── forum (approved members) ─────────────────────────
+-- Material for the referees' preparation, in three sections: documents (the Laws of the Game, regulations), documentaries
+-- and films, and training. Approved members read, post and comment; the author edits or deletes a post; an admin pins it,
+-- moves it to another section or deletes it, but doesn't change what the author wrote. Comments, as on the videos:
+-- no one edits them, the author or an admin deletes them.
+create table if not exists public.forum_posts (
+  id          bigint generated always as identity primary key,
+  category    text not null check (category in ('docs', 'films', 'training')),
+  title       text not null check (char_length(btrim(title)) between 2 and 200),
+  body        text check (body is null or char_length(body) <= 10000),
+  links       text[] not null default '{}' check (cardinality(links) <= 30),
+  files       jsonb not null default '[]'::jsonb check (jsonb_typeof(files) = 'array' and jsonb_array_length(files) <= 30),
+  pinned      boolean not null default false,
+  user_id     uuid default auth.uid() references auth.users(id) on delete set null,
+  author_name text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists forum_posts_cat_idx on public.forum_posts (category, pinned desc, created_at desc);
+create index if not exists forum_posts_user_idx on public.forum_posts (user_id);
+alter table public.forum_posts enable row level security;
+
+-- the author is whoever posts it; an admin who isn't the author can only pin it or move it; links are https; the
+-- files are in the author's own folder of the forum bucket ({ path, name, size, type })
+create or replace function public.forum_posts_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare f jsonb;
+begin
+  if tg_op = 'INSERT' then
+    new.user_id := auth.uid();
+    new.author_name := (select display_name from public.profiles where id = auth.uid());
+    new.created_at := now(); new.updated_at := now();
+    if not private.is_admin() then new.pinned := false; end if;
+  else
+    new.user_id := old.user_id; new.author_name := old.author_name; new.created_at := old.created_at;
+    if old.user_id is distinct from auth.uid() then
+      new.title := old.title; new.body := old.body; new.links := old.links; new.files := old.files;
+    end if;
+    if not private.is_admin() then new.pinned := old.pinned; end if;
+    new.updated_at := case when (new.title, new.body, new.links, new.files) is distinct from (old.title, old.body, old.links, old.files)
+      then now() else old.updated_at end;
+  end if;
+  if exists (select 1 from unnest(new.links) l where l !~ '^https://\S+$' or char_length(l) > 2000) then
+    raise exception 'A link must start with https://';
+  end if;
+  for f in select value from jsonb_array_elements(new.files) loop
+    if jsonb_typeof(f) <> 'object' or new.user_id is null or coalesce(f->>'path', '') not like new.user_id::text || '/%'
+       or char_length(coalesce(f->>'name', '')) not between 1 and 255 then
+      raise exception 'A file must be in the author''s own folder';
+    end if;
+  end loop;
+  return new;
+end; $$;
+drop trigger if exists forum_posts_guard on public.forum_posts;
+create trigger forum_posts_guard before insert or update on public.forum_posts
+  for each row execute function public.forum_posts_guard();
+
+drop policy if exists "forum posts: approved members read" on public.forum_posts;
+create policy "forum posts: approved members read" on public.forum_posts for select to authenticated using (private.is_approved());
+drop policy if exists "forum posts: approved members post" on public.forum_posts;
+create policy "forum posts: approved members post" on public.forum_posts for insert to authenticated with check (private.is_approved());
+drop policy if exists "forum posts: author or admin update" on public.forum_posts;
+create policy "forum posts: author or admin update" on public.forum_posts for update to authenticated
+  using ((user_id = (select auth.uid()) and private.is_approved()) or private.is_admin())
+  with check ((user_id = (select auth.uid()) and private.is_approved()) or private.is_admin());
+drop policy if exists "forum posts: author or admin delete" on public.forum_posts;
+create policy "forum posts: author or admin delete" on public.forum_posts for delete to authenticated
+  using (user_id = (select auth.uid()) or private.is_admin());
+
+create table if not exists public.forum_comments (
+  id          bigint generated always as identity primary key,
+  post_id     bigint not null references public.forum_posts(id) on delete cascade,
+  user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  author_name text,
+  body        text not null check (char_length(btrim(body)) between 1 and 4000),
+  created_at  timestamptz not null default now()
+);
+create index if not exists forum_comments_post_idx on public.forum_comments (post_id, created_at);
+create index if not exists forum_comments_user_idx on public.forum_comments (user_id);
+alter table public.forum_comments enable row level security;
+drop trigger if exists forum_comments_set_author on public.forum_comments;
+create trigger forum_comments_set_author before insert on public.forum_comments
+  for each row execute function public.comments_set_author();
+
+drop policy if exists "forum comments: approved members read" on public.forum_comments;
+create policy "forum comments: approved members read" on public.forum_comments for select to authenticated using (private.is_approved());
+drop policy if exists "forum comments: approved members write" on public.forum_comments;
+create policy "forum comments: approved members write" on public.forum_comments for insert to authenticated with check (private.is_approved());
+drop policy if exists "forum comments: author or admin delete" on public.forum_comments;
+create policy "forum comments: author or admin delete" on public.forum_comments for delete to authenticated
+  using (user_id = (select auth.uid()) or private.is_admin());
+-- (no update policy: a comment can't be edited — only deleted)
+
+-- the forum's files: documents, pictures and short videos, 50 MB each (the free plan's limit); private — approved members
+-- open them through short-lived signed links
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('forum', 'forum', false, 52428800, array[
+  'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.presentationml.slideshow', 'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.presentation', 'application/vnd.oasis.opendocument.spreadsheet', 'application/rtf',
+  'text/plain', 'text/csv', 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "forum bucket: approved members read" on storage.objects;
+create policy "forum bucket: approved members read" on storage.objects for select to authenticated
+  using (bucket_id = 'forum' and private.is_approved());
+drop policy if exists "forum bucket: approved upload to own folder" on storage.objects;
+create policy "forum bucket: approved upload to own folder" on storage.objects for insert to authenticated
+  with check (bucket_id = 'forum' and private.is_approved() and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists "forum bucket: owner or admin delete" on storage.objects;
+create policy "forum bucket: owner or admin delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'forum' and ((storage.foldername(name))[1] = (select auth.uid())::text or private.is_admin()));
+
 -- ───────────────────────── function permissions ─────────────────────────
 -- trigger functions are internal; the two checks are only needed by logged-in users
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.videos_set_uploader() from public, anon, authenticated;
 revoke execute on function public.comments_set_author() from public, anon, authenticated;
 revoke execute on function public.videos_guard() from public, anon, authenticated;
+revoke execute on function public.forum_posts_guard() from public, anon, authenticated;
 revoke execute on function private.is_admin() from public, anon;
 revoke execute on function private.is_approved() from public, anon;
 drop function if exists public.is_admin();
@@ -342,9 +458,9 @@ grant execute on function private.is_admin() to authenticated;
 grant execute on function private.is_approved() to authenticated;
 
 -- ───────────────────────── Google Drive clips for the video player ─────────────────────────
--- Is this Google Drive file one of the site's videos? The site's Cloudflare worker (/drive/video) streams Drive files to
--- the page's own player (Google refuses them to other sites' pages) and asks this first, so it serves the site's clips
--- only. Says yes or no and nothing else; the videos themselves stay members-only.
+-- Is this Google Drive file one of the site's videos (or a link in a forum post)? The site's Cloudflare worker
+-- (/drive/video) streams Drive files to the page's own player (Google refuses them to other sites' pages) and asks this
+-- first, so it serves the site's clips only. Says yes or no and nothing else; the videos themselves stay members-only.
 create or replace function public.video_drive_ok(p_id text)
 returns boolean
 language sql
@@ -353,7 +469,8 @@ security definer
 set search_path = public
 as $$
   select coalesce(p_id ~ '^[A-Za-z0-9_-]{10,100}$', false)
-     and exists (select 1 from public.videos v where v.video_url is not null and position(p_id in v.video_url) > 0);
+     and (exists (select 1 from public.videos v where v.video_url is not null and position(p_id in v.video_url) > 0)
+       or exists (select 1 from public.forum_posts p where position(p_id in array_to_string(p.links, ' ')) > 0));
 $$;
 revoke all on function public.video_drive_ok(text) from public;
 grant execute on function public.video_drive_ok(text) to anon, authenticated;
