@@ -309,6 +309,16 @@ const FOREIGN_NAMES = CS(['Порто', 'Бенфика', 'Брага', 'Спо�
 const FOREIGN_TIER = new RegExp(B + '(?:испан|италиан|англ|герман|франц|португал|холанд|турск|гръцк|румън|сръбск|руск|хърват|кипърск|полск|чешк)\\p{L}* ' +
   '(?:(?:трет|втор|първ)\\p{L}* (?:дивизи|лига|ниво)|(?:шест|пет|четвърт)\\p{L}* (?:дивизи|ниво))\\p{L}*', 'giu');
 const isForeign = s => RX.foreign.test(s) || RX.foreignMore.test(s) || FOREIGN_CS.test(s) || FOREIGN_NAMES.test(s);
+// "Обявиха съдията за мача с Исландия": in a Bulgarian paper, "the match with <country>" is Bulgaria's own match (World,
+// national teams), as long as nothing else in the headline is foreign ("Ирландия загуби срещу Исландия" is not)
+const VS_COUNTRY = new RegExp(B + '(?:мач|двубо|срещ|контрол|гостуван|реванш|дуел|сблъсък)\\p{L}* (?:с|със|срещу|против) (?:' +
+  RX.foreign.source + '|' + RX.foreignMore.source + ')', 'giu');
+// the referee's nationality is not whose match it is ("Испанец ще свири мача с Исландия", "Съдията на мача срещу Испания е италианец")
+const CTRY = '(?:' + RX.foreign.source + '|' + RX.foreignMore.source + ')';
+const REF_NAT = new RegExp(CTRY + '(?: \\p{L}+)? (?:ще )?(?:съди|рефер|арбит|бригад|свир|ръковод)\\p{L}*|' +
+  B + '(?:съди|рефер|арбит|бригад)\\p{L}*(?: \\p{L}+){0,5} (?:е|са|ще бъде|ще са) ' + CTRY, 'giu');
+const vsBulgaria = title => { VS_COUNTRY.lastIndex = 0; if (!VS_COUNTRY.test(title)) return false;
+  const rest = title.replace(VS_COUNTRY, ' ').replace(/\s+/g, ' ').replace(REF_NAT, ' '); return !isForeign(rest) && !RX.ruFoot.test(rest); };
 const WGT = { red: 3, penalty: 3, offside: 2, var: 3, foul: 2, committee: 2, discipline: 2, fights: 3, dispute: 3 };
 const DIRECT = ['red', 'penalty', 'offside', 'var', 'foul'];       // decisions a referee makes on the pitch
 
@@ -337,6 +347,7 @@ export function analyze(title, desc, q) {
   const bgTitle = RX.league1.test(titleL) || RX.league2.test(titleL) || RX.league3.test(titleL) || RX.cup.test(titleL) || clubsIn(title).length > 0 ||
     CLUBS.some(c => c.re.test(title) && !(ru && c.k === 'cska')) || REFNAMES.test(title) || RX.bgOrg.test(title) || RX.bgRef.test(title) || RX.bgNat.test(title);
   const foreignTitle = isForeign(title) || RX.ruFoot.test(title);
+  if (foreignTitle && !bgTitle && vsBulgaria(title) && !comps.includes('nat')) comps.push('nat');   // Bulgaria's own match
 
   let scope;
   if (anyLeague && !(foreignTitle && !bgTitle)) scope = 'bg';

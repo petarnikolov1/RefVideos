@@ -155,6 +155,12 @@ for (const t of [
 ok(!(N.analyze('Българинът Александър Ангелов ще ръководи мача в испанската трета дивизия', '', bgQ) || { divs: [] }).divs.includes('d3'),
   '"испанската трета дивизия" is not Трета лига');
 ok(!(N.analyze('Сърбин ще ръководи последния мач на България в Лигата на нациите', '', bgQ) || { divs: [] }).divs.includes('eur'), "Bulgaria's national team stays in World only (as before)");
+// "the match with <country>" in a Bulgarian paper is Bulgaria's own match: World, national teams
+for (const t of ['Обявиха съдията за мача с Исландия', 'Съдията на мача срещу Испания е италианец']) {
+  const r = N.analyze(t, '', bgQ); ok(!!r && r.scope === 'world' && r.comps.includes('nat'), "Bulgaria's match: " + t + (r ? ' → ' + r.scope + ' ' + r.comps : ' → left out'));
+}
+for (const t of ['Ирландия загуби срещу Исландия след грешка на съдията', 'Холанд с хеттрик в мача с Исландия, съдията отмени гол'])
+  ok(!N.analyze(t, '', bgQ), 'two foreign sides, not Bulgaria: ' + t);
 // not football
 for (const t of ['Карате клуб „Добруджа“ вече има трима съдии', '23-годишен благоевградчанин остава в ареста за кражба на златни накити в Кюстендил'])
   ok(!N.analyze(t, '', bgQ), 'not football: ' + t);
