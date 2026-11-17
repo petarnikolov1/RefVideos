@@ -1000,7 +1000,7 @@ function videoLink(u){
   if (/^https?:$/.test(url.protocol) && /(^|\.)(twitter|x)\.com$/.test(url.hostname) && /\/status\/\d+/.test(url.pathname)) return { label:'Video post on X', href:u };
   return null;
 }
-const playerHtml = e => `<div class="player"><iframe src="${esc(e.src)}" loading="lazy" title="${esc(e.kind)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"${e.sandbox ? ' sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"' : ''}></iframe></div>`;
+const playerHtml = e => `<div class="player" data-key="pl ${esc(e.key)}"><iframe src="${esc(e.src)}" loading="lazy" title="${esc(e.kind)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"${e.sandbox ? ' sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"' : ''}></iframe></div>`;
 const fileHtml = f => `<video class="file" controls preload="metadata" playsinline src="${esc(f.src)}"></video>`;
 const minLabel = m => `${m.m}${m.plus ? '+' + m.plus : ''}'`;
 const MIN_TAGS = { penalty:'penalty', red:'red card', yellow:'yellow card', offside:'offside', goal:'goal', var:'VAR', foul:'foul' };
@@ -1345,6 +1345,45 @@ const SEL = { bg: { group: new Set(), cats: new Set(), rcomp: '', round: '' }, w
 const EXPANDED = new Set();
 let shown = PAGE_SIZE, renderTimer = null;
 function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 350); }
+// Redraw an element without disturbing what plays in it: the new HTML is laid over the old node by node, so a video or
+// an embedded player that is in both stays exactly where it is. (Taking it out of the page, even for a moment, stops a
+// video and reloads an embedded player: the videos under a story stopped after 10–15 seconds that way, each time the
+// search for more videos in the story's other articles redrew the feed.) Keyed nodes (data-key; a video or a frame by its
+// address) are matched by key, the rest by position and tag.
+const nodeKey = n => n.nodeType !== 1 ? '' : n.getAttribute('data-key') || (n.tagName === 'IFRAME' || n.tagName === 'VIDEO' ? n.tagName + ' ' + n.getAttribute('src') : '');
+const sameNode = (a, b) => a.nodeType === b.nodeType && a.nodeName === b.nodeName && nodeKey(a) === nodeKey(b);
+function patchHtml(el, html){
+  const next = document.createElement(el.tagName);
+  next.innerHTML = html;
+  patchKids(el, next);
+}
+function patchNode(a, b){
+  if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+  if (a.tagName === 'IFRAME' || a.tagName === 'VIDEO') return;     // the same address: left alone, playing or not
+  if (a.isEqualNode(b)) return;
+  for (const { name } of [...a.attributes]) if (!b.hasAttribute(name)) a.removeAttribute(name);
+  for (const { name, value } of [...b.attributes]) if (a.getAttribute(name) !== value) a.setAttribute(name, value);
+  patchKids(a, b);
+}
+function patchKids(a, b){
+  const want = [...b.childNodes], wanted = new Set(want.map(nodeKey).filter(Boolean)), byKey = new Map();
+  for (const c of a.childNodes) { const k = nodeKey(c); if (k && !byKey.has(k)) byKey.set(k, c); }
+  let cur = a.firstChild;
+  for (const n of want) {
+    const k = nodeKey(n);
+    // old nodes here that won't be used are removed; the ones still wanted further on are left in place, not moved
+    while (cur && !(k ? cur === byKey.get(k) : !nodeKey(cur) && sameNode(cur, n)) && !(nodeKey(cur) && wanted.has(nodeKey(cur)))) {
+      const x = cur.nextSibling; cur.remove(); cur = x;
+    }
+    const m = k ? byKey.get(k) : (cur && !nodeKey(cur) && sameNode(cur, n) ? cur : null);
+    if (m && sameNode(m, n)) {
+      if (m === cur) cur = cur.nextSibling; else a.insertBefore(m, cur);      // moved only when the order changed
+      if (k) byKey.delete(k);
+      patchNode(m, n);
+    } else a.insertBefore(n, cur);
+  }
+  while (cur) { const x = cur.nextSibling; cur.remove(); cur = x; }
+}
 
 function setBusy(b){
   $('#btnRefresh').disabled = b;
@@ -1586,15 +1625,11 @@ function render(){
   rl.textContent = world ? 'Results & tables →' : 'Results & table →';
   rl.toggleAttribute('data-world-results', world); rl.toggleAttribute('data-bg-results', !world);
   const feed = $('#feed');
-  // keep already-loaded video players alive across re-renders
-  const keep = new Map([...feed.querySelectorAll('.media[data-key]')].map(m => [m.dataset.key, m]));
+  // updated in place: a video being watched under a story keeps playing
   if (!list.length) {
     const any = Object.keys(S.articles).length;
-    feed.innerHTML = `<div class="empty">${NEWS.loading && !any ? 'Loading the saved news…' : any ? 'No stories match these filters.' : NEWS.err ? 'The news could not be loaded — press Refresh to try again.' : 'No stories yet.'}</div>`;
-  } else {
-    feed.innerHTML = byDay ? withDays(list.slice(0, shown), list) : list.slice(0, shown).map(storyCard).join('');
-    feed.querySelectorAll('.media[data-key]').forEach(m => { const old = keep.get(m.dataset.key); if (old && old.dataset.sig === m.dataset.sig) m.replaceWith(old); });
-  }
+    patchHtml(feed, `<div class="empty">${NEWS.loading && !any ? 'Loading the saved news…' : any ? 'No stories match these filters.' : NEWS.err ? 'The news could not be loaded — press Refresh to try again.' : 'No stories yet.'}</div>`);
+  } else patchHtml(feed, byDay ? withDays(list.slice(0, shown), list) : list.slice(0, shown).map(storyCard).join(''));
   $('#more').hidden = list.length <= shown;
   updateLastRun();
   // look for videos in the stories on screen (first article of each), and all articles of opened stories
@@ -3596,9 +3631,7 @@ function refreshMatchNews(){
     const m = byId.get(w.dataset.mnw); if (!m) return;
     const html = matchNewsStrip(FB.league, m);
     if (w._html === html) return;
-    const keep = new Map([...w.querySelectorAll('.media[data-key]')].map(x => [x.dataset.key, x]));
-    w.innerHTML = w._html = html;
-    w.querySelectorAll('.media[data-key]').forEach(x => { const old = keep.get(x.dataset.key); if (old && old.dataset.sig === x.dataset.sig) x.replaceWith(old); });
+    patchHtml(w, w._html = html);                    // in place: a video playing under a story keeps playing
   });
 }
 function toggleMatchNews(id){

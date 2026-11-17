@@ -140,6 +140,8 @@ for (const [t, d] of [
   ['Галатасарай бесен на съдията след дербито с Фенербахче', ''],
   ['Червен картон за Холанд, Сити загуби', ''],
   ['Скандална дузпа в Португалската първа лига', ''],
+  ['Пике скочи срещу наказанието от 12 мача за вратаря, причинил смъртта на Хесус де Мигел', ''],
+  ['Рафиня за червения си картон: Трудно е да запазя самообладание след толкова много съдийски грешки', ''],
 ]) { const r = N.analyze(t, d, bgQ); ok(!r || r.scope === 'world', 'international, not Bulgarian: ' + t + (r ? ' → ' + r.scope : '')); }
 // …but Bulgarian referees abroad, Bulgaria's national team and Bulgarian clubs against foreign ones stay Bulgarian
 for (const t of [
