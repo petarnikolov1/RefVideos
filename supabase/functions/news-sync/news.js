@@ -231,7 +231,7 @@ const NAMEW = '["„“«]?\\p{Lu}[\\p{L}\\-]*(?:\\s+\\p{Lu}[\\p{L}\\-]*)?["“�
 const NAMES = NAMEW + '(?:\\s*(?:,|и)\\s*' + NAMEW + ')*';
 const REFW = '(?:[Сс]ъди(?:я|ята|и|ите|йка|йки|йката|йките)|[Рр]ефер(?:и|а|ът|ите)?|[Аа]рбит(?:ър|ъра|ърът|ри|рите)|[Бб]ригад(?:а|ата|и)|[Лл]айнсмен\\p{L}*|[Аа]систент\\p{L}*|[Нн]аблюдател\\p{L}*|[Дд]елегат\\p{L}*|ВАР|VAR)(?![\\p{L}])';
 const RX_REF_FROM = new RegExp(`(${REFW}(?:\\s+\\p{Ll}+){0,2}\\s+от\\s+)(${NAMES})(?![\\p{L}\\-])(?!\\s*[-–—]\\s*["„“«]?\\p{Lu})`, 'gu');
-const RX_EX_CLUB = new RegExp(`((?:[Бб]ивш\\p{L}*|[Кк]адър|[Кк]адри|[Вв]ъзпитани\\p{L}*|[Пп]родукт\\p{L}*)(?:\\s+\\p{Ll}+){0,2}\\s+(?:на|от)\\s+)(${NAMES})(?![\\p{L}\\-])`, 'gu');
+const RX_EX_CLUB = new RegExp(`((?:[Бб]ивш\\p{L}*|[Ее]кс-?\\p{L}*|[Кк]адър|[Кк]адри|[Вв]ъзпитани\\p{L}*|[Пп]родукт\\p{L}*)(?:\\s+\\p{Ll}+){0,2}\\s+(?:на|от)\\s+)(${NAMES})(?![\\p{L}\\-])`, 'gu');
 // the site's name some outlets add to the headline: " - TribunaPlovdiv.bg: Спортни новини, Локомотив Пловдив, Ботев Пловдив", "ᐉ Новини от Fakti.bg"
 const RX_SITE_TAIL = /\s+(?:[-–|]\s+(?:[\p{L}\d-]+\.)+(?:bg|com|net|eu|info|org)(?![\p{L}])|ᐉ\s)[\s\S]*$/u;
 const RX_REFWORD = new RegExp(REFW, 'u');
@@ -265,7 +265,10 @@ export const COURT = new RegExp(B + `(?:пред съди${W}|разпит${W}|�
   `избирателна активност|екипаж${W}|кораб${W})${E}`, 'iu');
 export const FOOTBALL = new RegExp(B + `(?:мач${W}|футбол${W}|гол(?:а|ът|ове|овете)?${E}|дузп${W}|картон${W}|вар${E}|var${E}|засад${W}|лига(?:та)?${E}|бфс${E}|уефа${E}|фифа${E}|` +
   `рефер${W}|арбитър${W}|арбитри${W}|свир${W}|наряд${W}|стадион${W}|треньор${W}|футболист${W}|играч${W}|фенове${W}|агитк${W}|дерби${W})`, 'iu');
-const REFNAMES = CS(REFEREES.concat(REF_SURNAMES).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+// a surname alone is the referee, but not after another first name in mid-sentence ("Десетки изпратиха Константин Тренчев":
+// a politician, not the referee Станимир Тренчев; "Съдията Тренчев" at the start of the headline is the referee)
+const reEsc = n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const REFNAMES = CS(REFEREES.map(reEsc).concat(REF_SURNAMES.map(n => '(?<!(?<![.!?:"„“«(]\\s|^)\\p{Lu}\\p{Ll}+\\s)' + reEsc(n))));
 
 // World section: the five big leagues, the three European cups and national teams
 // (league names are case-insensitive, club names case-sensitive)
@@ -352,10 +355,13 @@ export function analyze(title, desc, q) {
   let scope;
   if (anyLeague && !(foreignTitle && !bgTitle)) scope = 'bg';
   // a Bulgarian club named next to a big league is a Bulgarian story; the European cups and national teams are World
-  else if (comps.length) scope = (named && bgTitle && comps.every(c => TOP5.includes(c))) ? 'bg' : 'world';
+  else if (comps.length) scope = (clubs.length > 0 && bgTitle && comps.every(c => TOP5.includes(c))) ? 'bg' : 'world';
   else if (foreignTitle && !bgTitle && !RX.bgNat.test(desc)) return null;    // foreign football, in a Bulgarian paper
   else if (RX.euro.test(t) && !bgTitle) return null;                         // qualifiers of some other competition
   else if ((isForeign(t) || ru) && !named && !refName && !RX.bgNat.test(t)) return null;      // other foreign football
+  // "Сериозно наказание за бивш нападател на Лудогорец": a former club is the only Bulgarian thing, and the headline is about the
+  // player, not a referee — he plays abroad now ("Бивш нападател на ЦСКА вече е съдия" stays)
+  else if (named && !clubs.length && !anyLeague && !refName && !RX.bgOrg.test(t) && !RX.bgNat.test(t) && !RX.referee.test(title)) return null;
   else if (bgSignal || (q && q.ctx === 'bg')) scope = 'bg';
   else return null;
 

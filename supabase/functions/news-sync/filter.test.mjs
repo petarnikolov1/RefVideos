@@ -161,6 +161,12 @@ for (const t of ['Обявиха съдията за мача с Исланди�
 }
 for (const t of ['Ирландия загуби срещу Исландия след грешка на съдията', 'Холанд с хеттрик в мача с Исландия, съдията отмени гол'])
   ok(!N.analyze(t, '', bgQ), 'two foreign sides, not Bulgaria: ' + t);
+// a former Bulgarian club's player abroad is not Bulgarian football; a referee's surname after another first name is someone else
+for (const t of ['Ексзвезда на Лудогорец остава наказан за Ман Юн и Арсенал', 'Сериозно наказание за бивш нападател на Лудогорец',
+  'Десетки изпратиха Константин Тренчев в последния му път, малцина от ранните му съратници в СДС ...'])
+  ok(!N.analyze(t, '', bgQ), 'not Bulgarian football: ' + t);
+for (const t of ['Бивш нападател на ЦСКА вече е съдия', 'Съдията Тренчев отмени гол', 'Станимир Тренчев ще свири дербито', 'УЕФА засили Кабаков към Финландия'])
+  ok((N.analyze(t, '', bgQ) || {}).scope === 'bg', 'Bulgarian: ' + t);
 // not football
 for (const t of ['Карате клуб „Добруджа“ вече има трима съдии', '23-годишен благоевградчанин остава в ареста за кражба на златни накити в Кюстендил'])
   ok(!N.analyze(t, '', bgQ), 'not football: ' + t);
