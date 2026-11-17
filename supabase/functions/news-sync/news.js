@@ -257,6 +257,8 @@ const RX_RESERVE_AFTER = /^\s*\(?(?:III|II|2|3)\)?(?![\p{L}\p{N}:\-–])(?!\s*[-
 const reserveOnly = (c, t) => { let any = false;
   for (const m of t.matchAll(new RegExp(c.re.source, 'gu'))) { if (!RX_RESERVE_AFTER.test(t.slice(m.index + m[0].length))) return false; any = true; }
   return any; };
+// the only club named is a former one ("бивш нападател на Лудогорец"; a reserve team, "дубъла на Левски", is not this)
+const exClubOnly = t => { RX_EX_CLUB.lastIndex = 0; return RX_EX_CLUB.test(t) && !CLUBS.some(c => c.re.test(teamText(t))); };
 export const clubsIn = t => { t = teamText(t); return CLUBS.filter(c => c.re.test(t) && !reserveOnly(c, t)).map(c => c.k); };
 // "Съдия" is also a judge: a headline about a court, the judiciary or an investigation, with nothing about football in it, is
 // not about referees ("екипажът на „Челси 3“ е разпитан пред съдия", "Висшия съдебен съвет от квотата на съдиите в Монтана")
@@ -361,7 +363,7 @@ export function analyze(title, desc, q) {
   else if ((isForeign(t) || ru) && !named && !refName && !RX.bgNat.test(t)) return null;      // other foreign football
   // "Сериозно наказание за бивш нападател на Лудогорец": a former club is the only Bulgarian thing, and the headline is about the
   // player, not a referee — he plays abroad now ("Бивш нападател на ЦСКА вече е съдия" stays)
-  else if (named && !clubs.length && !anyLeague && !refName && !RX.bgOrg.test(t) && !RX.bgNat.test(t) && !RX.referee.test(title)) return null;
+  else if (exClubOnly(t) && !anyLeague && !refName && !RX.bgOrg.test(t) && !RX.bgNat.test(t) && !RX.referee.test(title)) return null;
   else if (bgSignal || (q && q.ctx === 'bg')) scope = 'bg';
   else return null;
 
