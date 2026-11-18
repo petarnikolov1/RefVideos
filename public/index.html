@@ -578,6 +578,9 @@
   .qzrb{white-space:pre-wrap;overflow-wrap:anywhere}
   .qznote-in{flex:1 1 200px;min-width:0;font-size:13px}
   .qzsetform{padding:10px 0;border-bottom:1px solid var(--line)}
+  .qznewset{padding:0 0 14px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+  .qzeform>b{font-size:14.5px}
+  .qzeform>p{margin:0}
   .qzsetform .bar{flex-wrap:wrap;align-items:center}
   table.users{width:100%;border-collapse:collapse;font-size:14px}
   table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -2993,7 +2996,7 @@ const Quiz = (() => {
   const draw = () => render();
 
   function homeHtml(){
-    if (!D.sets.length) return `<div class="empty">Още няма тестове.${isAdmin() ? '<br>Качете JSON файл с въпроси от „⚙ Управление на тестовете“ по-долу.' : ''}</div>`;
+    if (!D.sets.length) return `<div class="empty">Още няма тестове.${isAdmin() ? '<br>Качете JSON файл или създайте тест и въведете въпросите на ръка от „⚙ Управление на тестовете“ по-долу.' : ''}</div>`;
     const set = curSet(), qs = qsOf(set.id), n = Math.min(Q_COUNT, qs.length);
     const maxOpt = qs.reduce((m, q) => Math.max(m, q.options.length), 0);
     const mine = D.attempts.filter(a => a.set_id === set.id), weak = mistakes(set.id);
@@ -3283,28 +3286,31 @@ const Quiz = (() => {
   }
 
   function questionsHtml(){
-    const set = curSet(); if (!set) return '<p class="muted">Още няма тестове — качете JSON файл.</p>';
+    const set = curSet(); if (!set) return `<p class="muted">Още няма тестове. Създайте един и въведете въпросите тук, или качете JSON файл.</p>${newSetForm()}`;
     const qs = qsOf(set.id), q = norm(A.q);
     const list = qs.filter(x => !q || norm(x.question + ' ' + x.options.join(' ') + ' ' + (x.explanation || '')).includes(q));
     return `${D.sets.length > 1 ? `<label class="qzinline">Тест <select data-qsetsel>${D.sets.map(s => `<option value="${s.id}"${s.id === set.id ? ' selected' : ''}>${esc(s.title)} (${qsOf(s.id).length})</option>`).join('')}</select></label>` : ''}
       <div class="fsbar"><input type="search" id="qzaq" placeholder="Търси в ${qs.length} въпроса…" aria-label="Търси въпрос"><button class="primary" data-qadd>＋ Нов въпрос</button></div>
-      ${A.adding ? `<div class="qzrow editing" data-key="qa new">${editForm(null, set.id)}</div>` : ''}
+      ${A.adding ? `<div class="qzrow editing" data-key="qa new">${editForm(null, set.id, qs.length + 1)}</div>` : ''}
       <div class="qzrows">${list.map(x => { const n = openReports(x.id).length;
         return A.edit === x.id ? `<div class="qzrow editing" id="qze-${x.id}" data-key="qa ${x.id}">${editForm(x, set.id)}</div>`
           : `<div class="qzrow" data-key="qa ${x.id}"><span class="qznum">${qs.indexOf(x) + 1}</span><span class="qzrow-q">${esc(x.question)}<small> · верен ${L[x.correct]}${n ? ` · <b class="qzbad">⚑ ${n}</b>` : ''}</small></span>
             <span class="qzrow-a"><button class="small" data-qedit="${x.id}">Редактирай</button><button class="small" data-qdel="${x.id}">Изтрий</button></span></div>`; }).join('') || '<div class="empty">Няма въпроси.</div>'}</div>`;
   }
-  function editForm(q, sid){
+  // a question, field by field: the question, up to 5 answers (6 when it came with 6) with the right one marked, an explanation
+  function editForm(q, sid, n){
     const opts = q ? q.options.slice() : [];
     while (opts.length < 5) opts.push('');
     return `<form class="form qzeform" data-id="${q ? q.id : 0}" data-set="${sid}" data-key="qe ${q ? q.id : 'new'}">
+      <b>${q ? 'Редактиране на въпроса' : `Нов въпрос № ${n} в „${esc((D.sets.find(s => s.id === sid) || {}).title || '')}“`}</b>
+      <p class="muted small">Задължителни са въпросът, поне 2 отговора и отметката на верния. Обяснението е по желание.</p>
       <label>Въпрос<textarea name="question" rows="3" maxlength="3000" required>${esc(q ? q.question : '')}</textarea></label>
       <fieldset class="qzeopts"><legend>Отговори — отбележете верния (празните отпадат)</legend>${opts.map((o, i) => `<label class="qzeopt"><input type="radio" name="correct" value="${i}"${q && q.correct === i ? ' checked' : ''} aria-label="Верен е ${L[i]}"><span class="qzl">${L[i]}</span><input type="text" name="opt" maxlength="1000" value="${esc(o)}" aria-label="Отговор ${L[i]}"></label>`).join('')}</fieldset>
       <label>Обяснение (по желание)<textarea name="explanation" rows="2" maxlength="5000">${esc(q ? q.explanation || '' : '')}</textarea></label>
-      <div class="bar"><button class="primary small" type="submit">Запази</button><button class="small" type="button" data-qecancel>Отказ</button></div><div class="msg" role="status"></div>
+      <div class="bar"><button class="primary small" type="submit">${q ? 'Запази' : 'Добави'}</button>${q ? '' : '<button class="small" type="submit" data-next>Добави и въведи следващ</button>'}<button class="small" type="button" data-qecancel>${q ? 'Отказ' : 'Затвори'}</button></div><div class="msg" role="status"></div>
     </form>`;
   }
-  async function saveQ(f){
+  async function saveQ(f, by){
     const fd = new FormData(f), id = Number(f.dataset.id) || 0, sid = Number(f.dataset.set), msg = f.querySelector('.msg');
     const say = t => { msg.textContent = t; msg.className = 'msg err'; };
     const question = String(fd.get('question') || '').trim(), raw = fd.getAll('opt').map(o => String(o).trim()), pick = fd.get('correct');
@@ -3318,9 +3324,33 @@ const Quiz = (() => {
     const r = id ? await SB.from('quiz_questions').update(row).eq('id', id).select('id')
       : await SB.from('quiz_questions').insert({ ...row, set_id: sid, position: old.reduce((m, q) => Math.max(m, q.position + 1), 0) }).select('id');
     if (r.error || !r.data || !r.data.length) return say('Не е записано: ' + (r.error ? r.error.message : 'нямате права'));
-    A.edit = 0; A.adding = false;
+    // "Добави и въведи следващ": the form stays open and empty, for the next question
+    const next = !id && by && by.hasAttribute('data-next');
+    A.edit = 0; A.adding = next;
+    if (next) f.reset();
     await load();
-    toast(id ? 'Въпросът е запазен.' : 'Въпросът е добавен.');
+    if (next) { const ta = box.querySelector('[data-key="qe new"] textarea[name=question]'); if (ta) ta.focus(); }
+    toast(id ? 'Въпросът е запазен.' : next ? 'Добавен. Въведете следващия.' : 'Въпросът е добавен.');
+  }
+  // a test made by hand: its name (and a description); then its questions are entered one by one
+  function newSetForm(){
+    return `<form class="form qznewset" data-key="qznewset"><b>Нов тест, въведен на ръка</b>
+      <div class="two"><label>Име<input type="text" name="title" maxlength="200" required placeholder="Например: Правила на играта 2026/27"></label>
+        <label>Описание (по желание)<input type="text" name="description" maxlength="2000"></label></div>
+      <div class="bar"><button class="small primary" type="submit">Създай теста и добави въпроси</button></div><div class="msg" role="status"></div></form>`;
+  }
+  async function createSet(f){
+    const fd = new FormData(f), msg = f.querySelector('.msg'), title = String(fd.get('title') || '').trim();
+    if (!title) { msg.textContent = 'Напишете име.'; msg.className = 'msg err'; return; }
+    const r = await SB.from('quiz_sets').insert({ title: title.slice(0, 200), description: String(fd.get('description') || '').trim().slice(0, 2000) || null,
+      position: D.sets.reduce((m, s) => Math.max(m, s.position + 1), 0) }).select('id');
+    if (r.error || !r.data || !r.data.length) { msg.textContent = 'Не е създаден: ' + (r.error ? r.error.message : 'нямате права'); msg.className = 'msg err'; return; }
+    setId = r.data[0].id; lss('bgRefWatch.qset', String(setId));
+    A.tab = 'questions'; A.adding = true; A.edit = 0; A.q = '';
+    f.reset();
+    await load();
+    const ta = box.querySelector('[data-key="qe new"] textarea[name=question]'); if (ta) ta.focus();
+    toast('Тестът е създаден. Въведете първия въпрос.');
   }
   async function deleteQ(id){
     const q = byId(id); if (!q) return;
@@ -3354,8 +3384,7 @@ const Quiz = (() => {
   }
 
   function setsHtml(){
-    if (!D.sets.length) return '<p class="muted">Още няма тестове — качете JSON файл.</p>';
-    return D.sets.map(s => `<form class="form qzsetform" data-id="${s.id}" data-key="qs ${s.id}">
+    return newSetForm() + D.sets.map(s => `<form class="form qzsetform" data-id="${s.id}" data-key="qs ${s.id}">
       <div class="two"><label>Име<input type="text" name="title" maxlength="200" required value="${esc(s.title)}"></label><label>Подредба<input type="number" name="position" value="${s.position}" min="0" max="999"></label></div>
       <label>Описание (по желание)<textarea name="description" rows="2" maxlength="2000">${esc(s.description || '')}</textarea></label>
       <div class="bar"><button class="small primary" type="submit">Запази</button><button class="small" type="button" data-qexport="${s.id}">⬇ Изтегли JSON</button><button class="small" type="button" data-qsetdel="${s.id}">Изтрий теста</button><span class="muted small">${plural(qsOf(s.id).length, 'въпрос', 'въпроса')}</span></div><div class="msg" role="status"></div></form>`).join('');
@@ -3430,8 +3459,8 @@ const Quiz = (() => {
     });
     v.addEventListener('submit', e => {
       const f = e.target, fn = f.classList.contains('qzrform') ? report : f.classList.contains('qzup') ? upload
-        : f.classList.contains('qzeform') ? saveQ : f.classList.contains('qzsetform') ? saveSet : null;
-      if (fn) { e.preventDefault(); fn(f); }
+        : f.classList.contains('qzeform') ? saveQ : f.classList.contains('qzsetform') ? saveSet : f.classList.contains('qznewset') ? createSet : null;
+      if (fn) { e.preventDefault(); fn(f, e.submitter); }
     });
     // keys while taking a test: 1–6 or A–F picks an answer, Enter goes on
     document.addEventListener('keydown', e => {
