@@ -95,7 +95,7 @@
   }
   @media (max-width:420px){ .xs-hide{display:none} }
   @media (max-width:360px){ .ftoggle .ftxt{display:none} }
-  input[type=search],input[type=date],input[type=text],input[type=email],input[type=password],input[type=url],select,textarea{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);max-width:100%}
+  input[type=search],input[type=date],input[type=text],input[type=email],input[type=password],input[type=url],input[type=number],select,textarea{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);max-width:100%}
   input[type=search]{width:100%}
   textarea{width:100%;min-height:70px}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
@@ -451,6 +451,134 @@
   .fkeep{display:flex;flex-wrap:wrap;gap:6px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0}
   .fkeep legend{font-size:13px;color:var(--muted);padding:0 4px}
   .finfo-t{font-size:15px;margin:8px 0 0}
+  /* the forum's tests */
+  #quizBox{margin-top:12px}
+  .qzsets{margin:0 0 12px}
+  .qzstart{text-align:center;padding:20px 16px}
+  .qzstart h2{margin:0 0 6px;font-size:19px}
+  .qzstart p{margin:4px 0}
+  .qzrules{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:420px;margin:14px auto}
+  .qzrules>div{border:1px solid var(--line);border-radius:10px;padding:10px 6px;background:var(--bg)}
+  .qzrules b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+  .qzrules span{font-size:12px;color:var(--muted)}
+  .qzgo{justify-content:center;flex-wrap:wrap}
+  .qzbig{font-size:15px;padding:10px 26px}
+  .qzh{font-size:14px;margin:18px 2px 8px;color:var(--muted);font-weight:650}
+  .qzhist{display:grid;grid-template-columns:minmax(0,1fr);gap:5px}
+  .qzhist>div{display:flex;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:13.5px;font-variant-numeric:tabular-nums}
+  .qzfold{display:flex;align-items:center;gap:10px;width:100%;margin-top:16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--text);text-align:left}
+  .qzfold.on{border-bottom-left-radius:0;border-bottom-right-radius:0}
+  .qzfold-ic{font-size:20px}
+  .qzfold-l{flex:1;min-width:0;display:flex;flex-direction:column}
+  .qzfold-l span{font-size:12.5px;color:var(--muted);font-weight:400}
+  .qzchev{transition:transform .2s;color:var(--muted)}
+  .on>.qzchev,.open>button>.qzchev{transform:rotate(180deg)}
+  .qzpill{font-size:12px;font-weight:700;padding:3px 8px;border-radius:99px;background:var(--chip);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .qzpill.bad{color:var(--err)}
+  .qztrack,.qzadm{margin-top:0;border-top-left-radius:0;border-top-right-radius:0;border-top:0}
+  .qzsum{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;text-align:center}
+  .qzsum b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+  .qzsum span{font-size:11.5px;color:var(--muted)}
+  @media (max-width:520px){ .qzsum{grid-template-columns:repeat(3,1fr)} }
+  .qzctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+  .qzctl .seg{margin:0;flex:1 1 320px}
+  .qzctl .seg>button{font-size:12.5px;padding:6px 8px}
+  .qzctl input{flex:1 1 180px;min-width:0}
+  .qzcards{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+  .qzcard{border:1px solid var(--line);border-left:3px solid var(--line);border-radius:10px;background:var(--card)}
+  .qzcard.miss{border-left-color:var(--err)} .qzcard.perfect{border-left-color:var(--ok)}
+  .qzcard-top{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;background:none;color:var(--text);text-align:left;font-weight:400}
+  .qznum{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .qzcard-q{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+  .qzdots{display:flex;gap:2px;flex:0 0 auto}
+  .qzdots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+  .qzdots i.c{background:var(--ok)} .qzdots i.w{background:var(--err)} .qzdots i.s{background:var(--hot)}
+  .qzrate{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+  .qzbar{width:46px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+  .qzbar>span{display:block;height:100%}
+  .qzrate b{font-size:12px;min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+  .qzcn{font-size:11.5px;color:var(--muted);min-width:30px;text-align:right;font-variant-numeric:tabular-nums}
+  @media (max-width:560px){ .qzdots,.qzcn{display:none} .qzbar{width:32px} }
+  .qzcard-body{padding:2px 12px 12px}
+  .qzfull{margin:4px 0 10px;font-weight:600;white-space:pre-wrap}
+  .qzopts{display:grid;gap:5px}
+  .qzopt{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+  .qzopt.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+  .qzopt.bad{border-color:var(--err);background:color-mix(in srgb,var(--err) 9%,transparent)}
+  .qzl{flex:0 0 auto;width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:var(--chip);color:var(--text)}
+  .qzok{color:var(--ok);font-size:12.5px} .qzbad{color:var(--err);font-size:12.5px}
+  .qzexpl{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--chip);font-size:13.5px;white-space:pre-wrap}
+  .qzexpl a,.qzrep a,.qzrb a{color:var(--accent)}
+  .qzhh{font-size:12px;color:var(--muted);margin:10px 0 4px}
+  .qzpills{display:flex;flex-wrap:wrap;gap:4px}
+  .qzhp{font-size:12px;padding:3px 8px;border-radius:99px;border:1px solid var(--line)}
+  .qzhp.c{color:var(--ok)} .qzhp.w{color:var(--err)} .qzhp.s{color:var(--hot)}
+  .qzhp small{color:var(--muted)}
+  .qzreps{margin-top:10px}
+  .qzrep{font-size:13.5px;padding:7px 10px;border-radius:8px;border:1px dashed var(--line);margin-bottom:6px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .qzrep-m{font-size:12px;color:var(--muted);white-space:normal}
+  .qzst{font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;background:var(--chip);color:var(--hot)}
+  .done .qzst{color:var(--ok)} .rejected .qzst{color:var(--muted)}
+  .qznote{font-size:13px;color:var(--muted);margin-top:4px}
+  .qzflag{margin-top:2px}
+  .qzrform{margin-top:6px}
+  .qzact .qzhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .qzcount{font-size:13.5px;color:var(--muted);font-weight:600}
+  .qztimer{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;padding:4px 10px;border-radius:8px;background:var(--chip)}
+  .qztimer.warn{color:var(--hot)} .qztimer.danger{color:#fff;background:var(--err)}
+  .qzprog{height:5px;border-radius:3px;background:var(--line);overflow:hidden;margin-bottom:12px}
+  .qzprog>span{display:block;height:100%;background:var(--accent);transition:width .3s}
+  .qzq{padding:18px 16px}
+  .qzql{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .qzqt{font-size:16.5px;font-weight:600;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+  .qzrev .qzqt{font-size:15px;margin:4px 0 10px}
+  .qzchoices{display:grid;gap:8px;margin-top:14px}
+  .qzch{display:flex;gap:10px;align-items:flex-start;width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text);text-align:left;font-weight:400;font-size:15px;line-height:1.4}
+  .qzch:hover{border-color:var(--accent)}
+  .qzch.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--card));box-shadow:0 0 0 1px var(--accent) inset}
+  .qzch.on .qzl{background:var(--accent);color:var(--accent-ink)}
+  .qznav{display:flex;gap:8px;align-items:center;margin-top:12px}
+  .qznav .sp{flex:1}
+  .qzquit{color:var(--muted)}
+  .qzkeys{text-align:right}
+  @media (hover:none){ .qzkeys{display:none} }
+  .qzres{text-align:center;padding:20px 16px}
+  .qzring{position:relative;width:130px;height:130px;margin:0 auto 12px}
+  .qzring svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .qzring circle{fill:none;stroke-width:10}
+  .qzring .bg{stroke:var(--line)}
+  .qzring .fg{stroke-linecap:round;animation:qzring 1s cubic-bezier(.16,1,.3,1)}
+  @keyframes qzring{from{stroke-dashoffset:var(--c)}}
+  .qzring b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-variant-numeric:tabular-nums}
+  .qzstats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;max-width:440px;margin:0 auto 8px;font-size:12.5px;color:var(--muted)}
+  .qzstats b{display:block;font-size:20px;color:var(--text);font-variant-numeric:tabular-nums}
+  .qzrev{border-left:3px solid var(--ok)} .qzrev.bad{border-left-color:var(--err)}
+  .qzrl{font-size:11.5px;font-weight:700;letter-spacing:.03em}
+  .qzrl.ok{color:var(--ok)} .qzrl.bad{color:var(--err)} .qzrl.skip{color:var(--hot)}
+  .qzend{margin-top:12px}
+  .qzfold.adm{margin-top:22px}
+  .qzadm .seg{margin:0 0 12px}
+  .qzadm code{font-size:12px;background:var(--chip);padding:1px 4px;border-radius:4px;overflow-wrap:anywhere}
+  .qzinline{display:flex;gap:8px;align-items:center;font-size:13.5px;margin-bottom:8px}
+  .qzinline select{flex:1;min-width:0}
+  .qzrows{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:10px}
+  .qzrow{display:flex;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font-size:13.5px}
+  .qzrow.editing{display:block;padding:10px}
+  .qzrow-q{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qzrow-q small{color:var(--muted)}
+  .qzrow-a{display:flex;gap:4px;flex:0 0 auto}
+  .qzeopts{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0;display:grid;gap:6px}
+  .qzeopts legend{font-size:13px;color:var(--muted);padding:0 4px}
+  .qzeopt{display:flex;gap:8px;align-items:center;margin:0}
+  .qzeopt input[type=text]{flex:1;min-width:0}
+  .qzshow{margin-bottom:10px}
+  .qzrrow{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;font-size:14px}
+  .qzrrow .bar{flex-wrap:wrap;margin-top:8px}
+  .qzrq{margin:6px 0;font-weight:600}
+  .qzrb{white-space:pre-wrap;overflow-wrap:anywhere}
+  .qznote-in{flex:1 1 200px;min-width:0;font-size:13px}
+  .qzsetform{padding:10px 0;border-bottom:1px solid var(--line)}
+  .qzsetform .bar{flex-wrap:wrap;align-items:center}
   table.users{width:100%;border-collapse:collapse;font-size:14px}
   table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
   footer{padding:10px 0 40px;font-size:12px;color:var(--muted)}
@@ -1215,6 +1343,7 @@ async function handleSession(session){
     if (isAdmin()) loadUsers();
   }
   AUTH = 'ready';
+  Quiz.reset();          // the tests and their results are someone else's now: loaded again when the forum is opened
   renderAll();
   loadVideos();          // the members' videos depend on who is logged in
   Forum.load();          // and so does the forum
@@ -1401,6 +1530,7 @@ function patchHtml(el, html){
 function patchNode(a, b){
   if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
   if (a.tagName === 'IFRAME' || a.tagName === 'VIDEO') return;     // the same address: left alone, playing or not
+  if (a.hasAttribute('data-own') && b.hasAttribute('data-own')) return;   // drawn by its own code (the forum's tests)
   if (a.isEqualNode(b)) return;
   for (const { name } of [...a.attributes]) if (!b.hasAttribute(name)) a.removeAttribute(name);
   for (const { name, value } of [...b.attributes]) if (a.getAttribute(name) !== value) a.setAttribute(name, value);
@@ -2360,6 +2490,9 @@ const Forum = (() => {
     { k: 'training', label: 'Тренировки', icon: '🏃', hint: 'Тренировъчни програми, упражнения, физическа подготовка.' },
   ];
   const CAT = Object.fromEntries(CATS.map(c => [c.k, c]));
+  // the tabs: the three sections of posts, and the tests (Quiz, below)
+  const TABS = [...CATS, { k: 'tests', label: 'Тестове', icon: '📝', hint: 'Тестове за подготовка: 20 случайни въпроса за 15 минути. Резултатите си виждате само вие; с ⚑ под всеки въпрос сигнализирате грешка.' }];
+  const TAB = Object.fromEntries(TABS.map(c => [c.k, c]));
   const BUCKET = 'forum', MAX_MB = 50, MAX_FILES = 30;
   // what can be uploaded, by the file's extension (a browser often gives no type for .docx or .pptx)
   const TYPES = {
@@ -2382,7 +2515,7 @@ const Forum = (() => {
   const S = { posts: [], comments: {}, ver: 0, loaded: false, err: '', signed: {} };
   const load_ = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const save_ = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-  let cat = CAT[load_('bgRefWatch.fcat')] ? load_('bgRefWatch.fcat') : 'docs';
+  let cat = TAB[load_('bgRefWatch.fcat')] ? load_('bgRefWatch.fcat') : 'docs';
   let editing = 0, formOpen = false, pending = 0, pushed = false, isPlaying = false, KEY = '', query = '';
   const open = new Set();     // posts whose comments are shown
   const THUMBS = {};          // video id -> a picture made from the file (VPlayer keeps them in this browser too)
@@ -2544,26 +2677,30 @@ const Forum = (() => {
     // a #post-12 link: that post's section, its comments open
     const want = pending && S.posts.find(p => p.id === pending);
     if (want) { cat = want.category; open.add(want.id); save_('bgRefWatch.fcat', cat); }
-    const q = norm(query);
-    const key = [S.ver, cat, q, editing, formOpen, [...open].join(','), USER.id, isAdmin(), S.err, S.loaded].join('|');
-    if (key !== KEY || !box.querySelector('#fList')) {
+    const q = norm(query), tests = cat === 'tests';
+    Quiz.ensure();       // the tests (and their count on the tab) load when the forum is opened
+    const key = [S.ver, cat, q, editing, formOpen, [...open].join(','), USER.id, isAdmin(), S.err, S.loaded, Quiz.count()].join('|');
+    if (key !== KEY || !box.querySelector(tests ? '#quizBox' : '#fList')) {
       KEY = key;
       const list = S.posts.filter(p => p.category === cat && match(p, q));
       const counts = Object.fromEntries(CATS.map(c => [c.k, S.posts.filter(p => p.category === c.k && match(p, q)).length]));
-      const c = CAT[cat];
+      counts.tests = Quiz.count();
+      const c = TAB[cat];
+      // the tests draw their own box (data-own: a redraw of the forum leaves it alone, so a test in progress stays)
       patchHtml(box, `
         <p class="intro">Материали за подготовка на съдиите — само за одобрените членове.</p>
-        <div class="seg ftabs" role="tablist" aria-label="Раздели на форума">${CATS.map(x => `<button role="tab" data-fcat="${x.k}" class="${x.k === cat ? 'on' : ''}" aria-selected="${x.k === cat}">${x.icon} ${esc(x.label)}<span class="n">${counts[x.k]}</span></button>`).join('')}</div>
+        <div class="seg ftabs" role="tablist" aria-label="Раздели на форума">${TABS.map(x => `<button role="tab" data-fcat="${x.k}" class="${x.k === cat ? 'on' : ''}" aria-selected="${x.k === cat}">${x.icon} ${esc(x.label)}${counts[x.k] != null ? `<span class="n">${counts[x.k]}</span>` : ''}</button>`).join('')}</div>
         <p class="fhint">${esc(c.hint)}</p>
-        <div class="fsbar"><input id="fq" type="search" placeholder="Търси във форума…" aria-label="Търси във форума">
+        ${tests ? '<div id="quizBox" data-key="quizBox" data-own></div>' : `<div class="fsbar"><input id="fq" type="search" placeholder="Търси във форума…" aria-label="Търси във форума">
           <button class="primary${formOpen ? ' on' : ''}" data-fnew aria-expanded="${formOpen}">${formOpen ? '✕ Затвори' : '＋ Нова публикация'}</button></div>
         ${formOpen ? `<div class="card fnewbox" data-key="fnewbox">${form(null)}</div>` : ''}
         ${S.err ? `<div class="warn">Форумът не се зареди: ${esc(S.err)}</div>` : ''}
         <div id="fList" data-key="fList">${!S.loaded && !S.err ? '<p class="muted">Зареждане…</p>'
           : list.length ? list.map(card).join('')
-          : `<div class="empty">${q ? 'Нищо не е намерено в този раздел.' : `Още няма публикации в „${esc(c.label)}“.`}</div>`}</div>`);
-      fillThumbs(box);
+          : `<div class="empty">${q ? 'Нищо не е намерено в този раздел.' : `Още няма публикации в „${esc(c.label)}“.`}</div>`}</div>`}`);
+      if (!tests) fillThumbs(box);
     }
+    if (tests) Quiz.render(box.querySelector('#quizBox'));
     const fq = box.querySelector('#fq'); if (fq && fq.value !== query && document.activeElement !== fq) fq.value = query;
     if (want) {
       pending = 0;
@@ -2740,6 +2877,577 @@ const Forum = (() => {
     want: id => { pending = Number(id) || 0; },
     playing: () => isPlaying && VPlayer.isOpen(),
     count: () => S.posts.length,
+  };
+})();
+
+/* ======================= UI: FORUM — TESTS ======================= */
+// The forum's 📝 Тестове: practice tests from question banks. An admin uploads a JSON file — { meta: { title },
+// questions: [{ question, options: [...], correct, explanation }] } or a bare list; correct counts from 0 (or is a letter)
+// — or writes the questions; every approved member takes the same tests; only admins change them. A test: 20 questions
+// drawn at random, 15 minutes, Skip / Next, then the score and a review of every question. Each member's results — the
+// recent attempts and the tracker of every question they've seen — are saved to their account, visible to no one else.
+// Members flag a mistake or suggest a fix (⚑) on any question; admins see them under ⚙ Управление → Сигнали and mark them
+// done or rejected. Quiz = { load, reset, ensure, render, init, count, active }.
+const Quiz = (() => {
+  const Q_COUNT = 20, Q_TIME = 15 * 60, PER_Q = 45, L = 'ABCDEF';
+  const KIND = { answer: 'Грешен верен отговор', wording: 'Неясен или грешен въпрос / отговори', explanation: 'Грешно обяснение', other: 'Друго' };
+  const STATUS = { open: 'Отворен', done: 'Поправено', rejected: 'Отхвърлен' };
+  const D = { sets: [], qs: [], reports: [], attempts: [], loaded: false, loading: false, err: '', ver: 0 };
+  const ls = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lss = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  let setId = Number(ls('bgRefWatch.qset')) || 0;
+  let sess = null, timer = 0, last = null;          // the test being taken / the one just finished
+  let view = 'home';                                // home | active | results
+  let trackOpen = false, trackFilter = 'all', trackQuery = '';
+  const expanded = new Set();                       // tracker cards opened
+  let reportFor = '';                               // 'r12' (review) / 't12' (tracker): the ⚑ form shown under that question
+  const A = { open: false, tab: 'upload', edit: 0, adding: false, q: '', showDone: false, msg: null };
+  let box = null;
+
+  const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  const pctColor = p => p >= 80 ? 'var(--ok)' : p >= 50 ? 'var(--accent)' : 'var(--err)';
+  const when = s => new Date(Date.parse(s)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const linkify = t => esc(t).replace(/https:\/\/[^\s<>"']+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+  const curSet = () => D.sets.find(s => s.id === setId) || D.sets[0] || null;
+  const qsOf = id => D.qs.filter(q => q.set_id === id);
+  const byId = id => D.qs.find(q => q.id === id);
+  const openReports = qid => D.reports.filter(r => r.question_id === qid && r.status === 'open');
+  const timeFor = n => n >= Q_COUNT ? Q_TIME : Math.max(60, n * PER_Q);
+  const leftOf = s => Math.max(0, s.total - Math.floor((Date.now() - s.start) / 1000));
+  const tcls = s => s <= 60 ? ' danger' : s <= 180 ? ' warn' : '';
+  const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  /* ───────────── data ───────────── */
+  // every row, a thousand at a time (the database hands out at most 1000 per request)
+  async function all(make){
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await make().range(from, from + 999);
+      if (error) return { data: out, error };
+      out.push(...(data || []));
+      if (!data || data.length < 1000) return { data: out, error: null };
+    }
+  }
+  async function load(){
+    if (!SB || !approved()) { reset(); return; }
+    D.loading = true;
+    const [s, q, r, a] = await Promise.all([
+      all(() => SB.from('quiz_sets').select('*').order('position').order('id')),
+      all(() => SB.from('quiz_questions').select('*').order('set_id').order('position').order('id')),
+      all(() => SB.from('quiz_reports').select('*').order('created_at', { ascending: false })),
+      all(() => SB.from('quiz_attempts').select('*').eq('user_id', USER.id).order('created_at', { ascending: false })),
+    ]);
+    D.loading = false;
+    const bad = [s, q, r, a].find(x => x.error);
+    D.err = bad ? bad.error.message : '';
+    if (bad) log('Could not load the tests: ' + D.err);
+    D.sets = s.data; D.qs = q.data; D.reports = r.data; D.attempts = a.data;
+    D.loaded = true; D.ver++; TRACK = null;
+    const c = curSet(); setId = c ? c.id : 0;
+    renderAll();
+  }
+  async function loadReports(){
+    const r = await all(() => SB.from('quiz_reports').select('*').order('created_at', { ascending: false }));
+    if (!r.error) { D.reports = r.data; D.ver++; }
+    renderAll();
+  }
+  // someone else logged in, or out: their tests and results are loaded again when the forum is opened
+  function reset(){
+    clearInterval(timer); sess = null; last = null; view = 'home'; reportFor = '';
+    Object.assign(D, { sets: [], qs: [], reports: [], attempts: [], loaded: false, loading: false, err: '' }); D.ver++; TRACK = null;
+  }
+  const ensure = () => { if (!D.loaded && !D.loading && SB && approved()) load(); };
+
+  // a member's answers to each question of a set, oldest first: { q, h: [{ d, c, ok, skip }] }
+  let TRACK = null;
+  function track(sid){
+    const k = D.ver + '|' + sid + '|' + D.attempts.length;
+    if (TRACK && TRACK.k === k) return TRACK.m;
+    const m = new Map();
+    for (const a of D.attempts.filter(x => x.set_id === sid).reverse()) for (const x of a.answers || []) {
+      const q = byId(x.q); if (!q || q.set_id !== sid) continue;
+      if (!m.has(q.id)) m.set(q.id, { q, h: [] });
+      m.get(q.id).h.push({ d: a.created_at, c: x.c, ok: !!x.ok, skip: x.c == null || x.c < 0 });
+    }
+    TRACK = { k, m };
+    return m;
+  }
+  // the questions a member got wrong or skipped the last time they saw them
+  const mistakes = sid => [...track(sid).values()].filter(t => !t.h[t.h.length - 1].ok).map(t => t.q.id);
+
+  /* ───────────── the page ───────────── */
+  function render(b){
+    if (b) box = b;
+    if (!box || !box.isConnected) return;
+    if (!D.loaded) { ensure(); if (box._wait !== 1) { box.innerHTML = '<p class="muted">Зареждане…</p>'; box._wait = 1; } return; }
+    box._wait = 0;
+    let html = D.err ? `<div class="warn">Тестовете не се заредиха: ${esc(D.err)}</div>` : '';
+    if (view === 'active' && sess) html += activeHtml();
+    else if (view === 'results' && last) html += resultsHtml();
+    else html += homeHtml();
+    if (isAdmin() && view !== 'active') html += adminHtml();
+    patchHtml(box, html);
+    for (const [id, v] of [['qzq', trackQuery], ['qzaq', A.q]]) { const el = box.querySelector('#' + id); if (el && el.value !== v && document.activeElement !== el) el.value = v; }
+  }
+  const draw = () => render();
+
+  function homeHtml(){
+    if (!D.sets.length) return `<div class="empty">Още няма тестове.${isAdmin() ? '<br>Качете JSON файл с въпроси от „⚙ Управление на тестовете“ по-долу.' : ''}</div>`;
+    const set = curSet(), qs = qsOf(set.id), n = Math.min(Q_COUNT, qs.length);
+    const maxOpt = qs.reduce((m, q) => Math.max(m, q.options.length), 0);
+    const mine = D.attempts.filter(a => a.set_id === set.id), weak = mistakes(set.id);
+    const rep = D.reports.filter(r => r.status === 'open' && byId(r.question_id) && byId(r.question_id).set_id === set.id).length;
+    return `
+      ${D.sets.length > 1 ? `<div class="seg qzsets" role="tablist" aria-label="Тестове">${D.sets.map(s => `<button role="tab" data-qset="${s.id}" class="${s.id === set.id ? 'on' : ''}" aria-selected="${s.id === set.id}">${esc(s.title)}<span class="n">${qsOf(s.id).length}</span></button>`).join('')}</div>` : ''}
+      <div class="card qzstart">
+        <h2>${esc(set.title)}</h2>
+        ${set.description ? `<p class="muted">${linkify(set.description)}</p>` : ''}
+        <p class="muted small">${n < qs.length ? `${n} въпроса, избрани на случаен принцип от всичките ${qs.length}` : plural(qs.length, 'въпрос', 'въпроса')}</p>
+        <div class="qzrules"><div><b>${n}</b><span>въпроса</span></div><div><b>${fmt(timeFor(n))}</b><span>време</span></div><div><b>${maxOpt || '—'}</b><span>отговора на въпрос</span></div></div>
+        <div class="bar qzgo">${qs.length ? '<button class="primary qzbig" data-qstart>▶ Започни теста</button>' : '<span class="muted">В този тест още няма въпроси.</span>'}
+          ${weak.length ? `<button data-qstart="weak" title="Въпросите, на които последния път сте сгрешили или не сте отговорили">🎯 Само моите грешки <span class="n">${weak.length}</span></button>` : ''}</div>
+        ${rep ? `<p class="vhint">⚑ ${rep === 1 ? '1 сигнал за грешка се преглежда' : rep + ' сигнала за грешки се преглеждат'} от администратор.</p>` : ''}
+      </div>
+      ${mine.length ? `<h3 class="qzh">Последни опити</h3><div class="qzhist">${mine.slice(0, 10).map(a => { const p = Math.round(a.correct / a.total * 100);
+        return `<div><span class="muted">${esc(when(a.created_at))}</span><b style="color:${pctColor(p)}">${p}% — ${a.correct}/${a.total} · ${fmt(a.time_sec)}</b></div>`; }).join('')}</div>` : ''}
+      ${trackerHtml(set)}`;
+  }
+
+  function trackerHtml(set){
+    const t = [...track(set.id).values()];
+    if (!t.length) return '';
+    let att = 0, ok = 0, weak = 0, perfect = 0;
+    for (const x of t) { const n = x.h.length, c = x.h.filter(h => h.ok).length; att += n; ok += c; if (n >= 2 && c / n < .5) weak++; if (c === n) perfect++; }
+    const acc = att ? Math.round(ok / att * 100) : 0, accCol = acc >= 75 ? 'var(--ok)' : 'var(--err)';
+    const head = `<button class="qzfold${trackOpen ? ' on' : ''}" data-qtrack aria-expanded="${trackOpen}">
+        <span class="qzfold-ic">🎯</span><span class="qzfold-l"><b>История по въпроси и грешки</b><span>Точността ви по всеки въпрос — открийте слабите места и стигнете до 20/20</span></span>
+        <span class="qzpill">${t.length} в.</span><span class="qzpill" style="color:${accCol}">${acc}%</span>${weak ? `<span class="qzpill bad">🔥 ${weak}</span>` : ''}<span class="qzchev">▾</span></button>`;
+    if (!trackOpen) return head;
+    const q = norm(trackQuery);
+    let items = t.map(x => ({ ...x, n: x.h.length, c: x.h.filter(h => h.ok).length }));
+    items.sort((a, b) => (a.c / a.n - b.c / b.n) || (b.n - a.n));
+    items = items.filter(x => {
+      if (trackFilter === 'mistakes' && x.c === x.n) return false;
+      if (trackFilter === 'perfect' && x.c !== x.n) return false;
+      if (trackFilter === 'weak' && !(x.n >= 2 && x.c / x.n < .5)) return false;
+      if (trackFilter === 'once' && x.n !== 1) return false;
+      return !q || norm(x.q.question + ' ' + x.q.options.join(' ')).includes(q);
+    });
+    const F = [['all', 'Всички'], ['mistakes', '⚠ Грешки'], ['perfect', '✓ Без грешка'], ['weak', '🔥 Слаби (<50%)'], ['once', '◌ Видени веднъж']];
+    return head + `<div class="card qztrack">
+      <div class="qzsum"><div><b>${t.length}</b><span>видени въпроса</span></div><div><b>${att}</b><span>отговора</span></div><div><b style="color:${accCol}">${acc}%</b><span>точност</span></div><div><b style="color:var(--err)">${weak}</b><span>слаби</span></div><div><b style="color:var(--ok)">${perfect}</b><span>без грешка</span></div></div>
+      <div class="qzctl"><div class="seg qzfil">${F.map(([k, l]) => `<button data-qf="${k}" class="${trackFilter === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <input type="search" id="qzq" placeholder="Търси въпрос…" aria-label="Търси въпрос"></div>
+      <div class="qzcards">${items.length ? items.map((x, i) => trackCard(x, i)).join('') : '<div class="empty">Няма въпроси с този филтър.</div>'}</div>
+    </div>`;
+  }
+  function trackCard(x, i){
+    const p = Math.round(x.c / x.n * 100), col = p >= 80 ? 'var(--ok)' : p >= 50 ? 'var(--hot)' : 'var(--err)', open = expanded.has(x.q.id);
+    const tail = x.h.slice(-10);
+    const dots = '<i class="e"></i>'.repeat(10 - tail.length) + tail.map(h => `<i class="${h.skip ? 's' : h.ok ? 'c' : 'w'}" title="${h.skip ? 'Пропуснат' : h.ok ? 'Верен' : 'Грешен'} — ${esc(when(h.d))}"></i>`).join('');
+    return `<div class="qzcard${x.c === x.n ? ' perfect' : ' miss'}${open ? ' open' : ''}" data-key="qt ${x.q.id}">
+      <button class="qzcard-top" data-qexp="${x.q.id}" aria-expanded="${open}"><span class="qznum">#${String(i + 1).padStart(3, '0')}</span>
+        <span class="qzcard-q">${esc(x.q.question)}</span><span class="qzdots" aria-hidden="true">${dots}</span>
+        <span class="qzrate"><span class="qzbar"><span style="width:${p}%;background:${col}"></span></span><b style="color:${col}">${p}%</b></span><span class="qzcn">${x.c}/${x.n}</span><span class="qzchev">▾</span></button>
+      ${open ? `<div class="qzcard-body">${questionBody(x.q, { history: x.h, place: 't' })}</div>` : ''}
+    </div>`;
+  }
+
+  // a question with its answers (the right one marked, and the member's wrong one), explanation, history and ⚑ reports
+  function questionBody(q, o){
+    const key = o.place + q.id;
+    return `${o.full === false ? '' : `<p class="qzfull">${esc(q.question)}</p>`}
+      <div class="qzopts">${q.options.map((x, i) => { const ok = i === q.correct, bad = o.chosen != null && o.chosen >= 0 && i === o.chosen && !ok;
+        return `<div class="qzopt${ok ? ' ok' : bad ? ' bad' : ''}"><span class="qzl">${L[i]}</span><span>${esc(x)}${ok ? ' <b class="qzok">✓ верен</b>' : bad ? ' <b class="qzbad">✗ вашият отговор</b>' : ''}</span></div>`; }).join('')}</div>
+      ${q.explanation ? `<div class="qzexpl">💡 ${linkify(q.explanation)}</div>` : ''}
+      ${o.history ? `<div class="qzhh">История на отговорите (${o.history.length})</div><div class="qzpills">${o.history.map(h => `<span class="qzhp ${h.skip ? 's' : h.ok ? 'c' : 'w'}">${h.skip ? '⟳ Пропуснат' : h.ok ? '✓ Верен' : '✗ Грешен'}${!h.skip && !h.ok && q.options[h.c] != null ? ' → ' + L[h.c] : ''} <small>${esc(when(h.d))}</small></span>`).join('')}</div>` : ''}
+      ${reportsHtml(q, key)}`;
+  }
+  function reportsHtml(q, key){
+    const rs = D.reports.filter(r => r.question_id === q.id);
+    return `<div class="qzreps">${rs.map(r => `<div class="qzrep ${r.status}"><div class="qzrep-m"><span class="qzst">${STATUS[r.status]}</span> <b>${esc(r.author_name || 'член')}</b> · ${esc(when(r.created_at))} · ${esc(KIND[r.kind] || '')}${r.suggested_correct != null ? ` · предлага ${L[r.suggested_correct]}` : ''}
+        ${USER && ((r.user_id === USER.id && r.status === 'open') || isAdmin()) ? `<button class="small link" data-qrdel="${r.id}">изтрий</button>` : ''}</div>
+        <div>${linkify(r.body)}</div>${r.admin_note ? `<div class="qznote">Администратор: ${linkify(r.admin_note)}</div>` : ''}</div>`).join('')}
+      ${reportFor === key ? reportForm(q, key) : `<button class="small qzflag" data-qrep="${key}">⚑ Сигнализирай грешка / предложи корекция</button>`}</div>`;
+  }
+  function reportForm(q, key){
+    return `<form class="form qzrform" data-q="${q.id}" data-key="rf ${key}">
+      <label>Какво не е наред?<select name="kind">${Object.entries(KIND).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
+      <label>Верният отговор според вас (по желание)<select name="sc"><option value="">—</option>${q.options.map((x, i) => `<option value="${i}">${L[i]}. ${esc(x.slice(0, 80))}</option>`).join('')}</select></label>
+      <label>Обяснение или предложение<textarea name="body" rows="3" maxlength="3000" required placeholder="Например: според Правило 12 верният отговор е…"></textarea></label>
+      <div class="bar"><button class="small primary" type="submit">Изпрати</button><button class="small" type="button" data-qrcancel>Отказ</button></div><div class="msg" role="status"></div>
+    </form>`;
+  }
+
+  /* ───────────── taking a test ───────────── */
+  function activeHtml(){
+    const s = sess, q = s.qs[s.cur], ch = s.answers[s.cur], left = leftOf(s);
+    return `<div class="qzact">
+      <div class="qzhead"><span class="qzcount">Въпрос ${s.cur + 1} / ${s.qs.length}</span><span id="qzTimer" class="qztimer${tcls(left)}">⏱ ${fmt(left)}</span></div>
+      <div class="qzprog"><span style="width:${Math.round(s.cur / s.qs.length * 100)}%"></span></div>
+      <div class="card qzq" data-key="qq ${s.cur}">
+        <div class="qzql">${esc(s.title)} · въпрос ${s.cur + 1}</div>
+        <div class="qzqt">${esc(q.question)}</div>
+        <div class="qzchoices" role="radiogroup" aria-label="Отговори">${q.options.map((o, i) => `<button class="qzch${ch === i ? ' on' : ''}" role="radio" aria-checked="${ch === i}" data-qopt="${i}"><span class="qzl">${L[i]}</span><span>${esc(o)}</span></button>`).join('')}</div>
+      </div>
+      <div class="qznav"><button class="link qzquit" data-qquit>✕ Прекрати</button><span class="sp"></span><button data-qskip>Пропусни →</button><button class="primary" data-qnext${ch == null || ch < 0 ? ' disabled' : ''}>${s.cur + 1 === s.qs.length ? 'Край ✓' : 'Напред →'}</button></div>
+      <p class="vhint qzkeys">Клавиши: 1–${q.options.length} или A–${L[q.options.length - 1]} избира отговор, Enter — напред.</p>
+    </div>`;
+  }
+  function start(kind){
+    const set = curSet(); if (!set) return;
+    let pool = qsOf(set.id);
+    if (kind === 'weak') { const w = new Set(mistakes(set.id)); pool = pool.filter(q => w.has(q.id)); }
+    if (!pool.length) return;
+    const qs = shuffle(pool).slice(0, Q_COUNT);
+    sess = { setId: set.id, title: set.title, qs, cur: 0, answers: Array(qs.length).fill(null), start: Date.now(), total: timeFor(qs.length) };
+    view = 'active'; reportFor = ''; last = null;
+    clearInterval(timer); timer = setInterval(tick, 1000);
+    draw(); top();
+  }
+  const top = () => { const v = $('#view-forum'); if (v && box) box.scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+  function tick(){
+    if (!sess) { clearInterval(timer); return; }
+    const left = leftOf(sess), el = document.getElementById('qzTimer');
+    if (el) { el.textContent = '⏱ ' + fmt(left); el.className = 'qztimer' + tcls(left); }
+    if (left <= 0) finish(true);
+  }
+  function choose(i){ if (!sess) return; sess.answers[sess.cur] = i; draw(); }
+  function advance(skip){
+    if (!sess) return;
+    if (skip && sess.answers[sess.cur] == null) sess.answers[sess.cur] = -1;
+    if (sess.answers[sess.cur] == null) return;
+    sess.cur++;
+    if (sess.cur >= sess.qs.length) finish(false); else { draw(); const c = box.querySelector('.qzact'); if (c && c.getBoundingClientRect().top < 0) top(); }
+  }
+  async function finish(timeUp){
+    clearInterval(timer);
+    const s = sess; if (!s) return; sess = null;
+    const res = s.qs.map((q, i) => { const c = s.answers[i] == null ? -1 : s.answers[i]; return { q, c, ok: c === q.correct }; });
+    const correct = res.filter(r => r.ok).length, skipped = res.filter(r => r.c < 0).length;
+    const time = Math.min(s.total, Math.round((Date.now() - s.start) / 1000));
+    last = { setId: s.setId, title: s.title, res, correct, wrong: res.length - correct - skipped, skipped, time, total: res.length, saved: 'saving' };
+    view = 'results'; reportFor = '';
+    draw(); top();
+    if (timeUp) toast('⏱ Времето изтече!');
+    const row = { set_id: s.setId, total: res.length, correct, wrong: last.wrong, skipped, time_sec: time, answers: res.map(r => ({ q: r.q.id, c: r.c, ok: r.ok ? 1 : 0 })) };
+    const mine = last;
+    const { data, error } = await SB.from('quiz_attempts').insert(row).select('*');
+    if (error) { mine.saved = 'error'; log('Test result not saved: ' + error.message); }
+    else { mine.saved = 'ok'; D.attempts.unshift({ ...row, user_id: USER.id, created_at: new Date().toISOString(), ...((data && data[0]) || {}) }); D.ver++; }
+    draw();
+  }
+  function resultsHtml(){
+    const r = last, p = Math.round(r.correct / r.total * 100), col = pctColor(p), C = 2 * Math.PI * 52;
+    const actions = '<div class="bar qzgo"><button class="primary" data-qstart>↺ Нов тест</button><button data-qback>← Към началото</button></div>';
+    return `<div class="card qzres">
+      <div class="qzring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="bg"/><circle cx="60" cy="60" r="52" class="fg" style="stroke:${col};stroke-dasharray:${C.toFixed(1)};stroke-dashoffset:${(C * (1 - p / 100)).toFixed(1)};--c:${C.toFixed(1)}"/></svg><b style="color:${col}">${p}%</b></div>
+      <div class="qzstats"><div><b style="color:var(--ok)">${r.correct}</b>верни</div><div><b style="color:var(--err)">${r.wrong}</b>грешни</div><div><b style="color:var(--hot)">${r.skipped}</b>пропуснати</div><div><b>${fmt(r.time)}</b>време</div></div>
+      <p class="muted small">${esc(r.title)} · ${r.saved === 'saving' ? 'записване…' : r.saved === 'ok' ? 'резултатът е записан в профила ви' : '⚠ резултатът не се записа'}</p>
+      ${actions}
+    </div>
+    <h3 class="qzh">Преглед — всички ${r.total} въпроса</h3>
+    ${r.res.map((x, i) => { const skip = x.c < 0;
+      return `<div class="card qzrev ${x.ok ? 'ok' : 'bad'}" data-key="qr ${i}"><div class="qzrl ${x.ok ? 'ok' : skip ? 'skip' : 'bad'}">${i + 1}. ${x.ok ? 'ВЕРЕН' : skip ? 'ПРОПУСНАТ (без отговор)' : 'ГРЕШЕН'}</div>
+        <div class="qzqt">${esc(x.q.question)}</div>${questionBody(x.q, { chosen: x.c, place: 'r', full: false })}</div>`; }).join('')}
+    ${actions}`;
+  }
+
+  /* ───────────── members' reports ───────────── */
+  async function report(f){
+    const fd = new FormData(f), body = String(fd.get('body') || '').trim(), sc = String(fd.get('sc') || '');
+    const msg = f.querySelector('.msg'), btn = f.querySelector('button[type=submit]');
+    if (!body) return;
+    btn.disabled = true;
+    const { error } = await SB.from('quiz_reports').insert({ question_id: Number(f.dataset.q), kind: KIND[fd.get('kind')] ? String(fd.get('kind')) : 'other',
+      body: body.slice(0, 3000), suggested_correct: sc === '' ? null : Number(sc) });
+    btn.disabled = false;
+    if (error) { msg.textContent = 'Не е изпратено: ' + error.message; msg.className = 'msg err'; return; }
+    reportFor = '';
+    await loadReports();
+    toast('Благодарим! Администратор ще прегледа сигнала.');
+  }
+  async function unreport(id){
+    if (!confirm('Да изтрия ли сигнала?')) return;
+    const { error } = await SB.from('quiz_reports').delete().eq('id', id);
+    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    await loadReports();
+  }
+
+  /* ───────────── admin: upload, questions, reports, sets ───────────── */
+  function adminHtml(){
+    const nOpen = D.reports.filter(r => r.status === 'open').length;
+    const head = `<button class="qzfold adm${A.open ? ' on' : ''}" data-qadm aria-expanded="${A.open}"><span class="qzfold-ic">⚙</span><span class="qzfold-l"><b>Управление на тестовете</b><span>Само за администратори: качване на JSON, въпроси, сигнали от членовете</span></span>${nOpen ? `<span class="qzpill bad">⚑ ${nOpen}</span>` : ''}<span class="qzchev">▾</span></button>`;
+    if (!A.open) return head;
+    const T = [['upload', 'Качи JSON'], ['questions', 'Въпроси'], ['reports', `Сигнали${nOpen ? ` (${nOpen})` : ''}`], ['sets', 'Тестове']];
+    return head + `<div class="card qzadm"><div class="seg" role="tablist">${T.map(([k, l]) => `<button role="tab" data-qtab="${k}" class="${A.tab === k ? 'on' : ''}" aria-selected="${A.tab === k}">${l}</button>`).join('')}</div>
+      ${A.tab === 'upload' ? uploadHtml() : A.tab === 'questions' ? questionsHtml() : A.tab === 'reports' ? reportsAdminHtml() : setsHtml()}</div>`;
+  }
+  function uploadHtml(){
+    return `<form class="form qzup" data-key="qzup">
+      <p class="muted small">Файл <code>.json</code> — <code>{ "meta": { "title": "…" }, "questions": [ { "question": "…", "options": ["…", "…"], "correct": 0, "explanation": "…" } ] }</code> или само списъкът с въпроси. <code>correct</code> е номерът на верния отговор, броен от 0 (или буква A–F). Въпросите се записват в базата и ги виждат всички одобрени членове.</p>
+      <label>JSON файл<input type="file" name="file" accept=".json,application/json" required></label>
+      <label>Къде да отидат<select name="target"><option value="new">Нов тест</option>${D.sets.map(s => `<option value="u${s.id}">Обнови „${esc(s.title)}“ (замени въпросите; резултатите по еднаквите остават)</option><option value="a${s.id}">Добави към „${esc(s.title)}“</option>`).join('')}</select></label>
+      <label>Име на новия тест (празно — от файла)<input type="text" name="title" maxlength="200"></label>
+      <div class="bar"><button class="primary" type="submit">Качи въпросите</button></div>
+      <div class="msg ${A.msg ? A.msg.cls : ''}" role="status">${A.msg ? esc(A.msg.text) : ''}</div>
+    </form>`;
+  }
+  // a question bank from the file: the good questions, and why the others were left out
+  function parseBank(parsed, name){
+    const arr = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.questions) ? parsed.questions : [];
+    const title = String((parsed && parsed.meta && parsed.meta.title) || String(name || 'Тест').replace(/\.json$/i, '')).trim().slice(0, 200) || 'Тест';
+    const list = [], skipped = [];
+    arr.forEach((q, i) => {
+      const n = i + 1;
+      if (!q || typeof q !== 'object') return skipped.push(`№${n}: не е въпрос`);
+      const text = String(q.question ?? q.q ?? '').trim();
+      if (!text) return skipped.push(`№${n}: без текст`);
+      const options = (Array.isArray(q.options) ? q.options : []).slice(0, 6).map(o => String(o ?? '').trim().slice(0, 1000));
+      if (options.filter(Boolean).length < 2) return skipped.push(`№${n}: по-малко от 2 отговора`);
+      let c = q.correct ?? q.correctIndex ?? q.answer;
+      if (typeof c === 'string') { const k = c.trim().toUpperCase(); c = /^\d+$/.test(k) ? Number(k) : k.length === 1 ? Math.max('ABCDEF'.indexOf(k), 'АБВГДЕ'.indexOf(k)) : NaN; }
+      if (!Number.isInteger(c) || c < 0 || c >= options.length || !options[c]) return skipped.push(`№${n}: без верен отговор (correct)`);
+      list.push({ question: text.slice(0, 3000), options, correct: c, explanation: String(q.explanation ?? q.explain ?? '').trim().slice(0, 5000) || null });
+    });
+    return { list, skipped, title };
+  }
+  async function pool(items, k, fn){
+    let i = 0;
+    await Promise.all(Array.from({ length: Math.min(k, items.length) }, async () => { while (i < items.length) { const j = i++; await fn(items[j], j); } }));
+  }
+  async function insertQs(sid, list, start, say){
+    for (let i = 0; i < list.length; i += 200) {
+      const rows = list.slice(i, i + 200).map((q, j) => ({ set_id: sid, question: q.question, options: q.options, correct: q.correct, explanation: q.explanation || null,
+        position: start == null ? q.position : start + i + j }));
+      say(`Записване ${Math.min(i + 200, list.length)} от ${list.length}…`);
+      const r = await SB.from('quiz_questions').insert(rows);
+      if (r.error) throw r.error;
+    }
+    return list.length;
+  }
+  async function upload(f){
+    const fd = new FormData(f), file = fd.get('file'), target = String(fd.get('target') || 'new');
+    const msg = f.querySelector('.msg'), btn = f.querySelector('button[type=submit]');
+    const say = (t, cls) => { msg.textContent = t; msg.className = 'msg ' + (cls || ''); };
+    A.msg = null;
+    if (!file || !file.size) return say('Изберете JSON файл.', 'err');
+    let parsed;
+    try { parsed = JSON.parse(await file.text()); } catch (e) { return say('Файлът не е валиден JSON: ' + e.message, 'err'); }
+    const { list, skipped, title } = parseBank(parsed, file.name);
+    const why = skipped.length ? ` Пропуснати ${skipped.length}: ${skipped.slice(0, 4).join(' · ')}${skipped.length > 4 ? '…' : ''}` : '';
+    if (!list.length) return say('Във файла няма годни въпроси.' + why, 'err');
+    btn.disabled = true;
+    try {
+      let sid, added = 0, changed = 0, removed = 0;
+      if (target === 'new') {
+        const r = await SB.from('quiz_sets').insert({ title: (String(fd.get('title') || '').trim() || title).slice(0, 200), position: D.sets.length }).select('id');
+        if (r.error) throw r.error;
+        sid = r.data[0].id;
+        added = await insertQs(sid, list, 0, say);
+      } else {
+        sid = Number(target.slice(1));
+        const old = qsOf(sid), set = D.sets.find(s => s.id === sid);
+        if (target[0] === 'a') added = await insertQs(sid, list, old.reduce((m, q) => Math.max(m, q.position + 1), 0), say);
+        else {
+          // the same question (by its text) keeps its place in everyone's history; new ones are added, missing ones go
+          const key = s => norm(s).replace(/\s+/g, ' ').trim();
+          const byText = new Map(old.map(q => [key(q.question), q])), keep = new Set(), upd = [], add = [];
+          list.forEach((q, i) => {
+            const o = byText.get(key(q.question));
+            if (o && !keep.has(o.id)) {
+              keep.add(o.id);
+              if (o.position !== i || o.correct !== q.correct || (o.explanation || null) !== q.explanation || o.options.join('\n') !== q.options.join('\n') || o.question !== q.question) upd.push({ ...q, id: o.id, position: i });
+            } else add.push({ ...q, position: i });
+          });
+          const gone = old.filter(q => !keep.has(q.id));
+          if (!confirm(`„${set ? set.title : ''}“: ${add.length} нови, ${upd.length} променени и ${gone.length} махнати въпроса${gone.length ? ' — с резултатите и сигналите по тях' : ''}. Да продължа ли?`)) { btn.disabled = false; return say(''); }
+          for (let i = 0; i < gone.length; i += 200) { const r = await SB.from('quiz_questions').delete().in('id', gone.slice(i, i + 200).map(q => q.id)); if (r.error) throw r.error; }
+          let n = 0;
+          await pool(upd, 8, async q => {
+            const r = await SB.from('quiz_questions').update({ question: q.question, options: q.options, correct: q.correct, explanation: q.explanation, position: q.position }).eq('id', q.id);
+            if (r.error) throw r.error;
+            say(`Обновяване ${++n} от ${upd.length}…`);
+          });
+          added = await insertQs(sid, add, null, say);
+          changed = upd.length; removed = gone.length;
+        }
+      }
+      setId = sid; lss('bgRefWatch.qset', String(sid));
+      A.msg = { text: `Готово: ${added} нови${changed ? `, ${changed} променени` : ''}${removed ? `, ${removed} махнати` : ''} въпроса.${why}`, cls: skipped.length ? 'err' : 'ok' };
+      f.reset();
+      await load();
+    } catch (e) { say('Не е записано: ' + (e.message || e), 'err'); }
+    finally { btn.disabled = false; }
+  }
+
+  function questionsHtml(){
+    const set = curSet(); if (!set) return '<p class="muted">Още няма тестове — качете JSON файл.</p>';
+    const qs = qsOf(set.id), q = norm(A.q);
+    const list = qs.filter(x => !q || norm(x.question + ' ' + x.options.join(' ') + ' ' + (x.explanation || '')).includes(q));
+    return `${D.sets.length > 1 ? `<label class="qzinline">Тест <select data-qsetsel>${D.sets.map(s => `<option value="${s.id}"${s.id === set.id ? ' selected' : ''}>${esc(s.title)} (${qsOf(s.id).length})</option>`).join('')}</select></label>` : ''}
+      <div class="fsbar"><input type="search" id="qzaq" placeholder="Търси в ${qs.length} въпроса…" aria-label="Търси въпрос"><button class="primary" data-qadd>＋ Нов въпрос</button></div>
+      ${A.adding ? `<div class="qzrow editing" data-key="qa new">${editForm(null, set.id)}</div>` : ''}
+      <div class="qzrows">${list.map(x => { const n = openReports(x.id).length;
+        return A.edit === x.id ? `<div class="qzrow editing" id="qze-${x.id}" data-key="qa ${x.id}">${editForm(x, set.id)}</div>`
+          : `<div class="qzrow" data-key="qa ${x.id}"><span class="qznum">${qs.indexOf(x) + 1}</span><span class="qzrow-q">${esc(x.question)}<small> · верен ${L[x.correct]}${n ? ` · <b class="qzbad">⚑ ${n}</b>` : ''}</small></span>
+            <span class="qzrow-a"><button class="small" data-qedit="${x.id}">Редактирай</button><button class="small" data-qdel="${x.id}">Изтрий</button></span></div>`; }).join('') || '<div class="empty">Няма въпроси.</div>'}</div>`;
+  }
+  function editForm(q, sid){
+    const opts = q ? q.options.slice() : [];
+    while (opts.length < 5) opts.push('');
+    return `<form class="form qzeform" data-id="${q ? q.id : 0}" data-set="${sid}" data-key="qe ${q ? q.id : 'new'}">
+      <label>Въпрос<textarea name="question" rows="3" maxlength="3000" required>${esc(q ? q.question : '')}</textarea></label>
+      <fieldset class="qzeopts"><legend>Отговори — отбележете верния (празните отпадат)</legend>${opts.map((o, i) => `<label class="qzeopt"><input type="radio" name="correct" value="${i}"${q && q.correct === i ? ' checked' : ''} aria-label="Верен е ${L[i]}"><span class="qzl">${L[i]}</span><input type="text" name="opt" maxlength="1000" value="${esc(o)}" aria-label="Отговор ${L[i]}"></label>`).join('')}</fieldset>
+      <label>Обяснение (по желание)<textarea name="explanation" rows="2" maxlength="5000">${esc(q ? q.explanation || '' : '')}</textarea></label>
+      <div class="bar"><button class="primary small" type="submit">Запази</button><button class="small" type="button" data-qecancel>Отказ</button></div><div class="msg" role="status"></div>
+    </form>`;
+  }
+  async function saveQ(f){
+    const fd = new FormData(f), id = Number(f.dataset.id) || 0, sid = Number(f.dataset.set), msg = f.querySelector('.msg');
+    const say = t => { msg.textContent = t; msg.className = 'msg err'; };
+    const question = String(fd.get('question') || '').trim(), raw = fd.getAll('opt').map(o => String(o).trim()), pick = fd.get('correct');
+    if (!question) return say('Напишете въпроса.');
+    const options = raw.filter(Boolean);
+    if (options.length < 2) return say('Нужни са поне 2 отговора.');
+    if (pick == null || !raw[Number(pick)]) return say('Отбележете верния отговор (непразен).');
+    const correct = raw.slice(0, Number(pick)).filter(Boolean).length;
+    const row = { question: question.slice(0, 3000), options, correct, explanation: String(fd.get('explanation') || '').trim().slice(0, 5000) || null };
+    const old = qsOf(sid);
+    const r = id ? await SB.from('quiz_questions').update(row).eq('id', id).select('id')
+      : await SB.from('quiz_questions').insert({ ...row, set_id: sid, position: old.reduce((m, q) => Math.max(m, q.position + 1), 0) }).select('id');
+    if (r.error || !r.data || !r.data.length) return say('Не е записано: ' + (r.error ? r.error.message : 'нямате права'));
+    A.edit = 0; A.adding = false;
+    await load();
+    toast(id ? 'Въпросът е запазен.' : 'Въпросът е добавен.');
+  }
+  async function deleteQ(id){
+    const q = byId(id); if (!q) return;
+    if (!confirm(`Да изтрия ли въпроса „${q.question.slice(0, 80)}${q.question.length > 80 ? '…' : ''}“? Изтриват се и сигналите по него.`)) return;
+    const { error } = await SB.from('quiz_questions').delete().eq('id', id);
+    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    await load();
+  }
+
+  function reportsAdminHtml(){
+    const list = D.reports.filter(r => A.showDone || r.status === 'open');
+    return `<label class="ck qzshow"><input type="checkbox" data-qshowdone${A.showDone ? ' checked' : ''}> Покажи и решените</label>
+      ${list.length ? list.map(r => { const q = byId(r.question_id), set = q && D.sets.find(s => s.id === q.set_id);
+        return `<div class="qzrrow ${r.status}" data-key="qrr ${r.id}">
+          <div class="qzrep-m"><span class="qzst">${STATUS[r.status]}</span> <b>${esc(r.author_name || 'член')}</b> · ${esc(when(r.created_at))} · ${esc(KIND[r.kind] || '')}${r.suggested_correct != null ? ` · предлага <b>${L[r.suggested_correct]}</b>` : ''}${set ? ` · ${esc(set.title)}` : ''}</div>
+          ${q ? `<div class="qzrq">${esc(q.question)} <small class="muted">(верен сега: ${L[q.correct]}. ${esc((q.options[q.correct] || '').slice(0, 80))})</small></div>` : ''}
+          <div class="qzrb">${linkify(r.body)}</div>
+          ${r.admin_note ? `<div class="qznote">Бележка: ${linkify(r.admin_note)}</div>` : ''}
+          <div class="bar">${q ? `<button class="small" data-qfix="${r.question_id}">Редактирай въпроса</button>` : ''}
+            ${r.status === 'open' ? `<input class="qznote-in" type="text" maxlength="2000" placeholder="Бележка към члена (по желание)" data-qnote="${r.id}" aria-label="Бележка към члена"><button class="small primary" data-qres="${r.id}" data-st="done">✓ Поправено</button><button class="small" data-qres="${r.id}" data-st="rejected">✗ Отхвърли</button>`
+              : `<button class="small" data-qres="${r.id}" data-st="open">Отвори пак</button>`}
+            <button class="small" data-qrdel="${r.id}">Изтрий</button></div></div>`; }).join('') : `<div class="empty">${A.showDone ? 'Няма сигнали.' : 'Няма отворени сигнали.'}</div>`}`;
+  }
+  async function resolve(id, st){
+    const inp = box.querySelector(`[data-qnote="${id}"]`), note = inp ? inp.value.trim() : '';
+    const patch = { status: st };
+    if (st !== 'open' && note) patch.admin_note = note.slice(0, 2000);
+    const { data, error } = await SB.from('quiz_reports').update(patch).eq('id', id).select('id');
+    if (error || !data || !data.length) { alert('Не е запазено: ' + (error ? error.message : 'нямате права')); return; }
+    await loadReports();
+  }
+
+  function setsHtml(){
+    if (!D.sets.length) return '<p class="muted">Още няма тестове — качете JSON файл.</p>';
+    return D.sets.map(s => `<form class="form qzsetform" data-id="${s.id}" data-key="qs ${s.id}">
+      <div class="two"><label>Име<input type="text" name="title" maxlength="200" required value="${esc(s.title)}"></label><label>Подредба<input type="number" name="position" value="${s.position}" min="0" max="999"></label></div>
+      <label>Описание (по желание)<textarea name="description" rows="2" maxlength="2000">${esc(s.description || '')}</textarea></label>
+      <div class="bar"><button class="small primary" type="submit">Запази</button><button class="small" type="button" data-qexport="${s.id}">⬇ Изтегли JSON</button><button class="small" type="button" data-qsetdel="${s.id}">Изтрий теста</button><span class="muted small">${plural(qsOf(s.id).length, 'въпрос', 'въпроса')}</span></div><div class="msg" role="status"></div></form>`).join('');
+  }
+  async function saveSet(f){
+    const fd = new FormData(f), id = Number(f.dataset.id), msg = f.querySelector('.msg');
+    const title = String(fd.get('title') || '').trim();
+    if (!title) { msg.textContent = 'Напишете име.'; msg.className = 'msg err'; return; }
+    const { data, error } = await SB.from('quiz_sets').update({ title: title.slice(0, 200), description: String(fd.get('description') || '').trim().slice(0, 2000) || null,
+      position: Math.max(0, Math.min(999, Number(fd.get('position')) || 0)) }).eq('id', id).select('id');
+    if (error || !data || !data.length) { msg.textContent = 'Не е записано: ' + (error ? error.message : 'нямате права'); msg.className = 'msg err'; return; }
+    await load();
+    toast('Тестът е запазен.');
+  }
+  async function deleteSet(id){
+    const s = D.sets.find(x => x.id === id); if (!s) return;
+    if (!confirm(`Да изтрия ли теста „${s.title}“ с всичките му ${qsOf(id).length} въпроса? Изтриват се и резултатите и сигналите по него.`)) return;
+    const { error } = await SB.from('quiz_sets').delete().eq('id', id);
+    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    if (setId === id) setId = 0;
+    await load();
+  }
+  function exportSet(id){
+    const s = D.sets.find(x => x.id === id); if (!s) return;
+    const json = JSON.stringify({ meta: { title: s.title, exported: new Date().toISOString(), count: qsOf(id).length },
+      questions: qsOf(id).map(q => ({ question: q.question, options: q.options, correct: q.correct, explanation: q.explanation || '' })) }, null, 2);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = s.title.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80) + '.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  /* ───────────── events ───────────── */
+  function init(){
+    const v = $('#view-forum');
+    v.addEventListener('click', e => {
+      const t = e.target, at = (sel, fn) => { const el = t.closest(sel); if (el) { fn(el); return true; } return false; };
+      if (!t.closest('#quizBox')) return;
+      if (at('[data-qopt]', el => choose(Number(el.dataset.qopt)))) return;
+      if (at('[data-qnext]', () => advance(false))) return;
+      if (at('[data-qskip]', () => advance(true))) return;
+      if (at('[data-qquit]', () => { if (confirm('Да прекратя ли теста? Резултатът няма да се запише.')) { clearInterval(timer); sess = null; view = 'home'; draw(); } })) return;
+      if (at('[data-qstart]', el => start(el.dataset.qstart))) return;
+      if (at('[data-qback]', () => { view = 'home'; reportFor = ''; draw(); top(); })) return;
+      if (at('[data-qset]', el => { setId = Number(el.dataset.qset); lss('bgRefWatch.qset', String(setId)); draw(); })) return;
+      if (at('[data-qtrack]', () => { trackOpen = !trackOpen; draw(); })) return;
+      if (at('[data-qf]', el => { trackFilter = el.dataset.qf; draw(); })) return;
+      if (at('[data-qexp]', el => { const id = Number(el.dataset.qexp); expanded.has(id) ? expanded.delete(id) : expanded.add(id); draw(); })) return;
+      if (at('[data-qrep]', el => { reportFor = el.dataset.qrep; draw(); const ta = box.querySelector('.qzrform textarea'); if (ta) ta.focus({ preventScroll: true }); })) return;
+      if (at('[data-qrcancel]', () => { reportFor = ''; draw(); })) return;
+      if (at('[data-qrdel]', el => unreport(Number(el.dataset.qrdel)))) return;
+      if (at('[data-qadm]', () => { A.open = !A.open; draw(); })) return;
+      if (at('[data-qtab]', el => { A.tab = el.dataset.qtab; A.edit = 0; A.adding = false; draw(); })) return;
+      if (at('[data-qadd]', () => { A.adding = !A.adding; A.edit = 0; draw(); const ta = box.querySelector('[data-key="qe new"] textarea'); if (ta) ta.focus(); })) return;
+      if (at('[data-qedit]', el => { A.edit = Number(el.dataset.qedit); A.adding = false; draw(); })) return;
+      if (at('[data-qecancel]', () => { A.edit = 0; A.adding = false; draw(); })) return;
+      if (at('[data-qdel]', el => deleteQ(Number(el.dataset.qdel)))) return;
+      if (at('[data-qfix]', el => { const q = byId(Number(el.dataset.qfix)); if (!q) return; setId = q.set_id; A.tab = 'questions'; A.edit = q.id; A.adding = false; A.q = ''; draw();
+        const row = document.getElementById('qze-' + q.id); if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' }); })) return;
+      if (at('[data-qres]', el => resolve(Number(el.dataset.qres), el.dataset.st))) return;
+      if (at('[data-qexport]', el => exportSet(Number(el.dataset.qexport)))) return;
+      at('[data-qsetdel]', el => deleteSet(Number(el.dataset.qsetdel)));
+    });
+    v.addEventListener('change', e => {
+      if (e.target.matches('[data-qsetsel]')) { setId = Number(e.target.value); lss('bgRefWatch.qset', String(setId)); A.edit = 0; A.adding = false; draw(); }
+      else if (e.target.matches('[data-qshowdone]')) { A.showDone = e.target.checked; draw(); }
+    });
+    v.addEventListener('input', e => {
+      if (e.target.id === 'qzq') { trackQuery = e.target.value; draw(); }
+      else if (e.target.id === 'qzaq') { A.q = e.target.value; draw(); }
+    });
+    v.addEventListener('submit', e => {
+      const f = e.target, fn = f.classList.contains('qzrform') ? report : f.classList.contains('qzup') ? upload
+        : f.classList.contains('qzeform') ? saveQ : f.classList.contains('qzsetform') ? saveSet : null;
+      if (fn) { e.preventDefault(); fn(f); }
+    });
+    // keys while taking a test: 1–6 or A–F picks an answer, Enter goes on
+    document.addEventListener('keydown', e => {
+      if (view !== 'active' || !sess || !box || !box.isConnected || $('#view-forum').hidden) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input, textarea, select')) return;
+      if (e.key === 'Enter') { if (!e.target.closest('button') && sess.answers[sess.cur] != null) { e.preventDefault(); advance(false); } return; }
+      const k = e.key.length === 1 ? e.key.toUpperCase() : '';
+      const i = !k ? -1 : '123456'.includes(k) ? '123456'.indexOf(k) : Math.max('ABCDEF'.indexOf(k), 'АБВГДЕ'.indexOf(k));
+      if (i >= 0 && i < sess.qs[sess.cur].options.length) { e.preventDefault(); choose(i); }
+    });
+  }
+
+  return {
+    load, reset, ensure, render, init,
+    count: () => D.loaded ? D.qs.length : null,
+    active: () => !!sess,
   };
 })();
 
@@ -4203,6 +4911,7 @@ function initUI(){
 
   initVideosUI();
   Forum.init();
+  Quiz.init();
   bindPlayerActions();
   // a clip's tile anywhere on the page (the gallery, a story) opens the player
   document.addEventListener('click', e => {

@@ -443,6 +443,125 @@ drop policy if exists "forum bucket: owner or admin delete" on storage.objects;
 create policy "forum bucket: owner or admin delete" on storage.objects for delete to authenticated
   using (bucket_id = 'forum' and ((storage.foldername(name))[1] = (select auth.uid())::text or private.is_admin()));
 
+-- ───────────────────────── tests (the forum's 📝 Тестове) ─────────────────────────
+-- Question banks for practice tests. An admin uploads a JSON file (or writes the questions): everyone approved sees and
+-- takes the same tests; only admins add, change or remove sets and questions. Members flag a mistake or suggest a fix on
+-- a question; an admin marks it done or rejected. Each member's results (and so the mistake tracker) are their own.
+create table if not exists public.quiz_sets (
+  id          bigint generated always as identity primary key,
+  title       text not null check (char_length(btrim(title)) between 1 and 200),
+  description text check (description is null or char_length(description) <= 2000),
+  position    integer not null default 0,
+  created_by  uuid default auth.uid() references auth.users(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+alter table public.quiz_sets enable row level security;
+
+create table if not exists public.quiz_questions (
+  id          bigint generated always as identity primary key,
+  set_id      bigint not null references public.quiz_sets(id) on delete cascade,
+  position    integer not null default 0,
+  question    text not null check (char_length(btrim(question)) between 1 and 3000),
+  options     text[] not null check (cardinality(options) between 2 and 6),
+  correct     smallint not null,
+  explanation text check (explanation is null or char_length(explanation) <= 5000),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  check (correct >= 0 and correct < cardinality(options))
+);
+create index if not exists quiz_questions_set_idx on public.quiz_questions (set_id, position);
+alter table public.quiz_questions enable row level security;
+
+create or replace function public.quiz_touch() returns trigger language plpgsql as $$
+begin new.updated_at := now(); return new; end; $$;
+drop trigger if exists quiz_sets_touch on public.quiz_sets;
+create trigger quiz_sets_touch before update on public.quiz_sets for each row execute function public.quiz_touch();
+drop trigger if exists quiz_questions_touch on public.quiz_questions;
+create trigger quiz_questions_touch before update on public.quiz_questions for each row execute function public.quiz_touch();
+
+drop policy if exists "quiz sets: approved members read" on public.quiz_sets;
+create policy "quiz sets: approved members read" on public.quiz_sets for select to authenticated using (private.is_approved());
+drop policy if exists "quiz sets: admins write" on public.quiz_sets;
+create policy "quiz sets: admins write" on public.quiz_sets for all to authenticated using (private.is_admin()) with check (private.is_admin());
+drop policy if exists "quiz questions: approved members read" on public.quiz_questions;
+create policy "quiz questions: approved members read" on public.quiz_questions for select to authenticated using (private.is_approved());
+drop policy if exists "quiz questions: admins write" on public.quiz_questions;
+create policy "quiz questions: admins write" on public.quiz_questions for all to authenticated using (private.is_admin()) with check (private.is_admin());
+
+-- a member's own results: no one else reads them, admins included
+create table if not exists public.quiz_attempts (
+  id          bigint generated always as identity primary key,
+  user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  set_id      bigint not null references public.quiz_sets(id) on delete cascade,
+  total       smallint not null check (total between 1 and 500),
+  correct     smallint not null check (correct >= 0),
+  wrong       smallint not null check (wrong >= 0),
+  skipped     smallint not null check (skipped >= 0),
+  time_sec    integer not null check (time_sec between 0 and 86400),
+  answers     jsonb not null default '[]'::jsonb check (jsonb_typeof(answers) = 'array' and jsonb_array_length(answers) <= 500),
+  created_at  timestamptz not null default now()
+);
+create index if not exists quiz_attempts_user_idx on public.quiz_attempts (user_id, set_id, created_at desc);
+create index if not exists quiz_attempts_set_idx on public.quiz_attempts (set_id);
+alter table public.quiz_attempts enable row level security;
+drop policy if exists "quiz attempts: own read" on public.quiz_attempts;
+create policy "quiz attempts: own read" on public.quiz_attempts for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "quiz attempts: own insert" on public.quiz_attempts;
+create policy "quiz attempts: own insert" on public.quiz_attempts for insert to authenticated
+  with check (user_id = (select auth.uid()) and private.is_approved());
+drop policy if exists "quiz attempts: own delete" on public.quiz_attempts;
+create policy "quiz attempts: own delete" on public.quiz_attempts for delete to authenticated using (user_id = (select auth.uid()));
+
+-- a member's report of a mistake or suggested fix on a question; every approved member sees them (so a mistake isn't
+-- reported twice), an admin resolves them
+create table if not exists public.quiz_reports (
+  id                bigint generated always as identity primary key,
+  question_id       bigint not null references public.quiz_questions(id) on delete cascade,
+  user_id           uuid default auth.uid() references auth.users(id) on delete set null,
+  author_name       text,
+  kind              text not null default 'other' check (kind in ('answer', 'wording', 'explanation', 'other')),
+  body              text not null check (char_length(btrim(body)) between 1 and 3000),
+  suggested_correct smallint check (suggested_correct is null or suggested_correct between 0 and 5),
+  status            text not null default 'open' check (status in ('open', 'done', 'rejected')),
+  admin_note        text check (admin_note is null or char_length(admin_note) <= 2000),
+  resolved_at       timestamptz,
+  created_at        timestamptz not null default now()
+);
+create index if not exists quiz_reports_q_idx on public.quiz_reports (question_id);
+create index if not exists quiz_reports_status_idx on public.quiz_reports (status, created_at desc);
+create index if not exists quiz_reports_user_idx on public.quiz_reports (user_id);
+alter table public.quiz_reports enable row level security;
+
+-- the author is whoever reports it, and a report starts open; an admin changes only its status and note
+create or replace function public.quiz_reports_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.user_id := auth.uid();
+    new.author_name := (select display_name from public.profiles where id = auth.uid());
+    new.status := 'open'; new.admin_note := null; new.resolved_at := null; new.created_at := now();
+  else
+    new.question_id := old.question_id; new.user_id := old.user_id; new.author_name := old.author_name;
+    new.kind := old.kind; new.body := old.body; new.suggested_correct := old.suggested_correct; new.created_at := old.created_at;
+    new.resolved_at := case when new.status = 'open' then null when new.status is distinct from old.status then now() else old.resolved_at end;
+  end if;
+  return new;
+end; $$;
+drop trigger if exists quiz_reports_guard on public.quiz_reports;
+create trigger quiz_reports_guard before insert or update on public.quiz_reports
+  for each row execute function public.quiz_reports_guard();
+
+drop policy if exists "quiz reports: approved members read" on public.quiz_reports;
+create policy "quiz reports: approved members read" on public.quiz_reports for select to authenticated using (private.is_approved());
+drop policy if exists "quiz reports: approved members write" on public.quiz_reports;
+create policy "quiz reports: approved members write" on public.quiz_reports for insert to authenticated with check (private.is_approved());
+drop policy if exists "quiz reports: admins resolve" on public.quiz_reports;
+create policy "quiz reports: admins resolve" on public.quiz_reports for update to authenticated using (private.is_admin()) with check (private.is_admin());
+drop policy if exists "quiz reports: author while open, or admin, delete" on public.quiz_reports;
+create policy "quiz reports: author while open, or admin, delete" on public.quiz_reports for delete to authenticated
+  using ((user_id = (select auth.uid()) and status = 'open') or private.is_admin());
+
 -- ───────────────────────── function permissions ─────────────────────────
 -- trigger functions are internal; the two checks are only needed by logged-in users
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
@@ -450,6 +569,8 @@ revoke execute on function public.videos_set_uploader() from public, anon, authe
 revoke execute on function public.comments_set_author() from public, anon, authenticated;
 revoke execute on function public.videos_guard() from public, anon, authenticated;
 revoke execute on function public.forum_posts_guard() from public, anon, authenticated;
+revoke execute on function public.quiz_reports_guard() from public, anon, authenticated;
+revoke execute on function public.quiz_touch() from public, anon, authenticated;
 revoke execute on function private.is_admin() from public, anon;
 revoke execute on function private.is_approved() from public, anon;
 drop function if exists public.is_admin();
