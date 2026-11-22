@@ -1,8 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="bg">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f6f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b2a1e" media="(prefers-color-scheme: dark)">
+<link rel="preload" href="/fonts/sofia-sans-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/sofia-sans-condensed-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+  /* before the first paint: the language chosen on this device, and the chalk lines drawn once per visit */
+  try {
+    var l = JSON.parse(localStorage.getItem('bgRefWatch.lang') || '"bg"');
+    document.documentElement.lang = l === 'en' ? 'en' : 'bg';
+    if (l === 'en') document.write('<script src="/i18n-en.js"><\/script>');
+    if (!sessionStorage.getItem('bgRefWatch.intro')) { document.documentElement.classList.add('intro'); sessionStorage.setItem('bgRefWatch.intro', '1'); }
+  } catch (e) { /* no storage */ }
+</script>
 <title>BG Referee Watch</title>
 <!--
   BG Referee Watch — refereeing stories from Bulgarian football (efbet Liga, 2nd League, 3rd League,
@@ -17,32 +30,39 @@
   - Read marks are kept in this browser and, when logged in, synced to the account.
 -->
 <style>
+  /* Прожектори: a football pitch, in daylight (light) or under floodlights (dark), following the phone.
+     The pitch strip stays grass with chalk lines in both; yellow and red are only for cards (red also for live and errors). */
+  @font-face{font-family:"Sofia Sans";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-cyrillic-wght-normal.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+  @font-face{font-family:"Sofia Sans";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-latin-ext-wght-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+  @font-face{font-family:"Sofia Sans";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-latin-wght-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+  @font-face{font-family:"Sofia Sans Condensed";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-condensed-cyrillic-wght-normal.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+  @font-face{font-family:"Sofia Sans Condensed";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-condensed-latin-ext-wght-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+  @font-face{font-family:"Sofia Sans Condensed";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-condensed-latin-wght-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+  @font-face{font-family:"Sofia Sans Extra Condensed";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-extra-condensed-cyrillic-wght-normal.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+  @font-face{font-family:"Sofia Sans Extra Condensed";font-weight:1 1000;font-display:swap;src:url(/fonts/sofia-sans-extra-condensed-latin-wght-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
   :root{
     color-scheme: light dark;
-    --bg:#f5f6f8; --card:#ffffff; --text:#16191d; --muted:#667085; --line:#e4e7ec;
-    --accent:#0f766e; --accent-ink:#ffffff; --hot:#c2410c; --new:#1d4ed8; --ok:#15803d; --badge-ink:#ffffff;
-    --chip:#eef1f5; --warn-bg:#fff7e6; --warn-line:#f0c36d; --err:#b42318;
+    --bg:#f3f6f1; --card:#ffffff; --text:#0f2a1e; --muted:#4d6357; --line:#d3ddd6;
+    --accent:#1d6b43; --accent-ink:#ffffff; --hot:#c62f3b; --new:#1d6b43; --ok:#1d6b43; --badge-ink:#ffffff;
+    --chip:#e7eee9; --warn-bg:#fff6d9; --warn-line:#e2c25a; --err:#c62f3b;
+    --pitch-a:#2a7a4b; --pitch-b:#2f8552; --rule:#1d6b43; --glow:transparent; --yc:#f7c948; --rc:#c62f3b;
+    --f-body:"Sofia Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --f-head:"Sofia Sans Condensed","Sofia Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --f-num:"Sofia Sans Extra Condensed","Sofia Sans Condensed",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
   }
   @media (prefers-color-scheme: dark){
     :root{
-      --bg:#0e1013; --card:#16191e; --text:#e7e9ec; --muted:#98a1ad; --line:#272c34;
-      --accent:#2dd4bf; --accent-ink:#06201d; --hot:#fb923c; --new:#93c5fd; --ok:#4ade80; --badge-ink:#0e1013;
-      --chip:#20252d; --warn-bg:#2a2112; --warn-line:#7a5a1e; --err:#f97066;
+      --bg:#0b2a1e; --card:#113224; --text:#eef3ec; --muted:#a9bcb1; --line:#28473a;
+      --accent:#eef3ec; --accent-ink:#0b2a1e; --hot:#ff7b7f; --new:#eef3ec; --ok:#7fd3a0; --badge-ink:#0b2a1e;
+      --chip:#173e2e; --warn-bg:#2a2d17; --warn-line:#8d7b2c; --err:#ff7b7f;
+      --pitch-a:#0d3a29; --pitch-b:#104430; --rule:#eef3ec; --glow:rgba(232,240,255,.11); --yc:#f7c948; --rc:#e63946;
     }
   }
   *{box-sizing:border-box}
   html,body{margin:0}
-  body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  body{background:var(--bg);color:var(--text);font:16px/1.5 var(--f-body);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;-webkit-tap-highlight-color:transparent}
   a{color:inherit}
-  .wrap{max-width:860px;margin:0 auto;padding:0 16px}
-  header{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-  header .wrap{padding-top:12px;padding-bottom:10px}
-  .toprow{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
-  h1{font-size:19px;margin:0}
-  nav{display:flex;gap:4px;flex-wrap:wrap}
-  nav button{border:none;background:transparent;padding:6px 10px;border-radius:8px;font-size:14px;color:var(--muted)}
-  nav button.on{background:var(--chip);color:var(--text);font-weight:600}
-  nav .n{font-size:12px;opacity:.75;margin-left:3px}
+  .wrap{max-width:860px;margin:0 auto;padding:0 max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
   .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
   button,.btn{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer;text-decoration:none;display:inline-block}
   button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
@@ -65,9 +85,9 @@
   .ficon{flex:0 0 38px;width:38px;height:38px;padding:0;font-size:18px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
   .ficon.spin span{display:inline-block;animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .fpanel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 14px 12px;margin-top:8px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+  .fpanel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:2px 14px 12px;margin-top:8px}
   .fpanel .intro{margin:10px 0 0;font-size:13px}
-  .flabel{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:12px}
+  .flabel{font-size:13px;font-weight:650;color:var(--muted);margin-top:12px}
   .fpanel .chips{margin-top:6px}
   .fpfoot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
   .fpfoot .muted{font-size:12px}
@@ -80,13 +100,6 @@
   .fstat .flink{margin-left:auto;color:var(--accent);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
   .fstat .flink:hover{text-decoration:underline}
   @media (max-width:640px){
-    header .wrap{padding-top:8px;padding-bottom:6px}
-    .toprow{flex-wrap:nowrap;gap:10px}
-    h1{font-size:15px;white-space:nowrap;flex:0 0 auto}
-    nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0;margin-right:-16px;padding-right:16px;
-      -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
-    nav::-webkit-scrollbar{display:none}
-    nav button{white-space:nowrap;padding:6px 9px;font-size:13.5px}
     .fbar{margin-top:10px}
     .ftoggle{padding:7px 10px}
     #sectChips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
@@ -125,7 +138,7 @@
   .badge.hot{background:var(--hot)} .badge.new{background:var(--new)} .badge.read{background:var(--ok)}
   .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
   .panel{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
-  .panel h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:10px 0 6px}
+  .panel h3{font-size:16px;color:var(--text);margin:12px 0 6px}
   .arts{list-style:none;margin:0;padding:0}
   .arts li{padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
   .arts li:last-child{border-bottom:none}
@@ -160,7 +173,7 @@
   .vthumb>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .35s}
   .vtile:hover .vthumb>img{transform:scale(1.04)}
   .vthumb:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-  .vthumb .vph{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(135deg,#1f2937,#0f172a);color:rgba(255,255,255,.35);font-size:30px}
+  .vthumb .vph{position:absolute;inset:0;display:grid;place-items:center;background:var(--pitch-a);color:rgba(255,255,255,.4);font-size:30px}
   .vplay{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center;opacity:0;transition:opacity .2s;z-index:2}
   .vplay svg{width:24px;height:24px;margin-left:2px}
   .vtile:hover .vplay,.vthumb:focus-visible .vplay{opacity:1}
@@ -265,7 +278,7 @@
   .dayhead:first-child{margin-top:6px}
   .dayhead .dnow{color:var(--accent)}
   .dayhead .n{margin-left:auto;font-size:12.5px;font-weight:500;color:var(--muted);white-space:nowrap}
-  .mcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .mcard{display:block;color:inherit;text-decoration:none;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0}
   .mtop{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
   .mrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:12px 0 8px}
   .mteam{display:flex;align-items:center;gap:8px;min-width:0}
@@ -279,30 +292,30 @@
   .mbottom{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
   .vbtns{display:flex;gap:8px;margin-left:auto}
   .vbtn{display:flex;align-items:center;gap:6px;background:var(--chip);border:none;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600}
-  .vbtn .ic{color:#2563eb;font-size:15px}
+  .vbtn .ic{font-size:13px}
   .vbtn .len{font-weight:400;color:var(--muted)}
   .vbtn.on{background:var(--accent);color:var(--accent-ink)} .vbtn.on .ic,.vbtn.on .len{color:var(--accent-ink)}
   .vbtns{flex-wrap:wrap;justify-content:flex-end}
   a.vbtn{color:inherit;text-decoration:none}
   .vbtn.yt:hover{background:var(--line)}
   .mplayer .player{margin:10px 0 2px}
-  .vbtn.ref .ic{color:#b45309}
+  .vbtn.ref .ic{color:inherit}
   .mvids{margin:10px 0}
   .mvids .olist{margin:6px 0 10px}
   .olist{display:flex;flex-direction:column;gap:4px;margin-top:10px;max-height:320px;overflow-y:auto}
   .orow{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:var(--chip);color:inherit;border:1px solid transparent;border-radius:10px;padding:8px 10px;font:inherit;text-decoration:none;cursor:pointer}
   .orow:hover{border-color:var(--line)}
-  .orow .ic{color:#2563eb;font-size:13px;line-height:20px}
+  .orow .ic{font-size:13px;line-height:20px}
   .orow .ot{display:flex;flex-direction:column;gap:2px;min-width:0}
   .orow b{font-size:13px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
   .orow .muted{font-size:12px}
   .orow.on{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
   .mfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;flex-wrap:wrap}
   .mfoot .mnote{margin:0;flex:1 1 240px}
-  .ytbtn{display:inline-flex;align-items:center;gap:8px;background:#e00;color:#fff;font-weight:700;font-size:14px;padding:10px 16px;border-radius:10px;text-decoration:none;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.15)}
-  .ytbtn:hover{background:#c00;color:#fff}
+  .ytbtn{display:inline-flex;align-items:center;gap:8px;background:var(--chip);color:var(--text);font-weight:650;font-size:14px;padding:10px 16px;border-radius:10px;text-decoration:none;white-space:nowrap}
+  .ytbtn:hover{background:var(--line)}
   .ytbtn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-  .ytbtn .yti{width:0;height:0;border-left:11px solid #fff;border-top:7px solid transparent;border-bottom:7px solid transparent}
+  .ytbtn .yti{width:0;height:0;border-left:11px solid #ff0033;border-top:7px solid transparent;border-bottom:7px solid transparent}
   .mnote{font-size:12px;color:var(--muted);margin-top:4px}
   .standwrap{overflow-x:auto;margin:10px 0;border:1px solid var(--line);border-radius:12px;background:var(--card)}
   table.stand{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
@@ -330,11 +343,11 @@
   .zlegend i{width:12px;height:12px;border-radius:3px;background:var(--zc);flex:none}
   .znote{font-size:12.5px;color:var(--muted);margin:4px 2px 0}
   /* "Обзор на кръга": the round's review show, above the round's matches */
-  .rreview{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-left:4px solid #e00;border-radius:14px;padding:12px 14px;margin:10px 0 14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .rreview .rrbadge{width:46px;height:46px;border-radius:12px;background:#e00;display:flex;align-items:center;justify-content:center}
-  .rreview .rrbadge i{width:0;height:0;border-left:15px solid #fff;border-top:10px solid transparent;border-bottom:10px solid transparent;margin-left:4px}
+  .rreview{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0 14px}
+  .rreview .rrbadge{width:46px;height:46px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center}
+  .rreview .rrbadge i{width:0;height:0;border-left:15px solid var(--accent-ink);border-top:10px solid transparent;border-bottom:10px solid transparent;margin-left:4px}
   .rreview .rrtext{min-width:0}
-  .rreview .rrlabel{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#e00}
+  .rreview .rrlabel{font-size:13px;font-weight:650;color:var(--muted)}
   .rreview .rrtitle{font-weight:650;font-size:15px;line-height:1.3;overflow-wrap:anywhere}
   .rreview .rrmeta{font-size:12px;color:var(--muted)}
   .rreview .ytbtn,.rreview .rrplay{justify-self:end}
@@ -345,7 +358,7 @@
   .standhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:26px 0 0;scroll-margin-top:12px}
   .standhead h2{font-size:18px;margin:0}
   .fdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 1px;background:var(--muted)}
-  .fdot.W{background:#16a34a} .fdot.L{background:#dc2626} .fdot.D{background:#9ca3af}
+  .fdot.W{background:#3fb871} .fdot.L{background:var(--rc)} .fdot.D{background:#9aa9a0}
   @media (max-width:560px){ .hide-s{display:none} .mteam .tname{font-size:14px} .tlogo,.tinit{width:30px;height:30px;flex-basis:30px} .mscore{font-size:20px;min-width:52px} }
   /* the news strip under every match: what was written about it; opens the stories, stacked like the news feed */
   .mcard{scroll-margin-top:70px}
@@ -367,7 +380,7 @@
   .mnewsbox .mnhead{font-size:12px;color:var(--muted);margin:10px 2px 0}
   .mnewsbox .mcov{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 14px;margin-top:6px}
   .mcov li{overflow-wrap:anywhere}
-  .mcov .covsec{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:9px 0 2px;border-bottom:none}
+  .mcov .covsec{font-size:13px;font-weight:650;color:var(--muted);padding:10px 0 2px;border-bottom:none}
   .mcov .more{padding:4px 0}
   @media (max-width:560px){ .mnwrap{margin:-10px 8px 12px} .mnews .hl{display:none} }
   /* the referees on a match card, the whole crew behind a button; players who sit the match out */
@@ -380,7 +393,7 @@
   .crewbtn{margin-left:auto;font-size:12px;padding:3px 10px;border-radius:999px}
   .crew{margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--chip)}
   .crew dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 16px;margin:0}
-  .crew dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .crew dt{font-size:12.5px;color:var(--muted)}
   .crew dd{margin:1px 0 0;font-size:13.5px;font-weight:600}
   .crew .src{display:block;margin-top:9px;font-size:12px;color:var(--muted)}
   /* a newer version of the site: a bar at the bottom */
@@ -409,7 +422,7 @@
   .sheet .tag{flex:0 0 auto;font-size:10px;font-weight:700;line-height:1;padding:2px 4px;border-radius:4px;background:var(--card);color:var(--muted);border:1px solid var(--line)}
   .sheet .tag.cap{color:var(--accent);border-color:var(--accent)}
   .sheet .subs li{color:var(--muted)}
-  .sheet .subh{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px}
+  .sheet .subh{font-size:12.5px;font-weight:650;color:var(--muted);margin:12px 0 4px}
   .sheet .coach{margin-top:8px;font-size:13px}
   .sheet .soff{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 14px;margin:0}
   .sheet .soff dt{font-size:11px;color:var(--muted)}
@@ -420,8 +433,8 @@
   @media (max-width:480px){ .sheet{padding:10px} .sheet li{font-size:12.5px} .sheet .soff{grid-template-columns:1fr 1fr} }
   .mban{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:6px;font-size:12.5px}
   .mban .ban{display:inline-flex;align-items:center;gap:5px}
-  .cardic{display:inline-block;width:9px;height:12px;border-radius:2px;flex:0 0 auto;background:#f2c200;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
-  .cardic.r{background:#d93025}
+  .cardic{display:inline-block;width:9px;height:12px;border-radius:2px;flex:0 0 auto;background:var(--yc);box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+  .cardic.r{background:var(--rc)}
   .cardic.o{background:var(--muted)}
   /* the Third League's punishments, under the round's matches */
   .discip{margin:18px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
@@ -619,16 +632,183 @@
   .qzsetform .bar{flex-wrap:wrap;align-items:center}
   table.users{width:100%;border-collapse:collapse;font-size:14px}
   table.users td,table.users th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-  footer{padding:10px 0 40px;font-size:12px;color:var(--muted)}
+  footer{padding:10px 0 40px;font-size:13px;color:var(--muted)}
+
+  /* ═══════════ Прожектори ═══════════
+     the floodlight: one soft cold glow from the top of the page, at night only */
+  body::before{content:"";position:fixed;left:0;right:0;top:0;height:80vh;pointer-events:none;z-index:-1;background:radial-gradient(64% 58% at 50% -10%,var(--glow),transparent 72%)}
+  h1,h2,h3,h4{font-family:var(--f-head);letter-spacing:-.005em}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button,.btn{border-radius:10px;font-weight:600}
+  input[type=search],input[type=date],input[type=text],input[type=email],input[type=password],input[type=url],input[type=number],select,textarea{border-radius:10px;font-size:15px}
+  a{text-underline-offset:.18em}
+  .muted{font-size:13.5px}
+
+  /* the top bar: the name, the sections, the language and the account; its bottom edge is the halfway line */
+  header.top{position:sticky;top:0;z-index:20;background:var(--bg)}
+  header.top::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--rule);opacity:.5;transform-origin:0 50%}
+  header.top .wrap{max-width:1120px}
+  .toprow{display:flex;align-items:center;gap:22px;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;flex:0 0 auto}
+  .mark{width:30px;height:30px;color:var(--rule);flex:0 0 auto}
+  .mark circle,.mark line{fill:none;stroke:currentColor;stroke-width:2}
+  .mark .ring{stroke-dasharray:76;stroke-dashoffset:0}
+  .mark .spot{fill:currentColor;stroke:none}
+  .bname{font:800 21px/1 var(--f-head);letter-spacing:-.01em;white-space:nowrap}
+  #nav{display:flex;align-self:stretch;gap:2px;margin-right:auto;min-width:0}
+  #nav button{position:relative;display:flex;align-items:center;gap:8px;height:100%;padding:0 12px;border:0;border-radius:0;background:none;color:var(--muted);font:600 16px/1 var(--f-body);white-space:nowrap}
+  #nav button svg{display:none;width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  #nav button:hover,#nav button.on{color:var(--text)}
+  #nav button.on::after{content:"";position:absolute;left:10px;right:10px;bottom:0;height:4px;border-radius:2px 2px 0 0;background:var(--rule);z-index:1}
+  .tools{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .langbtn{display:inline-flex;align-items:center;padding:3px;border:0;border-radius:999px;background:var(--chip);color:var(--muted);font:700 13px/1 var(--f-body)}
+  .langbtn span{padding:7px 9px;border-radius:999px}
+  .langbtn span.on{background:var(--accent);color:var(--accent-ink)}
+  #acct{display:flex;align-items:center;gap:6px}
+  .acbtn{position:relative;display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 13px 0 5px;border:0;border-radius:999px;background:var(--chip);color:var(--text);font:600 14.5px/1 var(--f-body);white-space:nowrap}
+  .acbtn .av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font:800 14px/1 var(--f-head)}
+  .acbtn .av svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+  .acbtn.on{box-shadow:inset 0 0 0 2px var(--accent)}
+  .acbtn .n{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--rc);color:#fff;font:700 11px/18px var(--f-body);text-align:center}
+  @media (max-width:759px){
+    .toprow{height:56px;gap:10px}
+    .brand{margin-right:auto}
+    .bname{font-size:19px}
+    /* on phones the sections are a tab bar at the bottom, within reach of the thumb */
+    #nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:0;
+      padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:var(--bg);border-top:1.5px solid var(--line);transition:transform .2s ease}
+    #nav button{flex-direction:column;justify-content:center;gap:4px;height:60px;padding:0 2px;font-size:12px;font-weight:650}
+    #nav button svg{display:block}
+    #nav button.on::after{top:-1.5px;bottom:auto;left:calc(50% - 18px);right:auto;width:36px;height:3px;border-radius:0 0 3px 3px}
+    body.typing #nav{transform:translateY(110%)}
+    main.wrap{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+    #toast,.updbar{bottom:calc(76px + env(safe-area-inset-bottom))}
+    #vBulk{bottom:calc(70px + env(safe-area-inset-bottom))}
+    .acbtn{padding:0 5px}
+    .acbtn .nm{display:none}
+    .langbtn span{padding:7px 8px}
+  }
+  @media (max-width:340px){ .bname{font-size:17px} .mark{width:26px;height:26px} }
+
+  /* the news: one column of stories, divided by chalk lines rather than boxed */
+  #feed .card{background:none;border:0;border-top:1px solid var(--line);border-radius:0;margin:0;padding:16px 2px 18px}
+  #feed .dayhead+.card{border-top:0}
+  #feed .card h2,.mnewsbox .card h2{font:700 20px/1.22 var(--f-head);margin:6px 0 4px;letter-spacing:-.005em}
+  .card.read h2{font-weight:600;color:var(--muted)}
+  .desc{font-size:15px;line-height:1.45}
+  .meta{font-size:13.5px;gap:4px 10px}
+  .badge{font:700 11.5px/1 var(--f-body);padding:4px 7px;border-radius:5px}
+  .badge.hot{background:none;color:var(--text);box-shadow:inset 0 0 0 1.5px currentColor}
+  .badge.new{background:var(--accent);color:var(--accent-ink)}
+  .badge.read{background:none;color:var(--ok);padding-left:0;padding-right:0}
+  .tag{font-size:12.5px;padding:3px 10px}
+  .rel{border-left-width:2px}
+  .dayhead{font:800 20px/1.2 var(--f-head);border-bottom:1.5px solid var(--line);margin:22px 0 0;padding:12px 2px 8px}
+  .dayhead .dnow{color:inherit}
+  .dayhead .n{font:500 13px/1.2 var(--f-body)}
+  .fstat .flink{color:var(--text);text-decoration:underline}
+  .ftoggle[aria-expanded="true"]{border-color:var(--text)}
+  .pill{background:var(--accent);color:var(--accent-ink)}
+  .seg{gap:0;background:none;border:1.5px solid var(--line);border-radius:12px}
+  .seg>button,.seg>.chip{background:none;font-size:14px}
+  .seg>.on{background:var(--accent);color:var(--accent-ink)}
+  .chip{font-size:13.5px;padding:5px 11px}
+  .newsround{border-color:var(--line)}
+  .newsround .rlinks a,.newsround .rlinks button.link{color:var(--text);text-decoration:underline}
+
+  /* the matches: a row per match; the whole row opens the match's own page */
+  .roundnav h2{font:800 25px/1.1 var(--f-head)}
+  a.mcard{transition:border-color .15s}
+  a.mcard:hover{border-color:color-mix(in srgb,var(--text) 40%,var(--line))}
+  .mtop{font-size:13.5px}
+  .mrow{margin:12px 0 6px}
+  .mteam .tname{font:650 16.5px/1.2 var(--f-body)}
+  .mscore{min-width:84px;font:900 40px/1 var(--f-num);letter-spacing:.01em}
+  .mscore.time{font:800 24px/1 var(--f-num);color:var(--muted)}
+  .mscore.live{color:var(--hot)}
+  .mref{border-top:1px solid var(--line);font-size:14px}
+  .mref .whistle{color:currentColor}
+  .mhints{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:13.5px;color:var(--muted)}
+  .mhints:empty{display:none}
+  .mhints span{display:inline-flex;align-items:center;gap:6px}
+  .mhints .yes{color:var(--text);font-weight:600}
+  .ico{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  @media (max-width:560px){ .mscore{font-size:34px;min-width:66px} .mscore.time{font-size:21px} }
+
+  /* the match page: a pitch strip with the score inside the centre circle */
+  .mpage{padding:6px 0 10px}
+  .mpbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 10px}
+  .mback{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 4px 0 0;color:var(--text);font-weight:650;font-size:16px;text-decoration:none;background:none;border:0}
+  .mback .ico{width:20px;height:20px}
+  .mshare{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 14px}
+  .pitch{position:relative;overflow:hidden;color:#fff;border-radius:16px;background:repeating-linear-gradient(90deg,var(--pitch-a) 0 46px,var(--pitch-b) 46px 92px)}
+  .pitch::before{content:"";position:absolute;inset:10px;border:2px solid rgba(255,255,255,.5);border-radius:3px;pointer-events:none}
+  .pitch::after{content:"";position:absolute;top:10px;bottom:10px;left:50%;width:2px;margin-left:-1px;background:rgba(255,255,255,.5);pointer-events:none}
+  .mhero{padding:22px 16px 20px;text-align:center}
+  .mh-top,.mh-row,.mh-sub{position:relative;z-index:1}
+  .mh-top{font-size:14px;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+  .mh-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:6px;margin:12px 0 10px}
+  .mh-team{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+  .mh-team b{font:800 20px/1.12 var(--f-head);overflow-wrap:anywhere;text-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .mh-team .tlogo{width:44px;height:44px;flex-basis:44px;background:rgba(255,255,255,.92);border-radius:50%;padding:4px}
+  .mh-team .tinit{width:44px;height:44px;flex-basis:44px;background:rgba(255,255,255,.16);color:#fff;font-size:14px;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.6)}
+  .mh-score{position:relative;width:136px;height:136px;display:grid;place-items:center;view-transition-name:mscore}
+  .mh-score .ring{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .mh-score .ring circle{fill:none;stroke:rgba(255,255,255,.8);stroke-width:2.5;stroke-dasharray:358;stroke-dashoffset:0}
+  .mh-score .sc{position:relative;font:900 66px/1 var(--f-num);letter-spacing:.01em;font-variant-numeric:tabular-nums;text-shadow:0 2px 10px rgba(0,0,0,.28)}
+  .mh-score.pre .sc{font-size:38px;font-weight:800}
+  .mh-score.live .sc::after{content:"";position:absolute;right:-12px;top:6px;width:9px;height:9px;border-radius:50%;background:var(--rc);box-shadow:0 0 0 2px #fff;animation:livepulse 1.4s ease-in-out infinite}
+  .mh-sub{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 14px;font-size:14px;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+  .msec{margin:26px 0 0}
+  .msec>h2{font:800 23px/1.15 var(--f-head);margin:0 0 10px}
+  .crewlist{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  .crewlist li{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:11px 2px;border-bottom:1px solid var(--line)}
+  .crewlist .r{color:var(--muted);font-size:14.5px}
+  .crewlist b{font-weight:650;text-align:right}
+  .crewlist .t{margin-left:8px;color:var(--muted);font-size:13.5px;font-weight:400}
+  .msrc{display:block;margin-top:8px;font-size:13px;color:var(--muted)}
+  .msec .sheet{background:var(--card);border:1px solid var(--line);margin-top:0;padding:14px}
+  .msec .vbtns{justify-content:flex-start;margin:0}
+  .msec .mnwrap{margin:0}
+  .msec .mnews{border-top:1px solid var(--line);border-radius:12px}
+  .msec .mnews.open{border-radius:12px 12px 0 0}
+  .msec .mban{font-size:14px}
+  .mempty{color:var(--muted);font-size:14.5px;margin:0}
+  @media (max-width:420px){
+    .mh-score{width:112px;height:112px}
+    .mh-score .sc{font-size:54px}
+    .mh-team b{font-size:17px}
+    .mh-team .tlogo,.mh-team .tinit{width:38px;height:38px;flex-basis:38px}
+  }
+  @media (min-width:760px){ .mpage{max-width:760px} .mhero{padding:30px 24px 26px} .mh-score{width:160px;height:160px} .mh-score .sc{font-size:80px} .mh-team b{font-size:24px} }
+
+  /* motion: the chalk lines draw themselves once per visit; the centre circle draws around the score of a match opened */
+  @media (prefers-reduced-motion:no-preference){
+    html.intro header.top::after{animation:chalkline .95s cubic-bezier(.3,.7,.2,1) .2s both}
+    html.intro .mark .ring{animation:chalkring .65s cubic-bezier(.3,.7,.2,1) both}
+    html.intro body::before{animation:floodup 1.4s ease-out both}
+    .mh-score .ring circle{animation:ringdraw .55s cubic-bezier(.3,.7,.2,1) .05s both}
+    ::view-transition-group(mscore){animation-duration:.42s;animation-timing-function:cubic-bezier(.3,.7,.2,1)}
+  }
+  @keyframes chalkline{from{transform:scaleX(0)}}
+  @keyframes chalkring{from{stroke-dashoffset:76}}
+  @keyframes floodup{from{opacity:0}}
+  @keyframes ringdraw{from{stroke-dashoffset:358}}
+  ::view-transition-old(root),::view-transition-new(root){animation-duration:.18s}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <div class="toprow">
-      <h1>BG Ref<span class="xs-hide">eree</span> Watch</h1>
-      <nav id="nav"></nav>
+<header class="top">
+  <div class="wrap toprow">
+    <a class="brand" href="#bg" aria-label="BG Referee Watch">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><line x1="16" y1="1" x2="16" y2="31"/><circle class="ring" cx="16" cy="16" r="12"/><circle class="spot" cx="16" cy="16" r="2.4"/></svg>
+      <span class="bname" data-noi18n>BG Referee Watch</span>
+    </a>
+    <nav id="nav" aria-label="Раздели"></nav>
+    <div class="tools">
+      <button id="langBtn" class="langbtn" type="button" data-noi18n></button>
+      <span id="acct"></span>
     </div>
   </div>
 </header>
@@ -639,31 +819,31 @@
     <!-- the filters take one row: search, a Filters button that opens the rest, Refresh; what is switched on shows as pills -->
     <div id="newsFilters">
       <div class="fbar">
-        <input id="q" type="search" placeholder="Search: team, referee, word…" aria-label="Search the stories">
-        <button id="ftoggle" class="ftoggle" aria-expanded="false" aria-controls="fpanel"><span class="fic" aria-hidden="true"><i></i><i></i><i></i></span><span class="ftxt">Filters</span><span id="fcount" class="fcount" hidden></span></button>
-        <button id="btnRefresh" class="ficon" title="Check for new stories" aria-label="Check for new stories"><span>↻</span></button>
+        <input id="q" type="search" placeholder="Търси: отбор, съдия, дума…" aria-label="Търси в новините">
+        <button id="ftoggle" class="ftoggle" aria-expanded="false" aria-controls="fpanel"><span class="fic" aria-hidden="true"><i></i><i></i><i></i></span><span class="ftxt">Филтри</span><span id="fcount" class="fcount" hidden></span></button>
+        <button id="btnRefresh" class="ficon" title="Провери за нови статии" aria-label="Провери за нови статии"><span>↻</span></button>
       </div>
       <div id="fpanel" class="fpanel" hidden>
         <p class="intro" id="intro"></p>
-        <div class="flabel" id="groupLabel">Division</div>
+        <div class="flabel" id="groupLabel">Дивизия</div>
         <div id="groupChips" class="chips"></div>
         <!-- a round: the competition first, then its rounds -->
         <div class="flabel" id="roundLabel" hidden>Кръг</div>
         <div id="roundComps" class="chips" hidden></div>
         <div id="roundPick" hidden></div>
-        <div class="flabel">Topic</div>
+        <div class="flabel">Тема</div>
         <div id="catChips" class="chips"></div>
         <div class="row">
-          <select id="sort" aria-label="Order">
-            <option value="date">Newest first</option>
-            <option value="score">Most important first</option>
+          <select id="sort" aria-label="Подредба">
+            <option value="date">Най-новите първо</option>
+            <option value="score">Най-важните първо</option>
           </select>
-          <label><input type="checkbox" id="onlyNew"> Only new</label>
+          <label><input type="checkbox" id="onlyNew"> Само новите</label>
           <label><input type="checkbox" id="onlyMajor"> Само водещите сайтове</label>
-          <label><input type="checkbox" id="onlyHot"> Only hot</label>
-          <label><input type="checkbox" id="hideRead"> Hide read</label>
+          <label><input type="checkbox" id="onlyHot"> Само горещите</label>
+          <label><input type="checkbox" id="hideRead"> Скрий прочетените</label>
         </div>
-        <div class="fpfoot"><span id="lastRun" class="muted"></span><button id="fdone" class="small">Done</button></div>
+        <div class="fpfoot"><span id="lastRun" class="muted"></span><button id="fdone" class="small">Готово</button></div>
       </div>
       <div id="sectChips" class="chips seg" hidden></div>
       <div class="fstat"><span id="pills"></span><span id="count" class="muted"></span><a id="resLink" class="flink" href="#results"></a></div>
@@ -671,25 +851,25 @@
     </div>
     <div id="warn" class="warn" hidden></div>
     <section id="feed"></section>
-    <button id="more" hidden>Show more</button>
+    <button id="more" hidden>Покажи още</button>
 
-    <details class="box">
-      <summary>Diagnostics log</summary>
+    <details class="box" id="diag" hidden>
+      <summary>Дневник (за администратори)</summary>
       <pre id="log"></pre>
     </details>
     <footer>
-      Stories come from Google News and Bing News, searched every 30 minutes on the server, and link to the original publishers.
-      Grouping, division and topic tags are automatic, so a few may be off.
+      Статиите идват от Google News и Bing News, търсени на всеки 30 минути на сървъра, и водят към оригиналните издания.
+      Групирането, дивизиите и темите се определят автоматично, така че някои може да са неточни.
     </footer>
   </section>
 
   <section id="view-results" hidden><div id="resultsBox"></div></section>
   <section id="view-videos" hidden>
-    <p class="intro" id="vIntro">Clips shared by the members.</p>
+    <p class="intro" id="vIntro">Клипове, споделени от членовете.</p>
     <div id="uploadBox"></div>
     <div id="vCatAdmin"></div>
     <div id="vFilters" hidden></div>
-    <div class="filters" id="vSearch" hidden><input id="vq" type="search" placeholder="Filter videos by team, referee, word…"></div>
+    <div class="filters" id="vSearch" hidden><input id="vq" type="search" placeholder="Търси клип: отбор, съдия, дума…"></div>
     <div id="videoList"></div>
     <div id="vBulk" hidden></div>
   </section>
@@ -704,6 +884,61 @@
 <script>
 (() => {
 'use strict';
+
+/* ======================= LANGUAGE ======================= */
+// Bulgarian is the site's language. English translates the interface as it is drawn (menus, buttons, labels, messages);
+// the news, names and articles stay as they were written. The dictionary (/i18n-en.js) is loaded only for English, by
+// the line in <head> that reads the choice before the first paint.
+const EN = document.documentElement.lang === 'en' && !!window.BGRW_EN;
+const LOC = EN ? 'en-GB' : 'bg-BG';
+const I18N = (() => {
+  if (!EN) return { tr: t => t, el() {}, start() {} };
+  const D = window.BGRW_EN, exact = new Map(Object.entries(D.exact || {}));
+  const rx = (D.rx || []).map(([p, r]) => [new RegExp('^(?:' + p + ')$', 'u'), r]);
+  const CYR = /[\u0400-\u04FF]/;
+  const one = t => {
+    const raw = String(t), k = raw.replace(/\s+/g, ' ').trim();
+    if (!k || !CYR.test(k)) return null;
+    let v = exact.get(k);
+    if (v == null) for (const [re, r] of rx) if (re.test(k)) { v = k.replace(re, r); break; }
+    return v == null ? null : raw.match(/^\s*/)[0] + v + raw.match(/\s*$/)[0];
+  };
+  const tr = t => one(t) ?? t;
+  const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  const NOTEXT = /^(SCRIPT|STYLE|TEXTAREA|CODE|PRE)$/;   // their text is left alone (a textarea's placeholder is translated)
+  const skip = n => { for (let e = n.nodeType === 1 ? n : n.parentElement; e; e = e.parentElement) if (e.hasAttribute('data-noi18n') || (NOTEXT.test(e.tagName) && !(e === n && e.tagName === 'TEXTAREA'))) return true; return false; };
+  function attrs(e){
+    for (const a of ATTRS) { const v = e.getAttribute(a); if (v) { const t = one(v); if (t != null && t !== v) e.setAttribute(a, t); } }
+    if (e.tagName === 'INPUT' && /^(button|submit)$/.test(e.type) && e.value) { const t = one(e.value); if (t != null) e.value = t; }
+  }
+  function text(n){ const t = one(n.nodeValue); if (t != null && t !== n.nodeValue) n.nodeValue = t; }
+  function el(root){
+    if (!root || skip(root)) return;
+    if (root.nodeType === 3) return text(root);
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode: n => {
+        if (n.nodeType !== 1 || !(n.hasAttribute('data-noi18n') || NOTEXT.test(n.tagName))) return NodeFilter.FILTER_ACCEPT;
+        if (n.tagName === 'TEXTAREA' && !n.hasAttribute('data-noi18n')) attrs(n);
+        return NodeFilter.FILTER_REJECT;
+      } });
+    if (root.nodeType === 1) attrs(root);
+    for (let n = w.nextNode(); n; n = w.nextNode()) n.nodeType === 3 ? text(n) : attrs(n);
+  }
+  function start(){
+    el(document.body);
+    document.title = tr(document.title);
+    new MutationObserver(list => {
+      for (const m of list) {
+        if (m.type === 'childList') m.addedNodes.forEach(n => (n.nodeType === 1 || n.nodeType === 3) && el(n));
+        else if (m.type === 'characterData') { if (!skip(m.target)) text(m.target); }
+        else if (m.type === 'attributes' && !skip(m.target)) attrs(m.target);
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+  }
+  return { tr, el, start };
+})();
+// dialogs speak the reader's language too
+const confirmT = m => window.confirm(I18N.tr(m)), alertT = m => window.alert(I18N.tr(m));
 
 /* ======================= CONFIG ======================= */
 const SUPABASE_URL      = 'https://zinuspouctowujhocevy.supabase.co';          // RefVideos project
@@ -830,17 +1065,17 @@ function reserveOnly(c, text){       // the club named in the text only as its r
 }
 const clubLabel = k => { const [b, t] = k.split('~'); const l = CLUB_LABEL[b]; return !l ? '' : t === 'y' ? l + ' (юноши)' : t === 'r' ? l + ' II' : l; };
 
-const DIVS = { d1:'1st League (efbet)', d2:'2nd League', d3:'3rd League', cup:'Bulgarian Cup', youth:'Юноши', eur:'Europe & abroad', unk:'Unclassified' };
+const DIVS = { d1:'Първа лига (efbet)', d2:'Втора лига', d3:'Трета лига', cup:'Купа на България', youth:'Юноши', eur:'Европа и чужбина', unk:'Некласифицирани' };
 // which tab an article belongs to: Bulgarian, World, or both (a Bulgarian club in a European cup, a Bulgarian referee abroad)
 const artSide = a => a.scope === 'bg' ? 'bg' : (a.divs || []).includes('eur') ? 'both' : 'world';
-const COMPS = { nat:'National teams', ucl:'Champions League', uel:'Europa League', uecl:'Conference League',
-  eng:'England', esp:'Spain', ita:'Italy', ger:'Germany', fra:'France' };
+const COMPS = { nat:'Национални отбори', ucl:'Шампионска лига', uel:'Лига Европа', uecl:'Лига на конференциите',
+  eng:'Англия', esp:'Испания', ita:'Италия', ger:'Германия', fra:'Франция' };
 // the World tab is split into three sections
-const WSECT = { nat: ['National teams', ['nat']], euro: ['European cups', ['ucl', 'uel', 'uecl']], top5: ['Top 5 leagues', ['eng', 'esp', 'ita', 'ger', 'fra']] };
+const WSECT = { nat: ['Национални отбори', ['nat']], euro: ['Евротурнири', ['ucl', 'uel', 'uecl']], top5: ['Топ 5 лиги', ['eng', 'esp', 'ita', 'ger', 'fra']] };
 const inSect = (s, k) => s.comps.some(c => WSECT[k][1].includes(c));
-const CATS = { red:'Cards', penalty:'Penalties', offside:'Offsides / disallowed goals', var:'VAR', foul:'Fouls & handballs',
-  committee:'Referee committee & appointments', discipline:'Discipline & sanctions', fights:'Fights & incidents',
-  dispute:'Disputes & scandals', other:'Other' };
+const CATS = { red:'Картони', penalty:'Дузпи', offside:'Засади и отменени голове', var:'ВАР', foul:'Нарушения и игра с ръка',
+  committee:'Съдийска комисия и наряди', discipline:'Дисциплина и наказания', fights:'Сбивания и инциденти',
+  dispute:'Спорове и скандали', other:'Други' };
 
 /* ======================= STORAGE ======================= */
 function loadJSON(k){ try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
@@ -875,8 +1110,10 @@ const ymd = d => d.toISOString().slice(0, 10);
 const norm = s => (s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '#';
-const fmtDate = ts => new Date(ts).toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
-const fmtDay = ts => new Date(ts).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+// "22 ное, 17:07" (the year only when it isn't this one); "22 Nov, 17:07" in English
+const MON_SHORT = EN ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] : ['яну', 'фев', 'мар', 'апр', 'май', 'юни', 'юли', 'авг', 'сеп', 'окт', 'ное', 'дек'];
+const fmtDay = ts => { const d = new Date(ts); return `${d.getDate()} ${MON_SHORT[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''}`; };
+const fmtDate = ts => { const d = new Date(ts); return `${fmtDay(ts)}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const seasonStartTs = () => { const t = Date.parse(S.settings.seasonStart + 'T00:00:00'); return isFinite(t) ? t : Date.parse(SEASON_START_DEFAULT); };
 
 const LOG = [];
@@ -955,7 +1192,7 @@ async function loadNews(force){
   } catch (e) {
     NEWS.err = e.message || String(e);
     log('Could not load the news: ' + NEWS.err);
-    showWarn('Could not load the saved news right now (' + NEWS.err + '). Showing what this browser saved last time.');
+    showWarn('Запазените новини не се заредиха в момента (' + NEWS.err + '). Показваме каквото този браузър запази последния път.');
   }
   NEWS.loading = false; setBusy(false); renderAll();
 }
@@ -1181,7 +1418,7 @@ function toEmbed(u, kind){
     return null;
   }
   if (kind === 'player' && url.protocol === 'https:' && url.origin !== location.origin)
-    return { kind:'Video player', key:'pl:' + url.origin + url.pathname, src:url.href, sandbox:true };
+    return { kind:'Видеоплейър', key:'pl:' + url.origin + url.pathname, src:url.href, sandbox:true };
   return null;
 }
 // a Google Drive file (not a folder): /file/d/ID/…, open?id=ID, uc?id=ID
@@ -1198,7 +1435,7 @@ function videoFile(u){
 }
 function videoLink(u){
   let url; try { url = new URL(u); } catch (e) { return null; }
-  if (/^https?:$/.test(url.protocol) && /(^|\.)(twitter|x)\.com$/.test(url.hostname) && /\/status\/\d+/.test(url.pathname)) return { label:'Video post on X', href:u };
+  if (/^https?:$/.test(url.protocol) && /(^|\.)(twitter|x)\.com$/.test(url.hostname) && /\/status\/\d+/.test(url.pathname)) return { label:'Видео в X', href:u };
   return null;
 }
 const playerHtml = e => `<div class="player" data-key="pl ${esc(e.key)}"><iframe src="${esc(e.src)}" loading="lazy" title="${esc(e.kind)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"${e.sandbox ? ' sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"' : ''}></iframe></div>`;
@@ -1238,12 +1475,12 @@ function storyMedia(s){
 function ebfuHtml(s, mins){
   const match = storyMatch(s);
   const sits = mins.length
-    ? 'Situations at ' + mins.map(m => `<span class="min">${minLabel(m)}</span>${m.tags.length ? esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) : ''}`).join(' ')
-    : (s.cats.filter(c => c !== 'other').length ? 'Situations: ' + esc(s.cats.filter(c => c !== 'other').map(c => CATS[c]).join(', ')) : '');
-  return `<div class="ebfu"><div><b>ebfu.net video archive</b> · ${match ? esc(match) + ' · ' : ''}${esc(fmtDay(s.first))}${s.divs.some(d => d !== 'unk') ? ' · ' + esc(s.divs.filter(d => d !== 'unk').map(d => DIVS[d]).join(', ')) : ''}</div>
+    ? 'Ситуации в ' + mins.map(m => `<span class="min">${minLabel(m)}</span>${m.tags.length ? esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) : ''}`).join(' ')
+    : (s.cats.filter(c => c !== 'other').length ? 'Ситуации: ' + esc(s.cats.filter(c => c !== 'other').map(c => CATS[c]).join(', ')) : '');
+  return `<div class="ebfu"><div><b>Видеоархив на ebfu.net</b> · ${match ? esc(match) + ' · ' : ''}${esc(fmtDay(s.first))}${s.divs.some(d => d !== 'unk') ? ' · ' + esc(s.divs.filter(d => d !== 'unk').map(d => DIVS[d]).join(', ')) : ''}</div>
     ${sits ? `<div>${sits}</div>` : ''}
-    <div><a class="btn" href="${esc(EBFU_URL)}" target="_blank" rel="noopener">Open in ebfu.net</a>
-    <span class="muted">Opens with your own ebfu.net login. Jumping straight to the match and minute comes next.</span></div></div>`;
+    <div><a class="btn" href="${esc(EBFU_URL)}" target="_blank" rel="noopener">Отвори в ebfu.net</a>
+    <span class="muted">Отваря се с вашия вход в ebfu.net. Скок направо до мача и минутата предстои.</span></div></div>`;
 }
 
 function mediaHtml(s){
@@ -1251,21 +1488,21 @@ function mediaHtml(s){
   const uploads = VIDEOS.filter(v => v.article_key && s.aidSet.has(v.article_key));
   if (uploads.length) out.push(`<div class="vstrip">${uploads.map(v => videoTile(v, uploads.map(u => u.id).join(','), false)).join('')}</div>`);
   const players = M.players.slice(0, 4);
-  players.forEach(e => out.push(playerHtml(e) + `<div class="muted">${esc(e.kind)} from ${esc(e.from)}${e.page ? ' (found on the article page)' : ''}</div>`));
-  M.files.slice(0, 2).forEach(f => out.push(fileHtml(f) + `<div class="muted">Video from ${esc(f.from)} · <a href="${esc(safeUrl(f.src))}" target="_blank" rel="noopener noreferrer">open the file</a></div>`));
+  players.forEach(e => out.push(playerHtml(e) + `<div class="muted">${esc(e.kind)} от ${esc(e.from)}${e.page ? ' (намерено на страницата на статията)' : ''}</div>`));
+  M.files.slice(0, 2).forEach(f => out.push(fileHtml(f) + `<div class="muted">Видео от ${esc(f.from)} · <a href="${esc(safeUrl(f.src))}" target="_blank" rel="noopener noreferrer">отвори файла</a></div>`));
   if (M.links.length) out.push('<div class="msg">' + M.links.slice(0, 4).map(l => `<a class="btn small" href="${esc(safeUrl(l.href))}" target="_blank" rel="noopener noreferrer">▶ ${esc(l.label)} (${esc(l.from)})</a>`).join(' ') + '</div>');
   const MM = storyMatchMedia(s);
   if (MM.need.length) loadMatchVids(MM.need);
   out.push(matchMediaHtml(s, MM));
-  if (M.mins.length) out.push('<h3>Minutes mentioned</h3><div class="mins">' + M.mins.map(m =>
+  if (M.mins.length) out.push('<h3>Споменати минути</h3><div class="mins">' + M.mins.map(m =>
     `<div class="minrow"><span class="min">${minLabel(m)}</span>${m.tags.length ? '<b>' + esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) + '</b> · ' : ''}<span class="muted">…${esc(m.ctx || '')}… (${esc(m.from)})</span></div>`).join('') + '</div>');
   if (s.bgOnly) out.push(ebfuHtml(s, M.mins));
-  if (EXTRACT === 'off') out.push('<div class="muted">Finding videos inside articles works on the Cloudflare-hosted site.</div>');
-  else if (M.pending) out.push(`<div class="muted">Looking for videos in ${M.targets.length} article${M.targets.length > 1 ? 's' : ''}…</div>`);
-  else if (!players.length && !M.files.length && !M.links.length && !uploads.length) out.push(`<div class="muted">No video found in the articles${MM.items.length ? ' (the match videos are above)' : ''}.</div>`);
-  if (M.failed.length) out.push(`<details class="muted"><summary>Couldn't open ${M.failed.length} of ${M.targets.length} articles</summary>${M.failed.map(({ a, r }) =>
+  if (EXTRACT === 'off') out.push('<div class="muted">Търсенето на видео в статиите работи на публикувания сайт.</div>');
+  else if (M.pending) out.push(`<div class="muted">Търсим видео в ${M.targets.length} ${M.targets.length > 1 ? 'статии' : 'статия'}…</div>`);
+  else if (!players.length && !M.files.length && !M.links.length && !uploads.length) out.push(`<div class="muted">В статиите няма видео${MM.items.length ? ' (видеата от мача са по-горе)' : ''}.</div>`);
+  if (M.failed.length) out.push(`<details class="muted"><summary>Не се отвориха ${M.failed.length} от ${M.targets.length} статии</summary>${M.failed.map(({ a, r }) =>
     `<div>• ${esc(a.src)}: ${esc(r.err)}${r.diag && r.diag.length ? ' (' + esc(r.diag.join(' → ')) + ')' : ''}</div>`).join('')}</details>`);
-  if (EXTRACT !== 'off' && !M.pending) out.push('<div class="actions"><button class="small" data-act="retry">↻ Look for videos again</button></div>');
+  if (EXTRACT !== 'off' && !M.pending) out.push('<div class="actions"><button class="small" data-act="retry">↻ Търси видео отново</button></div>');
   const sig = [uploads.map(v => v.id + ':' + (COMMENTS[v.id] || []).length), players.map(p => p.key), M.files.map(f => f.key), M.links.map(l => l.href),
     M.mins.map(m => m.m + '+' + m.plus), M.failed.length, M.pending, EXTRACT, MM.items.map(x => x.v.id), MSEL[s.key] || '', MM.need.length].join('|');
   return { html: out.join(''), sig };
@@ -1356,7 +1593,7 @@ async function initSupabase(){
     if (!window.supabase) await loadScript(SUPABASE_JS);
     SB = window.supabase.createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     SB_CONF = { url, key };
-  } catch (e) { AUTH = 'error'; log('Supabase failed to load: ' + e.message); showWarn('The news database could not be reached: ' + e.message); renderAll(); return; }
+  } catch (e) { AUTH = 'error'; log('Supabase failed to load: ' + e.message); showWarn('Базата с новините не е достъпна: ' + e.message); renderAll(); return; }
   loadNews(true);
   loadMatchIndex();   // the news cards link to the matches they are about; every match lists its stories
   SB.auth.onAuthStateChange((event, session) => {
@@ -1431,15 +1668,15 @@ async function postComment(form){
   btn.disabled = true;
   const { error } = await SB.from('video_comments').insert({ video_id: vid, body: body.slice(0, 2000) });
   btn.disabled = false;
-  if (error) { if (msg) { msg.textContent = 'Could not post: ' + error.message; msg.className = 'msg err'; } return; }
+  if (error) { if (msg) { msg.textContent = 'Не можа да се публикува: ' + error.message; msg.className = 'msg err'; } return; }
   form.reset();
   await loadComments();
   renderAll();
 }
 async function deleteComment(id){
-  if (!confirm('Delete this comment?')) return;
+  if (!confirmT('Да изтрия ли този коментар?')) return;
   const { error } = await SB.from('video_comments').delete().eq('id', id);
-  if (error) { alert('Could not delete: ' + error.message); return; }
+  if (error) { alertT('Не можа да се изтрие: ' + error.message); return; }
   await loadComments();
   renderAll();
 }
@@ -1469,9 +1706,9 @@ async function saveNote(form){
   renderAll();
 }
 async function deleteNote(id){
-  if (!confirm('Да изтрия ли бележката?')) return;
+  if (!confirmT('Да изтрия ли бележката?')) return;
   const { error } = await SB.from('video_notes').delete().eq('id', id);
-  if (error) { alert('Бележката не е изтрита: ' + error.message); return; }
+  if (error) { alertT('Бележката не е изтрита: ' + error.message); return; }
   if (NOTE_EDIT === String(id)) NOTE_EDIT = '';
   await loadNotes();
   renderAll();
@@ -1505,8 +1742,15 @@ function applyView(){
   PENDING_VID = vid;
   SCROLL_TO = v === 'table' ? 'standings' : null;
   if (v.startsWith('post-')) Forum.want(v.slice(5));                  // #post-12 opens that forum post
-  VIEW = v.startsWith('video-') ? 'videos' : v === 'table' ? 'results' : v === 'forum-play' || v.startsWith('post-') ? 'forum'
+  // #match/efbet/<id>: the match's own page (Results underneath, so back returns to its round)
+  const mp = v.match(/^match\/([^/]+)\/(.+)$/);
+  const was = FB.match;
+  FB.match = mp ? { lg: decodeURIComponent(mp[1]), id: decodeURIComponent(mp[2]) } : null;
+  if (FB.match) { FB.league = FB.match.lg; FB.last[sectOf(FB.league)] = FB.league; }
+  VIEW = v.startsWith('video-') ? 'videos' : v === 'table' || mp ? 'results' : v === 'forum-play' || v.startsWith('post-') ? 'forum'
     : VIEWS.includes(v) ? v : 'bg';   // the table now sits under the results
+  FB.backFrom = was && !FB.match && VIEW === 'results' ? was.id : null;
+  if (!FB.backFrom && !FB.match) FB.listY = null;   // kept while on the match page, for the way back
   if (VIEW === 'admin' && !isAdmin() && AUTH !== 'loading') VIEW = 'account';
   $('#view-news').hidden = !(VIEW === 'bg' || VIEW === 'world');
   $('#view-videos').hidden = VIEW !== 'videos';
@@ -1519,23 +1763,28 @@ function applyView(){
   if (VIEW === 'admin') loadUsers();
   if (SCROLL_TO) { const el = document.getElementById(SCROLL_TO); if (el) el.scrollIntoView({ block: 'start' }); }
 }
+// the five sections (a tab bar at the bottom on phones, in the top bar on wider screens) and, in the top bar, the account
+const NAV_IC = {
+  bg: '<rect x="3.5" y="4.5" width="13.5" height="15" rx="1.5"/><path d="M17 8.5h3.5v9a2 2 0 0 1-2 2H6"/><path d="M7 8.5h6.5M7 12h6.5M7 15.5h4"/>',
+  world: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.4 3.7 5.2 3.7 8.5s-1.2 6.1-3.7 8.5c-2.5-2.4-3.7-5.2-3.7-8.5S9.5 5.9 12 3.5z"/>',
+  results: '<rect x="2.5" y="5.5" width="19" height="13" rx="1.5"/><path d="M12 5.5v13"/><circle cx="12" cy="12" r="2.7"/><path d="M2.5 9.5H5v5H2.5M21.5 9.5H19v5h2.5"/>',
+  videos: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10.2 9.3v5.4l4.6-2.7z"/>',
+  forum: '<path d="M4 5.5h10.5A1.5 1.5 0 0 1 16 7v6a1.5 1.5 0 0 1-1.5 1.5H9L5.5 17.5v-3H4A1.5 1.5 0 0 1 2.5 13V7A1.5 1.5 0 0 1 4 5.5z"/><path d="M16 9h3.5A1.5 1.5 0 0 1 21 10.5v5.5a1.5 1.5 0 0 1-1.5 1.5h-1V20l-3-2.5H11"/>',
+  person: '<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c.9-3.6 3.6-5.6 7-5.6s6.1 2 7 5.6"/>',
+  shield: '<path d="M12 3.2l7 2.9v5.5c0 4.2-2.9 7.7-7 9-4.1-1.3-7-4.8-7-9V6.1z"/><path d="M9 12l2.2 2.2L15.2 10"/>',
+};
+const SECTIONS = [['bg', 'Новини'], ['world', 'Свят'], ['results', 'Мачове'], ['videos', 'Видео'], ['forum', 'Форум']];
 function renderNav(){
-  const stories = buildStories();
-  const nb = stories.filter(s => s.bg).length, nw = stories.filter(s => s.world).length;
+  const nav = $('#nav'), html = SECTIONS.map(([k, l]) => `<button data-view="${k}"${VIEW === k ? ' class="on" aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${NAV_IC[k]}</svg><span>${l}</span></button>`).join('');
+  if (nav._html !== html) nav.innerHTML = nav._html = html;
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin').length;
-  const items = [['bg', 'Bulgaria', nb], ['world', 'World', nw], ['results', 'Results', null], ['videos', 'Videos', approved() ? VIDEOS.length : null],
-    ['forum', 'Forum', approved() ? Forum.count() : null],
-    ['account', USER ? (PROFILE && PROFILE.display_name) || 'Account' : 'Log in', null]];
-  if (isAdmin()) items.push(['admin', 'Admin', pending || null]);
-  const nav = $('#nav'), html = items.map(([k, l, n]) => `<button data-view="${k}" class="${VIEW === k ? 'on' : ''}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('');
-  if (nav._html === html) return;
-  nav.innerHTML = nav._html = html;
-  // on a phone the tabs scroll sideways: keep the open one in view
-  const on = nav.querySelector('.on');
-  if (on && nav.scrollWidth > nav.clientWidth) {
-    const r = on.getBoundingClientRect(), nr = nav.getBoundingClientRect();
-    if (r.left < nr.left || r.right > nr.right - 28) nav.scrollLeft += r.left - nr.left - 8;
-  }
+  const name = USER ? ((PROFILE && PROFILE.display_name) || 'Профил') : 'Вход';
+  const ic = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${NAV_IC[k]}</svg>`;
+  let a = `<button class="acbtn${VIEW === 'account' ? ' on' : ''}" data-view="account" title="${esc(USER ? 'Профил' : 'Вход или регистрация')}"><span class="av" data-noi18n>${USER ? esc((name.trim()[0] || '?').toUpperCase()) : ic('person')}</span><span class="nm"${USER ? ' data-noi18n' : ''}>${esc(name)}</span></button>`;
+  if (isAdmin()) a += `<button class="acbtn${VIEW === 'admin' ? ' on' : ''}" data-view="admin" title="Админ"><span class="av">${ic('shield')}</span><span class="nm">Админ</span>${pending ? `<span class="n">${pending}</span>` : ''}</button>`;
+  const ac = $('#acct');
+  if (ac._html !== a) ac.innerHTML = ac._html = a;
+  $('#diag').hidden = !isAdmin();   // the diagnostics log: for admins
 }
 function renderAll(){
   renderNav();
@@ -1563,6 +1812,7 @@ const sameNode = (a, b) => a.nodeType === b.nodeType && a.nodeName === b.nodeNam
 function patchHtml(el, html){
   const next = document.createElement(el.tagName);
   next.innerHTML = html;
+  if (EN) I18N.el(next);
   patchKids(el, next);
 }
 function patchNode(a, b){
@@ -1602,9 +1852,9 @@ function setBusy(b){
 function showWarn(t){ const w = $('#warn'); w.textContent = t; w.hidden = false; }
 function hideWarn(){ $('#warn').hidden = true; }
 function updateLastRun(){
-  $('#lastRun').textContent = NEWS.loading ? 'Loading…' : NEWS.at
-    ? `${NEWS.count} saved articles · newest found ${NEWS.newest ? fmtDate(NEWS.newest) : '—'} · new stories are searched for every 30 minutes`
-    : NEWS.count ? 'Showing the copy saved in this browser…' : '';
+  $('#lastRun').textContent = NEWS.loading ? 'Зареждане…' : NEWS.at
+    ? `${NEWS.count} запазени статии · най-новата е от ${NEWS.newest ? fmtDate(NEWS.newest) : '—'} · нови се търсят на всеки 30 минути`
+    : NEWS.count ? 'Показваме копието, запазено в този браузър…' : '';
 }
 
 // The search box: a club named in it is matched by who the story is about, not by its letters — "ЦСКА" finds ЦСКА София's
@@ -1654,45 +1904,45 @@ function relatedArts(s){
 }
 const REL_SHOWN = 3;
 // an article from an international outlet says its language (EN, ES, IT, DE, FR)
-const LANG_NAME = { en: 'English', es: 'Spanish', it: 'Italian', de: 'German', fr: 'French' };
+const LANG_NAME = { en: 'английски', es: 'испански', it: 'италиански', de: 'немски', fr: 'френски' };
 const langTag = a => a.lang && LANG_NAME[a.lang] ? `<span class="lng" title="${LANG_NAME[a.lang]}">${a.lang.toUpperCase()}</span>` : '';
 function storyCard(s){
   const read = storyRead(s), r = s.rep;
-  const srcLine = langTag(r) + esc(r.src) + (s.sources > 1 ? ` <span class="muted">· ${s.sources} sources</span>` : '');
+  const srcLine = langTag(r) + esc(r.src) + (s.sources > 1 ? ` <span class="muted">· ${s.sources} източника</span>` : '');
   const rel = relatedArts(s), more = s.arts.length - 1 - Math.min(REL_SHOWN, rel.length);
-  const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${langTag(a)}${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}${
-    more > 0 ? `<li><button class="more" data-act="expand">+${more} more article${more > 1 ? 's' : ''}</button></li>` : ''}</ul>` : '';
+  const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${langTag(a)}${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Прочетено">✓</span>' : ''}</li>`).join('')}${
+    more > 0 ? `<li><button class="more" data-act="expand">+ още ${more} ${more > 1 ? 'статии' : 'статия'}</button></li>` : ''}</ul>` : '';
   const compTags = s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`);
   const worldTags = VIEW === 'world' || (VIEW === 'results' && isWorld(FB.league));
   const tags = (worldTags ? compTags : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`).concat(s.world ? compTags : []))
     .concat(s.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`));
   const M = storyMedia(s);
   if (M.mins.length) tags.unshift(`<span class="tag">⏱ ${M.mins.slice(0, 4).map(minLabel).join(' ')}${M.mins.length > 4 ? ' …' : ''}</span>`);
-  if (storyHasVideo(s, M)) tags.unshift('<span class="tag vid">▶ Video</span>');
+  if (storyHasVideo(s, M)) tags.unshift('<span class="tag vid">▶ Видео</span>');
   const open = EXPANDED.has(s.key);
   let panel = '';
   if (open) {
     const media = mediaHtml(s);
     panel = `<div class="panel">
-      <h3>${s.arts.length} article${s.arts.length > 1 ? 's' : ''} from ${s.sources} source${s.sources > 1 ? 's' : ''}</h3>
+      <h3>${s.arts.length} ${s.arts.length > 1 ? 'статии' : 'статия'} от ${s.sources} ${s.sources > 1 ? 'източника' : 'източник'}</h3>
       <ul class="arts">${s.arts.map(a => `<li><div class="m">${esc(fmtDate(a.date))} · ${langTag(a)}${esc(a.src)}${isNewArt(a) ? ' · <b>new</b>' : ''}</div>
-        <a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${DUP.has(a.aid) ? '<span class="dup">Duplicate</span>' : ''}${isRead(a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`).join('')}</ul>
-      <h3>Video</h3>
+        <a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${DUP.has(a.aid) ? '<span class="dup">Дубликат</span>' : ''}${isRead(a.aid) ? '<span class="chk" title="Прочетено">✓</span>' : ''}</li>`).join('')}</ul>
+      <h3>Видео</h3>
       <div class="media" data-key="${esc(s.key)}" data-sig="${esc(media.sig)}">${media.html}</div>
-      <div class="actions">${approved() ? '<button class="small" data-act="upload">⬆ Upload a video for this story</button>'
-        : SB ? `<span class="muted">${USER ? 'Uploading videos needs admin approval of your account.' : '<a href="#account">Log in</a> to upload a video for this story.'}</span>` : ''}</div>
+      <div class="actions">${approved() ? '<button class="small" data-act="upload">⬆ Качи видео към тази статия</button>'
+        : SB ? `<span class="muted">${USER ? 'За качване на видео профилът ви трябва да е одобрен от администратор.' : '<a href="#account">Влезте</a>, за да качите видео към тази статия.'}</span>` : ''}</div>
     </div>`;
   }
   return `<article class="card${read ? ' read' : ''}" data-key="${esc(s.key)}">
-    <div class="meta">${s.hot ? '<span class="badge hot">HOT</span>' : ''}${s.hasNew ? '<span class="badge new">NEW</span>' : ''}${read ? '<span class="badge read">✓ READ</span>' : ''}
-      <span>${esc(fmtDate(s.date))}</span><span>·</span><span>${srcLine}</span></div>
+    <div class="meta">${s.hot ? '<span class="badge hot">Горещо</span>' : ''}${s.hasNew ? '<span class="badge new">Ново</span>' : ''}${read ? '<span class="badge read">✓ Прочетено</span>' : ''}
+      <span>${esc(fmtDate(s.date))}</span><span>${srcLine}</span></div>
     <h2><a href="${esc(safeUrl(r.link))}" data-aid="${esc(r.aid)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h2>
     ${r.desc ? `<p class="desc">${esc(r.desc)}</p>` : ''}${relHtml}
     <div class="tags">${tags.join('')}</div>${matchLinks(s)}
     <div class="actions">
-      <button class="small" data-act="expand">${open ? '▴ Hide' : '▾ ' + (s.arts.length > 1 ? `All ${s.arts.length} articles & video` : 'Details & video')}</button>
-      <button class="small" data-act="read">${read ? 'Mark unread' : 'Mark read'}</button>
-      ${s.bgOnly ? `<a class="btn small" href="${esc(EBFU_URL)}" target="_blank" rel="noopener" title="Match video in the ebfu.net archive (your own login)">🎥 ebfu.net</a>` : ''}
+      <button class="small" data-act="expand">${open ? '▴ Скрий' : '▾ ' + (s.arts.length > 1 ? `Всички ${s.arts.length} статии и видео` : 'Подробно и видео')}</button>
+      <button class="small" data-act="read">${read ? 'Непрочетено' : 'Прочетено'}</button>
+      ${s.bgOnly ? `<a class="btn small" href="${esc(EBFU_URL)}" target="_blank" rel="noopener" title="Видео от мача в архива на ebfu.net (с вашия вход)">🎥 ebfu.net</a>` : ''}
     </div>${panel}
   </article>`;
 }
@@ -1704,13 +1954,13 @@ function renderPills(world, sel){
   sel.group.forEach(k => p.push(['group:' + k, (world ? COMPS : DIVS)[k] || k]));
   sel.cats.forEach(k => p.push(['cats:' + k, CATS[k] || k]));
   if (sel.round) p.push(['round', roundName(sel.round)]);
-  [['onlyNew', 'Only new'], ['onlyMajor', 'Само водещите сайтове'], ['onlyHot', 'Only hot'], ['hideRead', 'Hide read']].forEach(([id, l]) => { if ($('#' + id).checked) p.push([id, l]); });
-  if ($('#sort').value === 'score') p.push(['sort', 'Most important first']);
-  $('#pills').innerHTML = p.map(([k, l]) => `<button class="pill" data-pill="${esc(k)}" title="Remove">${esc(l)}<span class="x" aria-hidden="true">×</span></button>`).join('')
-    + (p.length > 1 ? '<button class="pill clear" data-pill="*">Clear all</button>' : '');
+  [['onlyNew', 'Само новите'], ['onlyMajor', 'Само водещите сайтове'], ['onlyHot', 'Само горещите'], ['hideRead', 'Скрий прочетените']].forEach(([id, l]) => { if ($('#' + id).checked) p.push([id, l]); });
+  if ($('#sort').value === 'score') p.push(['sort', 'Най-важните първо']);
+  $('#pills').innerHTML = p.map(([k, l]) => `<button class="pill" data-pill="${esc(k)}" title="Махни">${esc(l)}<span class="x" aria-hidden="true">×</span></button>`).join('')
+    + (p.length > 1 ? '<button class="pill clear" data-pill="*">Изчисти всички</button>' : '');
   const n = p.filter(([k]) => k !== 'q').length, fc = $('#fcount');
   fc.hidden = !n; fc.textContent = n;
-  $('#ftoggle').setAttribute('aria-label', n ? `Filters, ${n} on` : 'Filters');
+  $('#ftoggle').setAttribute('aria-label', n ? `Филтри, включени ${n}` : 'Филтри');
 }
 
 // The feed a day at a time (newest first): a heading for each day — "Днес · петък, 13 ноември", "Вчера · …",
@@ -1720,7 +1970,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 function dayHead(t, stories, arts, now = Date.now()){
   const d = new Date(t), y = new Date(now);
   const rel = dayNo(t) === dayNo(now) ? 'Днес' : dayNo(t) === dayNo(now) - 1 ? 'Вчера' : '';
-  let txt = d.toLocaleDateString('bg-BG', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== y.getFullYear() ? { year: 'numeric' } : {}) });
+  let txt = d.toLocaleDateString(LOC, { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== y.getFullYear() ? { year: 'numeric' } : {}) });
   if (!rel) txt = txt.charAt(0).toUpperCase() + txt.slice(1);
   return `<div class="dayhead" role="heading" aria-level="2">${rel ? `<span class="dnow">${rel}</span><span>·</span>` : ''}<span>${esc(txt)}</span>` +
     `<span class="n">${plural(stories, 'тема', 'теми')} · ${plural(arts, 'статия', 'статии')}</span></div>`;
@@ -1793,14 +2043,14 @@ function renderRoundBar(sel, list, stories){
 function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
   $('#intro').innerHTML = world
-    ? 'Refereeing stories from the national teams, the European cups (Champions League, Europa League, Conference League) and the top five leagues: England, Spain, Italy, Germany and France. <a href="#results" data-world-results>Results &amp; tables →</a>'
-    : 'Refereeing stories from the efbet Liga, 2nd League, 3rd League and the Bulgarian Cup, and Bulgarian clubs and referees in Europe and abroad. Articles about the same incident are grouped into one story.';
+    ? 'Съдийството в националните отбори, евротурнирите (Шампионска лига, Лига Европа, Лига на конференциите) и петте водещи първенства: Англия, Испания, Италия, Германия и Франция. <a href="#results" data-world-results>Мачове и класирания</a>'
+    : 'Съдийството в efbet Лига, Втора и Трета лига и Купата на България, и българските клубове и съдии в Европа и чужбина. Статиите за един и същ случай са събрани в една тема.';
   let base = filteredStories();
   // World: a section first (national teams / European cups / top 5 leagues), then the competitions inside it
   const sectEl = $('#sectChips');
   sectEl.hidden = !world;
   if (world) {
-    sectEl.innerHTML = `<button class="chip${!sel.sect ? ' on' : ''}" data-sect="">All<span class="n">${base.length}</span></button>` +
+    sectEl.innerHTML = `<button class="chip${!sel.sect ? ' on' : ''}" data-sect="">Всички<span class="n">${base.length}</span></button>` +
       Object.entries(WSECT).map(([k, [label]]) => `<button class="chip${sel.sect === k ? ' on' : ''}" data-sect="${k}">${esc(label)}<span class="n">${base.filter(s => inSect(s, k)).length}</span></button>`).join('');
     if (sel.sect) base = base.filter(s => inSect(s, sel.sect));
   }
@@ -1810,7 +2060,7 @@ function render(){
   const byGroup = base.filter(s => !sel.group.size || s[groupKey].some(d => sel.group.has(d)));
   // the competition chips appear once a section is picked; a section with one competition (national teams) has none
   $('#groupChips').hidden = $('#groupLabel').hidden = world && (!sel.sect || Object.keys(groupLabels).length < 2);
-  $('#groupLabel').textContent = world ? 'Competition' : 'Division';
+  $('#groupLabel').textContent = world ? 'Турнир' : 'Дивизия';
   renderChips($('#groupChips'), groupLabels, sel.group, byCat, groupKey);
   renderChips($('#catChips'), CATS, sel.cats, byGroup, 'cats');
   const all = byCat.filter(s => byGroup.includes(s));
@@ -1828,16 +2078,16 @@ function render(){
     : (a, b) => dayNo(b.date) - dayNo(a.date) || (b.lead - a.lead) || b.date - a.date);
 
   const totalArts = list.reduce((n, s) => n + s.arts.length, 0);
-  $('#count').textContent = `${list.length} stories · ${totalArts} articles`;
+  $('#count').textContent = `${list.length} ${list.length === 1 ? 'тема' : 'теми'} · ${totalArts} ${totalArts === 1 ? 'статия' : 'статии'}`;
   renderPills(world, sel);
   const rl = $('#resLink');
-  rl.textContent = world ? 'Results & tables →' : 'Results & table →';
+  rl.textContent = world ? 'Мачове и класирания' : 'Мачове и класиране';
   rl.toggleAttribute('data-world-results', world); rl.toggleAttribute('data-bg-results', !world);
   const feed = $('#feed');
   // updated in place: a video being watched under a story keeps playing
   if (!list.length) {
     const any = Object.keys(S.articles).length;
-    patchHtml(feed, `<div class="empty">${NEWS.loading && !any ? 'Loading the saved news…' : any ? 'No stories match these filters.' : NEWS.err ? 'The news could not be loaded — press Refresh to try again.' : 'No stories yet.'}</div>`);
+    patchHtml(feed, `<div class="empty">${NEWS.loading && !any ? 'Зареждаме запазените новини…' : any ? 'Няма теми за тези филтри.' : NEWS.err ? 'Новините не се заредиха — натиснете ↻, за да опитате пак.' : 'Още няма теми.'}</div>`);
   } else patchHtml(feed, byDay ? withDays(list.slice(0, shown), list) : list.slice(0, shown).map(storyCard).join(''));
   $('#more').hidden = list.length <= shown;
   updateLastRun();
@@ -1869,8 +2119,8 @@ function preserveForm(container, draw){
 /* ======================= UI: VIDEOS ======================= */
 // Members' clips: Bulgarian / World → approved by the Referee Committee or not checked → Laws-of-the-Game category.
 // Only approved members see them (the database enforces it). The admin keeps the categories and sorts the videos.
-const VREGION = { bg: 'Bulgarian videos', world: 'World videos' };
-const VREVIEW = { approved: 'Approved by the Referee Committee', unchecked: 'Not checked by the Referee Committee' };
+const VREGION = { bg: 'Български клипове', world: 'Световни клипове' };
+const VREVIEW = { approved: 'Одобрени от Съдийската комисия', unchecked: 'Непроверени от Съдийската комисия' };
 const VSEL = Object.assign({ region: 'bg', status: '', cat: '' }, loadJSON('bgRefWatch.vsel') || {});
 const VPICK = new Set();          // videos the admin has ticked for a bulk move / copy
 let DRIVE_PICK = null;            // videos found in the Google Drive folders of the upload form
@@ -1885,16 +2135,16 @@ const vMatch = (v, sel) => vRegion(v) === sel.region && (!sel.status || v.review
 function renderVideos(){
   const box = $('#uploadBox'), member = approved();
   $('#vIntro').textContent = member
-    ? 'Clips shared by the members: Bulgarian or World, approved by the Referee Committee or not checked yet, and filed by the Laws of the Game.'
-    : 'Clips shared by the members — for approved members only.';
+    ? 'Клипове, споделени от членовете: български и световни, одобрени от Съдийската комисия или още непроверени, подредени по Правилата на играта.'
+    : 'Клипове, споделени от членовете — само за одобрени членове.';
   // the upload form is only re-drawn when who is logged in, the story it's for or the category list changes — never while typing
   const upKey = [AUTH, USER && USER.id, member, PREFILL ? PREFILL.article_key : '', CATV_VER].join('|');
   if (upKey !== UP_KEY) {
     UP_KEY = upKey;
-    if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Videos need the Supabase connection, which isn't set up on this site yet.</div>`;
-    else if (AUTH === 'loading') box.innerHTML = '<p class="muted">Loading…</p>';
-    else if (!USER) box.innerHTML = `<div class="card"><b>Members only</b><p class="muted">The members' videos and comments are visible to members approved by the admin. <a href="#account">Log in or register</a>.</p></div>`;
-    else if (!member) box.innerHTML = `<div class="card"><b>Waiting for approval</b><p class="muted">Your account is registered. Once the admin approves it you can watch, upload and comment on the members' videos.</p></div>`;
+    if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Видеата изискват връзка с базата данни, която на този сайт още не е настроена.</div>`;
+    else if (AUTH === 'loading') box.innerHTML = '<p class="muted">Зареждане…</p>';
+    else if (!USER) box.innerHTML = `<div class="card"><b>Само за членове</b><p class="muted">Клиповете и коментарите на членовете се виждат от членове, одобрени от администратор. <a href="#account">Вход или регистрация</a>.</p></div>`;
+    else if (!member) box.innerHTML = `<div class="card"><b>Чака одобрение</b><p class="muted">Профилът ви е регистриран. Щом администраторът го одобри, ще можете да гледате, качвате и коментирате клиповете на членовете.</p></div>`;
     else preserveForm(box, () => { box.innerHTML = uploadForm(); if (DRIVE_PICK) drawDrivePick(); });
   }
   $('#vFilters').hidden = $('#vSearch').hidden = !member;
@@ -1921,7 +2171,7 @@ function renderVideos(){
             <span class="muted">${vids.length} ${vids.length === 1 ? 'клип' : 'клипа'}${first ? ' — пускат се един след друг' : ''}</span>
             ${isAdmin() ? `<button class="small vsel${VSELECTING || VPICK.size ? ' on' : ''}" data-vselect aria-pressed="${!!(VSELECTING || VPICK.size)}">☑ Избери</button>` : ''}</div>
            <div class="vgrid">${vids.map(v => videoTile(v, 'list', true)).join('')}</div>`
-        : `<div class="empty">${VIDEOS.length ? 'No videos here yet.' : 'No videos uploaded yet.'}</div>`;
+        : `<div class="empty">${VIDEOS.length ? 'Тук още няма клипове.' : 'Още няма качени клипове.'}</div>`;
     });
     $('#videoList').classList.toggle('selecting', isAdmin() && (VSELECTING || VPICK.size > 0));
     fillThumbs($('#videoList'));
@@ -1937,15 +2187,15 @@ function renderVideoFilters(){
   inS.forEach(v => vCats(v).forEach(c => cnt[c] = (cnt[c] || 0) + 1));
   const none = inS.filter(v => !vCats(v).size).length;
   $('#vFilters').innerHTML = `
-    <div class="seg" role="tablist" aria-label="Bulgarian or World">${Object.entries(VREGION).map(([k, l]) =>
+    <div class="seg" role="tablist" aria-label="Български или световни">${Object.entries(VREGION).map(([k, l]) =>
       `<button class="${VSEL.region === k ? 'on' : ''}" data-vreg="${k}" role="tab" aria-selected="${VSEL.region === k}">${esc(l)}${n(VIDEOS.filter(v => vRegion(v) === k).length)}</button>`).join('')}</div>
-    <div class="seg vstatus" aria-label="Referee Committee">${[['', 'All', inR.length], ['approved', '✓ Approved by the Referee Committee', inR.filter(v => v.review_status === 'approved').length],
-      ['unchecked', 'Not checked yet', inR.filter(v => v.review_status !== 'approved').length]].map(([k, l, c]) =>
+    <div class="seg vstatus" aria-label="Съдийска комисия">${[['', 'Всички', inR.length], ['approved', '✓ Одобрени от Съдийската комисия', inR.filter(v => v.review_status === 'approved').length],
+      ['unchecked', 'Непроверени', inR.filter(v => v.review_status !== 'approved').length]].map(([k, l, c]) =>
       `<button class="${VSEL.status === k ? 'on' : ''}" data-vst="${k}">${esc(l)}${n(c)}</button>`).join('')}</div>
-    <div class="chips" aria-label="Laws of the Game">
-      <button class="chip${!VSEL.cat ? ' on' : ''}" data-vcat="">All categories${n(inS.length)}</button>
+    <div class="chips" aria-label="Правила на играта">
+      <button class="chip${!VSEL.cat ? ' on' : ''}" data-vcat="">Всички категории${n(inS.length)}</button>
       ${CATS_V.map(c => `<button class="chip${VSEL.cat === String(c.id) ? ' on' : ''}" data-vcat="${c.id}">${esc(c.name)}${n(cnt[c.id] || 0)}</button>`).join('')}
-      ${none ? `<button class="chip${VSEL.cat === 'none' ? ' on' : ''}" data-vcat="none">Not in a category${n(none)}</button>` : ''}
+      ${none ? `<button class="chip${VSEL.cat === 'none' ? ' on' : ''}" data-vcat="none">Без категория${n(none)}</button>` : ''}
     </div>`;
 }
 const catChecks = (name, checked, prefix) => CATS_V.map(c => `<label class="ck"><input type="checkbox" name="${name}" value="${c.id}"${checked.has(c.id) ? ' checked' : ''}${prefix ? ` data-vc="${prefix}:${c.id}"` : ''}>${esc(c.name)}</label>`).join('');
@@ -1953,7 +2203,7 @@ const catChecks = (name, checked, prefix) => CATS_V.map(c => `<label class="ck">
 const PLAY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>';
 let LAST_Q = [], VP_Q = [], VP_PUSHED = false, PENDING_VID = 0, VP_SYNC = '', VSELECTING = false;
 const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
-const bgDay = ts => new Date(ts).toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' });
+const bgDay = ts => new Date(ts).toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' });
 // A clip as the player plays it. Uploaded files and Google Drive files play in the page's own <video>, so zoom, slow
 // motion and frame steps work: a Drive file comes through the site's worker (Google refuses it to other sites' pages),
 // and Drive's own player stays as the fallback. YouTube plays through its player API; other sites' players in a
@@ -2061,7 +2311,7 @@ function videoInfoHtml(v, adminOpen){
   const note = ok || v.committee_note
     ? `<div class="rcnote${ok ? ' ok' : ''}"><b>${ok ? '✓ Одобрено от Съдийската комисия' : 'Съдийската комисия'}</b>${v.reviewed_at ? `<span class="muted"> · ${esc(bgDay(Date.parse(v.reviewed_at)))}${v.reviewed_by_name ? ' · ' + esc(v.reviewed_by_name) : ''}</span>` : ''}${v.committee_note ? `<p>${esc(v.committee_note)}</p>` : ''}</div>`
     : '<div class="muted" style="margin-top:8px">Не е проверено от Съдийската комисия.</div>';
-  const when = s => new Date(Date.parse(s)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const when = s => new Date(Date.parse(s)).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   // comments: every member sees them; no one edits them; the author or an admin deletes them
   const comments = cs.map(c => `<div class="cm"><div class="m"><b>${esc(c.author_name || 'член')}</b> · ${esc(when(c.created_at))}
       ${USER && (c.user_id === USER.id || isAdmin()) ? `<button class="small link" data-cdel="${esc(c.id)}">изтрий</button>` : ''}</div><div>${esc(c.body)}</div></div>`).join('');
@@ -2152,18 +2402,18 @@ function renderBulk(){
   if (bar.dataset.key === key) return;     // keep the choices being made
   bar.dataset.key = key;
   bar.innerHTML = `<b>${VPICK.size} selected</b>
-    <label>Copy to<select data-bulk="copy"><option value="">category…</option>${opts}</select></label>
-    <label title="${from ? `Takes them out of “${esc(from)}”` : 'Takes them out of all their categories'}">Move ${from ? `from “${esc(from)}” ` : ''}to<select data-bulk="move"><option value="">category…</option>${opts}</select></label>
-    <label>Section<select data-bulk="region"><option value="">…</option>${Object.entries(VREGION).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
-    <label>Referee Committee<select data-bulk="review_status"><option value="">…</option>${Object.entries(VREVIEW).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
-    <button class="small" data-bulk-all>Select all shown</button><button class="small" data-bulk-clear>Clear</button>
+    <label>Копирай в<select data-bulk="copy"><option value="">категория…</option>${opts}</select></label>
+    <label title="${from ? `Изважда ги от „${esc(from)}“` : 'Изважда ги от всичките им категории'}">Премести ${from ? `от „${esc(from)}“ ` : ''}в<select data-bulk="move"><option value="">категория…</option>${opts}</select></label>
+    <label>Раздел<select data-bulk="region"><option value="">…</option>${Object.entries(VREGION).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
+    <label>Съдийска комисия<select data-bulk="review_status"><option value="">…</option>${Object.entries(VREVIEW).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
+    <button class="small" data-bulk-all>Избери всички показани</button><button class="small" data-bulk-clear>Изчисти</button>
     <span class="msg" id="bulkMsg"></span>`;
 }
 async function bulkAction(kind, value){
   const ids = [...VPICK], msg = $('#bulkMsg');
   if (!ids.length || !value) return;
   const say = (t, cls) => { if (msg) { msg.textContent = t; msg.className = 'msg ' + (cls || ''); } };
-  say('Saving…');
+  say('Записване…');
   let error;
   if (kind === 'copy' || kind === 'move') {
     const cid = Number(value);
@@ -2174,8 +2424,8 @@ async function bulkAction(kind, value){
     }
     if (!error) ({ error } = await SB.from('video_category_items').upsert(ids.map(id => ({ video_id: id, category_id: cid })), { onConflict: 'video_id,category_id', ignoreDuplicates: true }));
   } else ({ error } = await SB.from('videos').update(kind === 'region' && value === 'world' ? { region: value, division: null } : { [kind]: value }).in('id', ids));
-  if (error) { say('Could not save: ' + error.message, 'err'); return; }
-  const what = kind === 'copy' ? `copied to “${catName(value)}”` : kind === 'move' ? `moved to “${catName(value)}”` : kind === 'region' ? `moved to ${VREGION[value]}` : `marked “${VREVIEW[value]}”`;
+  if (error) { say('Не можа да се запише: ' + error.message, 'err'); return; }
+  const what = kind === 'copy' ? `копирани в „${catName(value)}“` : kind === 'move' ? `преместени в „${catName(value)}“` : kind === 'region' ? `преместени в „${VREGION[value]}“` : `отбелязани „${VREVIEW[value]}“`;
   VPICK.clear();
   await loadVideos();
   toast(`${ids.length} video${ids.length > 1 ? 's' : ''} ${what}.`);
@@ -2202,13 +2452,13 @@ function renderCatAdmin(){
       <p class="muted">Rename, reorder, add or delete categories. Deleting a category keeps its videos — they just leave that category.
         To move or copy videos, tick them (☐ at the top of each video) and use the bar that appears; or open “Sort this video”.</p>
       <div class="catrows">${CATS_V.map((c, i) => `<form class="catrow" data-cid="${c.id}">
-        <input type="text" name="cname-${c.id}" value="${esc(c.name)}" maxlength="80" required aria-label="Category name">
+        <input type="text" name="cname-${c.id}" value="${esc(c.name)}" maxlength="80" required aria-label="Име на категорията">
         <span class="muted">${counts[c.id] || 0} video${counts[c.id] === 1 ? '' : 's'}</span>
-        <button type="button" class="small" data-cmove="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
-        <button type="button" class="small" data-cmove="1" ${i === CATS_V.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+        <button type="button" class="small" data-cmove="-1" ${i === 0 ? 'disabled' : ''} aria-label="Нагоре">↑</button>
+        <button type="button" class="small" data-cmove="1" ${i === CATS_V.length - 1 ? 'disabled' : ''} aria-label="Надолу">↓</button>
         <button type="submit" class="small">Rename</button>
         <button type="button" class="small" data-cdelete>Delete</button></form>`).join('')}</div>
-      <form class="catrow" id="catAdd"><input type="text" name="newcat" maxlength="80" required placeholder="New category, e.g. Goalkeeper infringements"><button type="submit" class="small primary">Add category</button></form>
+      <form class="catrow" id="catAdd"><input type="text" name="newcat" maxlength="80" required placeholder="Нова категория, напр. Нарушения на вратаря"><button type="submit" class="small primary">Добави категория</button></form>
       <div class="msg" id="catMsg"></div></details>`;
   });
 }
@@ -2227,7 +2477,7 @@ async function catAction(kind, form, btn){
     ({ error } = await SB.from('video_categories').update({ name }).eq('id', id));
   } else if (kind === 'delete') {
     const c = CATS_V.find(x => x.id === id), n = VIDEOS.filter(v => vCats(v).has(id)).length;
-    if (!c || !confirm(`Delete the category “${c.name}”?${n ? ` Its ${n} video${n > 1 ? 's stay' : ' stays'} on the site.` : ''}`)) return;
+    if (!c || !confirmT(`Да изтрия ли категорията „${c.name}“?${n ? ` ${n > 1 ? `Нейните ${n} клипа остават` : 'Клипът ѝ остава'} на сайта.` : ''}`)) return;
     ({ error } = await SB.from('video_categories').delete().eq('id', id));
   } else if (kind === 'move') {
     const i = CATS_V.findIndex(c => c.id === id), j = i + Number(btn.dataset.cmove);
@@ -2237,9 +2487,9 @@ async function catAction(kind, form, btn){
     const changed = order.map((c, k) => ({ id: c.id, sort: (k + 1) * 10 })).filter((c, k) => order[k].sort !== c.sort);
     for (const c of changed) { ({ error } = await SB.from('video_categories').update({ sort: c.sort }).eq('id', c.id)); if (error) break; }
   }
-  if (error) { say(/duplicate|unique/i.test(error.message) ? 'There is already a category with that name.' : 'Could not save: ' + error.message, 'err'); return; }
+  if (error) { say(/duplicate|unique/i.test(error.message) ? 'Вече има категория с това име.' : 'Не можа да се запише: ' + error.message, 'err'); return; }
   await loadVideos();
-  say(kind === 'add' ? 'Category added.' : kind === 'rename' ? 'Renamed.' : kind === 'delete' ? 'Category deleted.' : '', 'ok');
+  say(kind === 'add' ? 'Категорията е добавена.' : kind === 'rename' ? 'Преименувано.' : kind === 'delete' ? 'Категорията е изтрита.' : '', 'ok');
 }
 
 /* --- admin: one video --- */
@@ -2248,14 +2498,14 @@ async function saveVideoAdmin(form){
   const patch = { region: f.get('region'), review_status: f.get('review_status'), committee_note: String(f.get('committee_note') || '').trim() || null };
   if (patch.region === 'world') patch.division = null;
   const { error } = await SB.from('videos').update(patch).eq('id', id);
-  if (error) { msg.textContent = 'Could not save: ' + error.message; msg.className = 'msg err'; return; }
+  if (error) { msg.textContent = 'Не можа да се запише: ' + error.message; msg.className = 'msg err'; return; }
   await loadVideos();
-  toast('Saved.');
+  toast('Записано.');
 }
 async function setVideoCat(vid, cid, on){
   const { error } = on ? await SB.from('video_category_items').upsert({ video_id: vid, category_id: cid }, { onConflict: 'video_id,category_id', ignoreDuplicates: true })
     : await SB.from('video_category_items').delete().eq('video_id', vid).eq('category_id', cid);
-  if (error) { alert('Could not save: ' + error.message); return; }
+  if (error) { alertT('Не можа да се запише: ' + error.message); return; }
   const s = VCAT[vid] || (VCAT[vid] = new Set());
   on ? s.add(cid) : s.delete(cid);
   VPlayer.refreshDetails();
@@ -2267,12 +2517,12 @@ async function setVideoCat(vid, cid, on){
 /* --- adding videos --- */
 function uploadForm(){
   const p = PREFILL || {};
-  return `<details class="box" ${PREFILL ? 'open' : ''}><summary>⬆ Add videos</summary>
+  return `<details class="box" ${PREFILL ? 'open' : ''}><summary>⬆ Добави клипове</summary>
     <form class="form" id="upForm">
       ${p.article_key ? `<div class="muted">For the story: <b>${esc(p.storyTitle)}</b></div>` : ''}
       <div class="two">
-        <label>Section<select name="region"><option value="bg"${p.region !== 'world' ? ' selected' : ''}>Bulgarian video</option><option value="world"${p.region === 'world' ? ' selected' : ''}>World video</option></select></label>
-        <label>Division (Bulgarian videos)<select name="division"><option value="">—</option>${Object.entries(DIVS).filter(([k]) => k !== 'unk' && k !== 'eur').map(([k, l]) => `<option value="${k}" ${p.division === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        <label>Раздел<select name="region"><option value="bg"${p.region !== 'world' ? ' selected' : ''}>Български клип</option><option value="world"${p.region === 'world' ? ' selected' : ''}>Световен клип</option></select></label>
+        <label>Дивизия (български клипове)<select name="division"><option value="">—</option>${Object.entries(DIVS).filter(([k]) => k !== 'unk' && k !== 'eur').map(([k, l]) => `<option value="${k}" ${p.division === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       </div>
       <label>Title<input type="text" name="title" maxlength="200" value="${esc(p.title || '')}" placeholder="Needed for one video; videos from a folder take their file names"></label>
       <div class="two">
@@ -2280,17 +2530,17 @@ function uploadForm(){
         <label>Match date<input type="date" name="match_date" value="${esc(p.match_date || '')}"></label>
       </div>
       <label>Minute(s)<input type="text" name="minutes" placeholder="23, 67, 90+2" value="${esc(p.minutes || '')}"></label>
-      <fieldset class="catpick"><legend>Categories (Laws of the Game)</legend>${catChecks('cats', new Set())}</fieldset>
-      <label>Video file — a screen recording of up to about 5 minutes is fine: anything over ${MAX_UPLOAD_MB} MB is compressed in your browser before uploading
+      <fieldset class="catpick"><legend>Категории (Правила на играта)</legend>${catChecks('cats', new Set())}</fieldset>
+      <label>Видеофайл — запис на екрана до около 5 минути е наред: всичко над ${MAX_UPLOAD_MB} MB се компресира в браузъра преди качване
         <input type="file" name="file" accept="video/*"></label>
-      <label>…or links, one per line: Google Drive files or whole Google Drive folders, YouTube, Facebook, Vimeo, Vbox7, Instagram, TikTok
+      <label>…или линкове, по един на ред: файлове или цели папки в Google Drive, YouTube, Facebook, Vimeo, Vbox7, Instagram, TikTok
         <textarea name="links" rows="3" placeholder="https://drive.google.com/drive/folders/…&#10;https://drive.google.com/file/d/…/view"></textarea></label>
-      <p class="muted small">Google Drive: share the file or folder as “Anyone with the link” so it plays here. A folder adds every video in it, subfolders included.</p>
+      <p class="muted small">Google Drive: споделете файла или папката като „Всеки с линка“, за да се пуска тук. Папка добавя всички клипове в нея, с подпапките.</p>
       <div id="drivePick"></div>
-      <label>Description<textarea name="description" maxlength="2000"></textarea></label>
+      <label>Описание<textarea name="description" maxlength="2000"></textarea></label>
       <input type="hidden" name="article_key" value="${esc(p.article_key || '')}">
       <input type="hidden" name="article_url" value="${esc(p.article_url || '')}">
-      <div class="bar"><button class="primary" type="submit">Add</button>${PREFILL ? '<button type="button" data-act="clearPrefill">Not for a story</button>' : ''}</div>
+      <div class="bar"><button class="primary" type="submit">Добави</button>${PREFILL ? '<button type="button" data-act="clearPrefill">Не е към статия</button>' : ''}</div>
       <div class="prog" id="upProg" hidden><div></div></div>
       <div id="upMsg" class="msg" role="status"></div>
     </form></details>`;
@@ -2301,16 +2551,16 @@ function drawDrivePick(){
   if (!DRIVE_PICK || !DRIVE_PICK.items.length) { box.innerHTML = ''; return; }
   const items = DRIVE_PICK.items;
   box.innerHTML = `<div class="dpick"><div class="bar"><b>${items.length} video${items.length > 1 ? 's' : ''} in ${esc(DRIVE_PICK.title || 'the folder')}</b>
-      <button type="button" class="small" data-dpall="1">Tick all</button><button type="button" class="small" data-dpall="0">Untick all</button></div>
+      <button type="button" class="small" data-dpall="1">Отметни всички</button><button type="button" class="small" data-dpall="0">Махни всички</button></div>
     <div class="dlist">${items.map((it, i) => `<label class="ck"><input type="checkbox" name="dp" value="${i}" checked>${esc(it.name || it.id)}${it.folder ? ` <span class="muted">· ${esc(it.folder)}</span>` : ''}</label>`).join('')}</div></div>`;
 }
 const driveFolder = u => { const m = String(u || '').match(/^https:\/\/drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders\/|embeddedfolderview\?id=|open\?id=)([\w-]{10,})/); return m && !/\/file\//.test(u) ? m[1] : null; };
 async function listDriveFolder(url){
   const { data } = await SB.auth.getSession();
   const r = await fetch('/drive/list', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session && data.session.access_token) }, body: JSON.stringify({ url }) });
-  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('Reading Google Drive folders works on the published site.');
+  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('Четенето на папки от Google Drive работи на публикувания сайт.');
   const j = await r.json();
-  if (!j.ok) throw new Error(j.error || 'Google Drive could not be read');
+  if (!j.ok) throw new Error(j.error || 'Google Drive не можа да се прочете');
   return j;
 }
 const stripExt = n => String(n || '').replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[_]+/g, ' ').trim();
@@ -2322,16 +2572,16 @@ async function submitUpload(form){
   const say = (t, cls) => { msg.textContent = t; msg.className = 'msg ' + (cls || ''); };
   const bar = p => { prog.hidden = p == null; if (p != null) prog.firstElementChild.style.width = Math.round(p * 100) + '%'; };
   const hasFile = !!(file && file.size);
-  if (!hasFile && !lines.length) return say('Choose a video file or paste a link.', 'err');
+  if (!hasFile && !lines.length) return say('Изберете видеофайл или поставете линк.', 'err');
   const bad = lines.find(l => !/^https:\/\//i.test(l));
-  if (bad) return say('Links must start with https:// — check: ' + bad.slice(0, 80), 'err');
+  if (bad) return say('Линковете трябва да започват с https:// — проверете: ' + bad.slice(0, 80), 'err');
   btn.disabled = true;
   let path = null;
   try {
     // 1. a Google Drive folder: list its videos first, so the member can untick some
     const folders = lines.filter(driveFolder), fkey = folders.join('|');
     if (folders.length && (!DRIVE_PICK || DRIVE_PICK.key !== fkey)) {
-      say('Reading the Google Drive folder' + (folders.length > 1 ? 's' : '') + '…');
+      say(folders.length > 1 ? 'Четем папките в Google Drive…' : 'Четем папката в Google Drive…');
       const items = [], titles = [];
       for (const u of folders) {
         const j = await listDriveFolder(u);
@@ -2340,8 +2590,8 @@ async function submitUpload(form){
       }
       DRIVE_PICK = { key: fkey, items, title: titles.map(t => `“${t}”`).join(', ') };
       drawDrivePick();
-      if (!items.length) { DRIVE_PICK = null; return say('No videos found in that folder. Is it shared as “Anyone with the link”?', 'err'); }
-      return say(`Found ${items.length} video${items.length > 1 ? 's' : ''}. Untick any you don't want and press Add again.`, 'ok');
+      if (!items.length) { DRIVE_PICK = null; return say('В папката няма клипове. Споделена ли е като „Всеки с линка“?', 'err'); }
+      return say(`${items.length > 1 ? `Намерени са ${items.length} клипа` : 'Намерен е 1 клип'}. Махнете отметката на ненужните и натиснете „Добави“ отново.`, 'ok');
     }
     // 2. what will be added
     const picked = DRIVE_PICK && DRIVE_PICK.key === fkey ? [...form.querySelectorAll('input[name=dp]:checked')].map(i => DRIVE_PICK.items[Number(i.value)]) : [];
@@ -2349,25 +2599,25 @@ async function submitUpload(form){
     if (hasFile) items.push({ file });
     lines.filter(l => !driveFolder(l)).forEach(url => items.push({ url }));
     picked.forEach(it => items.push({ url: it.url, name: it.name, folder: it.folder }));
-    if (!items.length) return say('Nothing ticked to add.', 'err');
+    if (!items.length) return say('Нищо не е отметнато.', 'err');
     const title = String(f.get('title') || '').trim();
-    if (items.length === 1 && !title && !items[0].name) return say('Give the video a title.', 'err');
+    if (items.length === 1 && !title && !items[0].name) return say('Дайте заглавие на клипа.', 'err');
     // 3. the file: compressed when it is too big (or not MP4/WebM/MOV), then uploaded with progress
     if (hasFile) {
       let blob = file;
       // a recording without sound (a screen recorder set to record the picture only): say so before uploading
-      say('Checking the video…');
-      if ((await hasSound(file)) === false && !confirm('This recording has NO SOUND — the file has no audio track (the screen recorder probably was not set to record sound).\n\nUpload it anyway, without sound?'))
-        return say('Not uploaded: the recording has no sound. Record it again with sound (in Windows Game Bar: Settings → Captures → "Capture audio"), then upload it.', 'err');
+      say('Проверяваме клипа…');
+      if ((await hasSound(file)) === false && !confirmT('Този запис е БЕЗ ЗВУК — файлът няма аудио (програмата за запис на екрана вероятно не е била настроена да записва звук).\n\nДа го кача ли въпреки това, без звук?'))
+        return say('Не е качено: записът е без звук. Запишете го отново със звук (в Windows Game Bar: Настройки → Заснемания → „Записвай звук“) и го качете.', 'err');
       if (file.size > MAX_UPLOAD_MB * 1048576 || !/^video\/(mp4|webm|quicktime)$/.test(file.type)) {
-        say('Compressing the video in your browser… 0%');
+        say('Компресираме клипа в браузъра… 0%');
         bar(0);
-        blob = await compressVideo(file, p => { bar(p); say(`Compressing the video in your browser… ${Math.round(p * 100)}%`); });
-        say(`Compressed to ${(blob.size / 1048576).toFixed(1)} MB.`);
+        blob = await compressVideo(file, p => { bar(p); say(`Компресираме клипа в браузъра… ${Math.round(p * 100)}%`); });
+        say(`Компресиран до ${(blob.size / 1048576).toFixed(1)} MB.`);
       }
       path = `${USER.id}/${Date.now()}-${(stripExt(file.name) || 'video').replace(/[^\w.-]+/g, '_').slice(-70)}.${blob === file ? (file.name.split('.').pop() || 'mp4').toLowerCase() : 'mp4'}`;
       bar(0);
-      await putFile(path, blob, p => { bar(p); say(`Uploading… ${Math.round(p * 100)}%`); });
+      await putFile(path, blob, p => { bar(p); say(`Качване… ${Math.round(p * 100)}%`); });
     }
     // 4. the rows, then their categories
     const base = { region: f.get('region') === 'world' ? 'world' : 'bg', match: String(f.get('match') || '').trim() || null,
@@ -2375,12 +2625,12 @@ async function submitUpload(form){
       description: String(f.get('description') || '').trim() || null, article_key: f.get('article_key') || null, article_url: f.get('article_url') || null };
     base.division = base.region === 'bg' ? (f.get('division') || null) : null;
     const rows = items.map((it, i) => {
-      let t = items.length === 1 ? (title || stripExt(it.name)) : (stripExt(it.name) || (title ? `${title} (${i + 1})` : `Video ${i + 1}`));
-      if (t.length < 3) t = 'Video ' + t;
+      let t = items.length === 1 ? (title || stripExt(it.name)) : (stripExt(it.name) || (title ? `${title} (${i + 1})` : `Клип ${i + 1}`));
+      if (t.length < 3) t = 'Клип ' + t;
       return { ...base, title: t.slice(0, 200), storage_path: it.file ? path : null, video_url: it.file ? null : it.url,
         description: base.description || (it.folder ? 'Google Drive: ' + it.folder : null) };
     });
-    say(`Saving ${rows.length} video${rows.length > 1 ? 's' : ''}…`);
+    say(rows.length > 1 ? `Записваме ${rows.length} клипа…` : 'Записваме клипа…');
     const { data, error } = await SB.from('videos').insert(rows).select('id');
     if (error) { if (path) await SB.storage.from('videos').remove([path]); path = null; throw error; }
     const cats = f.getAll('cats').map(Number).filter(Boolean);
@@ -2392,9 +2642,9 @@ async function submitUpload(form){
     form.reset(); drawDrivePick();
     VSEL.region = base.region; VSEL.status = ''; VSEL.cat = ''; saveVsel();
     await loadVideos();
-    const m = $('#upMsg'); if (m) { m.textContent = rows.length > 1 ? `Added ${rows.length} videos.` : 'Added — the video is now on the site.'; m.className = 'msg ok'; }
+    const m = $('#upMsg'); if (m) { m.textContent = rows.length > 1 ? `Добавени са ${rows.length} клипа.` : 'Добавено — клипът е на сайта.'; m.className = 'msg ok'; }
   } catch (e) {
-    say((path ? 'Upload failed: ' : '') + (e.message || e), 'err');
+    say((path ? 'Качването не успя: ' : '') + (e.message || e), 'err');
   } finally { btn.disabled = false; bar(null); }
 }
 // upload straight to Supabase Storage, so the progress can be shown (the members' videos, or another bucket: the forum's)
@@ -2410,7 +2660,7 @@ async function putFile(path, blob, onProgress, bucket = 'videos', type = ''){
     x.setRequestHeader('x-upsert', 'false');
     x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
     x.onload = () => { if (x.status < 300) resolve(); else { let m = 'HTTP ' + x.status; try { const j = JSON.parse(x.responseText); m = j.message || j.error || m; } catch (e) {} reject(new Error(m)); } };
-    x.onerror = () => reject(new Error('the connection was lost'));
+    x.onerror = () => reject(new Error('връзката прекъсна'));
     x.send(blob);
   });
 }
@@ -2428,49 +2678,49 @@ async function hasSound(file){
   } catch (e) { return null; }
 }
 async function compressVideo(file, onProgress){
-  if (typeof VideoEncoder === 'undefined') throw new Error('This browser cannot compress video. Use Chrome, Edge or Safari, or add the video from Google Drive.');
-  const M = await (MB_LIB || (MB_LIB = import(MEDIABUNNY).catch(e => { MB_LIB = null; throw new Error('The video compressor could not be loaded: ' + e.message); })));
+  if (typeof VideoEncoder === 'undefined') throw new Error('Този браузър не може да компресира видео. Използвайте Chrome, Edge или Safari или добавете клипа от Google Drive.');
+  const M = await (MB_LIB || (MB_LIB = import(MEDIABUNNY).catch(e => { MB_LIB = null; throw new Error('Компресорът за видео не се зареди: ' + e.message); })));
   const open = () => new M.Input({ formats: M.ALL_FORMATS, source: new M.BlobSource(file) });
   const probe = open();
   const vt = await probe.getPrimaryVideoTrack();
-  if (!vt) throw new Error('No video found in that file.');
+  if (!vt) throw new Error('Във файла няма видео.');
   const dur = await probe.computeDuration();
-  if (!(dur > 0)) throw new Error('The length of the video could not be read.');
+  if (!(dur > 0)) throw new Error('Дължината на клипа не можа да се прочете.');
   let fps = 0;
   try { fps = (await vt.computePacketStats(120)).averagePacketRate || 0; } catch (e) {}
   const limitBits = (MAX_UPLOAD_MB - 3) * 1048576 * 8, audioBits = 96e3;
   const total = limitBits / dur;
-  if (total < 450e3) throw new Error(`The video is ${fmtDur(dur)} long — too long to fit ${MAX_UPLOAD_MB} MB in a watchable quality. Upload it to Google Drive and paste the link instead.`);
+  if (total < 450e3) throw new Error(`Клипът е дълъг ${fmtDur(dur)} — твърде дълъг, за да се побере в ${MAX_UPLOAD_MB} MB с добро качество. Качете го в Google Drive и поставете линка.`);
   const run = async factor => {
     const vb = Math.round(Math.min(2.5e6, Math.max(300e3, (total - audioBits) * factor)));
     const width = Math.min(vt.displayWidth, vb >= 1.0e6 ? 1280 : vb >= 0.6e6 ? 960 : 640) & ~1;
     const height = Math.round(width * vt.displayHeight / vt.displayWidth / 2) * 2;
     const codec = (await M.canEncodeVideo('avc', { width, height, bitrate: vb })) ? 'avc' : (await M.canEncodeVideo('vp9', { width, height, bitrate: vb })) ? 'vp9' : null;
-    if (!codec) throw new Error('This browser cannot compress video. Use Chrome, Edge or Safari, or add the video from Google Drive.');
+    if (!codec) throw new Error('Този браузър не може да компресира видео. Използвайте Chrome, Edge или Safari или добавете клипа от Google Drive.');
     const acodec = (await M.canEncodeAudio('aac')) ? 'aac' : 'opus';
     const output = new M.Output({ format: new M.Mp4OutputFormat({ fastStart: 'in-memory' }), target: new M.BufferTarget() });
     const conv = await M.Conversion.init({ input: open(), output, showWarnings: false,
       video: { width, codec, quality: new M.Quality({ bitrate: vb }), forceTranscode: true, ...(fps > 31 ? { frameRate: 30 } : {}) },
       audio: { codec: acodec, quality: new M.Quality({ bitrate: audioBits }), forceTranscode: true } });
-    if (!conv.isValid) throw new Error('The browser cannot read this video (' + conv.discardedTracks.map(t => t.reason.replace(/_/g, ' ')).join(', ') + '). Add it from Google Drive instead.');
+    if (!conv.isValid) throw new Error('Браузърът не може да прочете този клип (' + conv.discardedTracks.map(t => t.reason.replace(/_/g, ' ')).join(', ') + '). Добавете го от Google Drive.');
     // the sound can't be kept (a sound format this browser can't read or write): ask, don't drop it without a word
     const lost = conv.discardedTracks.find(t => t.track && t.track.type === 'audio');
-    if (lost && factor === 1 && !confirm(`This browser can't keep the video's sound while compressing it (${String(lost.reason).replace(/_/g, ' ')}).\n\nUpload it WITHOUT sound? (Or press Cancel and add it from Google Drive, which keeps the sound.)`))
-      throw new Error('Not uploaded: the sound could not be kept. Add the video from Google Drive instead.');
+    if (lost && factor === 1 && !confirmT(`Този браузър не може да запази звука при компресиране (${String(lost.reason).replace(/_/g, ' ')}).\n\nДа го кача ли БЕЗ звук? (Или натиснете „Отказ“ и го добавете от Google Drive, където звукът се запазва.)`))
+      throw new Error('Не е качено: звукът не можа да се запази. Добавете клипа от Google Drive.');
     conv.onProgress = p => onProgress(Math.min(1, p));
     await conv.execute();
     return new Blob([output.target.buffer], { type: 'video/mp4' });
   };
   let blob = await run(1);
   if (blob.size > MAX_UPLOAD_MB * 1048576) blob = await run(0.75);     // the encoder overshot: once more, smaller
-  if (blob.size > MAX_UPLOAD_MB * 1048576) throw new Error(`Even compressed the video is ${(blob.size / 1048576).toFixed(0)} MB. Upload it to Google Drive and paste the link instead.`);
+  if (blob.size > MAX_UPLOAD_MB * 1048576) throw new Error(`Дори компресиран клипът е ${(blob.size / 1048576).toFixed(0)} MB. Качете го в Google Drive и поставете линка.`);
   return blob;
 }
 async function deleteVideo(id){
   const v = VIDEOS.find(x => String(x.id) === String(id));
-  if (!v || !confirm('Delete this video?')) return;
+  if (!v || !confirmT('Да изтрия ли този клип?')) return;
   const { error } = await SB.from('videos').delete().eq('id', v.id);
-  if (error) { alert('Could not delete: ' + error.message); return; }
+  if (error) { alertT('Не можа да се изтрие: ' + error.message); return; }
   if (v.storage_path) await SB.storage.from('videos').remove([v.storage_path]);
   VPICK.delete(v.id);
   loadVideos();
@@ -2563,8 +2813,8 @@ const Forum = (() => {
   const isImage = f => /^image\//.test(f.type || TYPES[extOf(f.name)] || '');
   const size = b => !b ? '' : b < 1048576 ? Math.max(1, Math.round(b / 1024)) + ' KB' : (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + ' MB';
   const signed = p => (S.signed[p] || {}).url || '';
-  const when = s => new Date(Date.parse(s)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const day = s => new Date(Date.parse(s)).toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' });
+  const when = s => new Date(Date.parse(s)).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const day = s => new Date(Date.parse(s)).toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' });
   const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
   // a file name the storage accepts (Latin letters, digits, . _ -): the real name is kept in the post
   const keyName = n => { const e = extOf(n), b = String(n || '').replace(/\.[a-z0-9]{2,5}$/i, '').normalize('NFKD').replace(/[^\w.-]+/g, '_').replace(/_+/g, '_').replace(/^[_.]+|[_.]+$/g, '').slice(0, 60);
@@ -2838,9 +3088,9 @@ const Forum = (() => {
   async function remove(id){
     const p = S.posts.find(x => x.id === id); if (!p) return;
     const n = (p.files || []).length;
-    if (!confirm(`Да изтрия ли публикацията „${p.title}“${n ? ` и ${n === 1 ? 'файла ѝ' : `${n}-те ѝ файла`}` : ''}? Коментарите също се изтриват.`)) return;
+    if (!confirmT(`Да изтрия ли публикацията „${p.title}“${n ? ` и ${n === 1 ? 'файла ѝ' : `${n}-те ѝ файла`}` : ''}? Коментарите също се изтриват.`)) return;
     const { error } = await SB.from('forum_posts').delete().eq('id', id);
-    if (error) { alert('Не е изтрита: ' + error.message); return; }
+    if (error) { alertT('Не е изтрита: ' + error.message); return; }
     if (n) { const r = await SB.storage.from(BUCKET).remove(p.files.map(f => f.path)); if (r.error) log('Forum files not removed: ' + r.error.message); }
     open.delete(id);
     await load();
@@ -2848,7 +3098,7 @@ const Forum = (() => {
   }
   async function setPost(id, patch, done){
     const { data, error } = await SB.from('forum_posts').update(patch).eq('id', id).select('id');
-    if (error || !data || !data.length) { alert('Не е запазено: ' + (error ? error.message : 'нямате права')); return; }
+    if (error || !data || !data.length) { alertT('Не е запазено: ' + (error ? error.message : 'нямате права')); return; }
     await load();
     if (done) toast(done);
   }
@@ -2864,9 +3114,9 @@ const Forum = (() => {
     await load();
   }
   async function uncomment(id){
-    if (!confirm('Да изтрия ли коментара?')) return;
+    if (!confirmT('Да изтрия ли коментара?')) return;
     const { error } = await SB.from('forum_comments').delete().eq('id', id);
-    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    if (error) { alertT('Не е изтрит: ' + error.message); return; }
     await load();
   }
 
@@ -2944,7 +3194,7 @@ const Quiz = (() => {
 
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const pctColor = p => p >= 80 ? 'var(--ok)' : p >= 50 ? 'var(--accent)' : 'var(--err)';
-  const when = s => new Date(Date.parse(s)).toLocaleString('bg-BG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const when = s => new Date(Date.parse(s)).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const linkify = t => esc(t).replace(/https:\/\/[^\s<>"']+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
   const curSet = () => D.sets.find(s => s.id === setId) || D.sets[0] || null;
   const qsOf = id => D.qs.filter(q => q.set_id === id);
@@ -3207,9 +3457,9 @@ const Quiz = (() => {
     toast('Благодарим! Администратор ще прегледа сигнала.');
   }
   async function unreport(id){
-    if (!confirm('Да изтрия ли сигнала?')) return;
+    if (!confirmT('Да изтрия ли сигнала?')) return;
     const { error } = await SB.from('quiz_reports').delete().eq('id', id);
-    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    if (error) { alertT('Не е изтрит: ' + error.message); return; }
     await loadReports();
   }
 
@@ -3300,7 +3550,7 @@ const Quiz = (() => {
             } else add.push({ ...q, position: i });
           });
           const gone = old.filter(q => !keep.has(q.id));
-          if (!confirm(`„${set ? set.title : ''}“: ${add.length} нови, ${upd.length} променени и ${gone.length} махнати въпроса${gone.length ? ' — с резултатите и сигналите по тях' : ''}. Да продължа ли?`)) { btn.disabled = false; return say(''); }
+          if (!confirmT(`„${set ? set.title : ''}“: ${add.length} нови, ${upd.length} променени и ${gone.length} махнати въпроса${gone.length ? ' — с резултатите и сигналите по тях' : ''}. Да продължа ли?`)) { btn.disabled = false; return say(''); }
           for (let i = 0; i < gone.length; i += 200) { const r = await SB.from('quiz_questions').delete().in('id', gone.slice(i, i + 200).map(q => q.id)); if (r.error) throw r.error; }
           let n = 0;
           await pool(upd, 8, async q => {
@@ -3389,9 +3639,9 @@ const Quiz = (() => {
   }
   async function deleteQ(id){
     const q = byId(id); if (!q) return;
-    if (!confirm(`Да изтрия ли въпроса „${q.question.slice(0, 80)}${q.question.length > 80 ? '…' : ''}“? Изтриват се и сигналите по него.`)) return;
+    if (!confirmT(`Да изтрия ли въпроса „${q.question.slice(0, 80)}${q.question.length > 80 ? '…' : ''}“? Изтриват се и сигналите по него.`)) return;
     const { error } = await SB.from('quiz_questions').delete().eq('id', id);
-    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    if (error) { alertT('Не е изтрит: ' + error.message); return; }
     await load();
   }
 
@@ -3414,7 +3664,7 @@ const Quiz = (() => {
     const patch = { status: st };
     if (st !== 'open' && note) patch.admin_note = note.slice(0, 2000);
     const { data, error } = await SB.from('quiz_reports').update(patch).eq('id', id).select('id');
-    if (error || !data || !data.length) { alert('Не е запазено: ' + (error ? error.message : 'нямате права')); return; }
+    if (error || !data || !data.length) { alertT('Не е запазено: ' + (error ? error.message : 'нямате права')); return; }
     await loadReports();
   }
 
@@ -3436,9 +3686,9 @@ const Quiz = (() => {
   }
   async function deleteSet(id){
     const s = D.sets.find(x => x.id === id); if (!s) return;
-    if (!confirm(`Да изтрия ли теста „${s.title}“ с всичките му ${qsOf(id).length} въпроса? Изтриват се и резултатите и сигналите по него.`)) return;
+    if (!confirmT(`Да изтрия ли теста „${s.title}“ с всичките му ${qsOf(id).length} въпроса? Изтриват се и резултатите и сигналите по него.`)) return;
     const { error } = await SB.from('quiz_sets').delete().eq('id', id);
-    if (error) { alert('Не е изтрит: ' + error.message); return; }
+    if (error) { alertT('Не е изтрит: ' + error.message); return; }
     if (setId === id) setId = 0;
     await load();
   }
@@ -3462,7 +3712,7 @@ const Quiz = (() => {
       if (at('[data-qopt]', el => choose(Number(el.dataset.qopt)))) return;
       if (at('[data-qnext]', () => advance(false))) return;
       if (at('[data-qskip]', () => advance(true))) return;
-      if (at('[data-qquit]', () => { if (confirm('Да прекратя ли теста? Резултатът няма да се запише.')) { clearInterval(timer); sess = null; view = 'home'; draw(); } })) return;
+      if (at('[data-qquit]', () => { if (confirmT('Да прекратя ли теста? Резултатът няма да се запише.')) { clearInterval(timer); sess = null; view = 'home'; draw(); } })) return;
       if (at('[data-qstart]', el => start(el.dataset.qstart))) return;
       if (at('[data-qback]', () => { view = 'home'; reportFor = ''; draw(); top(); })) return;
       if (at('[data-qset]', el => { setId = Number(el.dataset.qset); lss('bgRefWatch.qset', String(setId)); draw(); })) return;
@@ -3526,33 +3776,33 @@ function renderAccount(force){
   preserveForm(box, () => drawAccount(box));
 }
 function drawAccount(box){
-  if (AUTH === 'off') { box.innerHTML = `<div class="card"><h2>Accounts</h2><p class="muted">Logging in isn't set up on this site yet. All news stays open to everyone — an account is only needed to upload videos.</p></div>`; return; }
-  if (AUTH === 'error') { box.innerHTML = `<div class="warn">The login service could not be loaded. Try again later.</div>`; return; }
-  if (AUTH === 'loading') { box.innerHTML = '<p class="muted">Loading…</p>'; return; }
+  if (AUTH === 'off') { box.innerHTML = `<div class="card"><h2>Профили</h2><p class="muted">Входът още не е настроен на този сайт. Новините са отворени за всички — профил трябва само за клиповете.</p></div>`; return; }
+  if (AUTH === 'error') { box.innerHTML = `<div class="warn">Услугата за вход не се зареди. Опитайте по-късно.</div>`; return; }
+  if (AUTH === 'loading') { box.innerHTML = '<p class="muted">Зареждане…</p>'; return; }
   if (RECOVERY) {
-    box.innerHTML = `<div class="card"><h2>Set a new password</h2><form class="form" id="pwForm"><label>New password<input type="password" name="password" minlength="8" required autocomplete="new-password"></label><button class="primary" type="submit">Save password</button><div id="accMsg" class="msg"></div></form></div>`;
+    box.innerHTML = `<div class="card"><h2>Нова парола</h2><form class="form" id="pwForm"><label>Нова парола<input type="password" name="password" minlength="8" required autocomplete="new-password"></label><button class="primary" type="submit">Запази паролата</button><div id="accMsg" class="msg"></div></form></div>`;
     return;
   }
   if (USER) {
-    const status = isAdmin() ? 'Admin' : approved() ? 'Approved member — you can watch, upload and comment on videos' : 'Waiting for admin approval';
+    const status = isAdmin() ? 'Администратор' : approved() ? 'Одобрен член — можете да гледате, качвате и коментирате клипове' : 'Чака одобрение от администратор';
     box.innerHTML = `<div class="card"><h2>${esc((PROFILE && PROFILE.display_name) || USER.email)}</h2>
-      <p class="muted">${esc(USER.email)}</p><p><b>Status:</b> ${esc(status)}</p>
-      <p class="muted">Your read marks are saved to your account and follow you to other devices.</p>
-      <div class="bar">${approved() ? '<a class="btn primary" href="#videos">Upload a video</a>' : ''}${isAdmin() ? '<a class="btn" href="#admin">Admin</a>' : ''}<button id="btnLogout">Log out</button></div></div>
-      ${approved() ? ebfuCard() : '<div class="card"><h2>ebfu.net</h2><p class="muted">Connecting your ebfu.net account opens once the admin approves you.</p></div>'}`;
+      <p class="muted">${esc(USER.email)}</p><p><b>Статус:</b> ${esc(status)}</p>
+      <p class="muted">Прочетеното се пази в профила ви и ви следва на другите устройства.</p>
+      <div class="bar">${approved() ? '<a class="btn primary" href="#videos">Качи клип</a>' : ''}${isAdmin() ? '<a class="btn" href="#admin">Админ</a>' : ''}<button id="btnLogout">Изход</button></div></div>
+      ${approved() ? ebfuCard() : '<div class="card"><h2>ebfu.net</h2><p class="muted">Връзката с профила ви в ebfu.net се отключва, щом администраторът ви одобри.</p></div>'}`;
     return;
   }
   const login = ACC_TAB === 'login';
   box.innerHTML = `<div class="card">
-    <div class="bar"><button class="${login ? 'primary' : ''}" data-tab="login">Log in</button><button class="${!login ? 'primary' : ''}" data-tab="register">Register</button></div>
+    <div class="bar"><button class="${login ? 'primary' : ''}" data-tab="login">Вход</button><button class="${!login ? 'primary' : ''}" data-tab="register">Регистрация</button></div>
     <form class="form" id="${login ? 'loginForm' : 'regForm'}">
-      ${login ? '' : '<label>Name shown on your uploads<input type="text" name="name" required maxlength="60" autocomplete="nickname"></label>'}
-      <label>Email<input type="email" name="email" required autocomplete="email"></label>
-      <label>Password${login ? '' : ' (at least 8 characters)'}<input type="password" name="password" required ${login ? 'autocomplete="current-password"' : 'minlength="8" autocomplete="new-password"'}></label>
-      <div class="bar"><button class="primary" type="submit">${login ? 'Log in' : 'Create account'}</button>${login ? '<button type="button" id="btnForgot">Forgot password?</button>' : ''}</div>
+      ${login ? '' : '<label>Име, което се показва до клиповете ви<input type="text" name="name" required maxlength="60" autocomplete="nickname"></label>'}
+      <label>Имейл<input type="email" name="email" required autocomplete="email"></label>
+      <label>Парола${login ? '' : ' (поне 8 знака)'}<input type="password" name="password" required ${login ? 'autocomplete="current-password"' : 'minlength="8" autocomplete="new-password"'}></label>
+      <div class="bar"><button class="primary" type="submit">${login ? 'Влез' : 'Създай профил'}</button>${login ? '<button type="button" id="btnForgot">Забравена парола?</button>' : ''}</div>
       <div id="accMsg" class="msg"></div>
     </form>
-    <p class="muted">You don't need an account to read the news. Accounts are for the members' videos — watching, uploading and commenting, after admin approval — and keeping your read marks across devices.</p>
+    <p class="muted">За новините не ви трябва профил. Профилите са за клиповете на членовете — гледане, качване и коментари след одобрение от администратор — и за да пазите прочетеното на всичките си устройства.</p>
   </div>`;
 }
 function accSay(t, cls){ const m = $('#accMsg'); if (m) { m.textContent = t; m.className = 'msg ' + (cls || ''); } }
@@ -3568,13 +3818,13 @@ function ebfuCard(){
   if (!EBFU) {
     const blocked = recentFails().length >= 2;
     return `<div class="card" id="ebfuCard"><h2>ebfu.net</h2>
-      <p class="muted">Connect your own ebfu.net account so the site can open match videos in the BFU video archive for you. Your password is used once to log in and is never stored. Only the ebfu.net login session is kept, on this device.</p>
+      <p class="muted">Свържете своя профил в ebfu.net, за да може сайтът да отваря видео от мачовете в архива на БФС вместо вас. Паролата се използва веднъж за вход и не се пази никъде. Пази се само сесията на ebfu.net, на това устройство.</p>
       <form class="form" id="ebfuForm" autocomplete="off">
-        <label>ebfu.net username<input type="text" name="ebfu_user" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
-        <label>ebfu.net password<input type="password" name="ebfu_pass" required autocomplete="off"></label>
-        <p class="muted">ebfu.net locks an account after 5 wrong passwords, so the site stops after 2 failed tries for 30 minutes.</p>
-        <div class="bar"><button class="primary" type="submit" ${blocked || EBFU_BUSY ? 'disabled' : ''}>${EBFU_BUSY ? 'Connecting…' : 'Connect ebfu.net'}</button></div>
-        ${blocked ? '<div class="msg err">Two failed tries in the last 30 minutes. Check your username and password on ebfu.net itself, then try again later.</div>' : msg}
+        <label>Потребителско име в ebfu.net<input type="text" name="ebfu_user" required autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+        <label>Парола за ebfu.net<input type="password" name="ebfu_pass" required autocomplete="off"></label>
+        <p class="muted">ebfu.net заключва профил след 5 грешни пароли, затова сайтът спира за 30 минути след 2 неуспешни опита.</p>
+        <div class="bar"><button class="primary" type="submit" ${blocked || EBFU_BUSY ? 'disabled' : ''}>${EBFU_BUSY ? 'Свързване…' : 'Свържи ebfu.net'}</button></div>
+        ${blocked ? '<div class="msg err">Два неуспешни опита за последните 30 минути. Проверете потребителското име и паролата в самия ebfu.net и опитайте по-късно.</div>' : msg}
       </form></div>`;
   }
   const r = EBFU_REPORT;
@@ -3584,27 +3834,27 @@ function ebfuCard(){
     ['camera button → ' + (has('video') ? 'video page' : r.report.cameraFunction ? 'pop-up player script' : 'player'), camOk]].map(([l, okk]) => (okk ? '✓ ' : '✗ ') + l).join(' · ') : '';
   const notes = r ? [].concat(r.report.notes || [], r.report.note || []) : [];
   return `<div class="card" id="ebfuCard"><h2>ebfu.net</h2>
-    <p><b>Connected</b>${EBFU.name ? ' as ' + esc(EBFU.name) : ''} · since ${esc(fmtDate(EBFU.at))}</p>
-    <p class="muted">Next step: "Check the video archive" opens the archive with your account and records how its pages are built (links, buttons, players) so the automatic match and minute search can be finished. Your calendar, history and settings pages are never opened.</p>
-    <div class="bar"><button class="primary" id="btnEbfuCheck" ${EBFU_BUSY ? 'disabled' : ''}>${EBFU_BUSY ? 'Checking…' : 'Check the video archive'}</button><button id="btnEbfuOff">Disconnect</button></div>
+    <p><b>Свързано</b>${EBFU.name ? ' като ' + esc(EBFU.name) : ''} · от ${esc(fmtDate(EBFU.at))}</p>
+    <p class="muted">Следваща стъпка: „Провери видеоархива“ отваря архива с вашия профил и записва как са построени страниците му (линкове, бутони, плейъри), за да се довърши автоматичното търсене по мач и минута. Календарът, историята и настройките ви никога не се отварят.</p>
+    <div class="bar"><button class="primary" id="btnEbfuCheck" ${EBFU_BUSY ? 'disabled' : ''}>${EBFU_BUSY ? 'Проверка…' : 'Провери видеоархива'}</button><button id="btnEbfuOff">Прекъсни</button></div>
     ${r ? `<p>${esc(steps)}</p>${notes.map(n => `<p class="muted">${esc(n)}</p>`).join('')}
-      <div class="bar"><button class="primary" id="btnEbfuSend" ${r.sent ? 'disabled' : ''}>${r.sent ? '✓ Report sent' : 'Send this report to the developer'}</button></div>
-      <details class="muted"><summary>What's in the report</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:240px;overflow:auto">${esc(JSON.stringify(r.report, null, 1).slice(0, 6000))}</pre></details>` : ''}
+      <div class="bar"><button class="primary" id="btnEbfuSend" ${r.sent ? 'disabled' : ''}>${r.sent ? '✓ Докладът е изпратен' : 'Изпрати доклада на разработчика'}</button></div>
+      <details class="muted"><summary>Какво има в доклада</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:240px;overflow:auto">${esc(JSON.stringify(r.report, null, 1).slice(0, 6000))}</pre></details>` : ''}
     ${msg}</div>`;
 }
 async function siteToken(){ const { data } = await SB.auth.getSession(); return data.session ? data.session.access_token : null; }
 async function ebfuCall(action, payload){
   const token = await siteToken();
-  if (!token) throw new Error('Log in to the site again.');
+  if (!token) throw new Error('Влезте отново в сайта.');
   const r = await fetch('/ebfu/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(payload) });
-  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('The ebfu.net connection only works on the Cloudflare-hosted site.');
+  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('Връзката с ebfu.net работи само на публикувания сайт.');
   const j = await r.json();
   if (j.diag && j.diag.length) log('ebfu.net ' + action + ': ' + j.diag.join(' → '));
   return j;
 }
 function ebfuSay(text, cls){ EBFU_MSG = text ? { text, cls } : null; renderAccount(true); }
 async function ebfuConnect(form){
-  if (recentFails().length >= 2) return ebfuSay('Two failed tries in the last 30 minutes — wait before trying again.', 'err');
+  if (recentFails().length >= 2) return ebfuSay('Два неуспешни опита за последните 30 минути — изчакайте, преди да опитате пак.', 'err');
   const f = new FormData(form), username = String(f.get('ebfu_user') || '').trim(), password = String(f.get('ebfu_pass') || '');
   if (!username || !password) return;
   EBFU_BUSY = true; EBFU_MSG = null; renderAccount(true);
@@ -3617,13 +3867,13 @@ async function ebfuConnect(form){
       let sent = '';
       if (j.inspect && !/ebfu\.net says/.test(j.error || '')) {
         const { error } = await SB.from('ebfu_reports').insert({ report: { stage: 'login', error: j.error, page: j.inspect, steps: j.diag || [] } });
-        sent = error ? '' : " The site sent the developer how ebfu.net's login page is built (no password), so this can be fixed.";
+        sent = error ? '' : ' Сайтът изпрати на разработчика как е построена страницата за вход на ebfu.net (без паролата), за да се поправи.';
       }
-      return ebfuSay((j.error || 'Could not connect.') + sent, 'err');
+      return ebfuSay((j.error || 'Връзката не успя.') + sent, 'err');
     }
     EBFU = { session: j.session, name: j.name || '', at: Date.now() };
     saveJSON(EBFU_KEY, EBFU); saveJSON(EBFU_FAILS, []);
-    ebfuSay('Connected. Now tap "Check the video archive".', 'ok');
+    ebfuSay('Свързано. Сега натиснете „Провери видеоархива“.', 'ok');
   } catch (e) { EBFU_BUSY = false; ebfuSay(e.message, 'err'); }
 }
 async function ebfuCheck(){
@@ -3633,18 +3883,18 @@ async function ebfuCheck(){
     EBFU_BUSY = false;
     if (!j.ok) {
       if (j.expired) { EBFU = null; saveJSON(EBFU_KEY, null); }
-      return ebfuSay(j.error || 'The check did not finish.', 'err');
+      return ebfuSay(j.error || 'Проверката не завърши.', 'err');
     }
     if (j.session) { EBFU.session = j.session; saveJSON(EBFU_KEY, EBFU); }
     EBFU_REPORT = { report: j.report, steps: j.diag || [], at: Date.now(), sent: false };
-    ebfuSay('Done. Send the report so the automatic search can be finished.', 'ok');
+    ebfuSay('Готово. Изпратете доклада, за да се довърши автоматичното търсене.', 'ok');
   } catch (e) { EBFU_BUSY = false; ebfuSay(e.message, 'err'); }
 }
 async function ebfuSendReport(){
   const { error } = await SB.from('ebfu_reports').insert({ report: { ...EBFU_REPORT.report, steps: EBFU_REPORT.steps } });
-  if (error) return ebfuSay('Could not send: ' + error.message, 'err');
+  if (error) return ebfuSay('Не можа да се изпрати: ' + error.message, 'err');
   EBFU_REPORT.sent = true;
-  ebfuSay('Report sent. Tell Claude it is there.', 'ok');
+  ebfuSay('Докладът е изпратен.', 'ok');
 }
 const redirectTo = () => location.origin + location.pathname;
 async function onAccountSubmit(form){
@@ -3660,7 +3910,7 @@ async function onAccountSubmit(form){
       const { data, error } = await SB.auth.signUp({ email: f.get('email'), password: f.get('password'),
         options: { data: { display_name: String(f.get('name')).trim() }, emailRedirectTo: redirectTo() } });
       if (error) throw error;
-      accSay(data.session ? 'Account created. The admin will approve it so you can upload videos.' : 'Check your email and open the confirmation link. After that, the admin can approve your account.', 'ok');
+      accSay(data.session ? 'Профилът е създаден. Администраторът ще го одобри, за да можете да качвате клипове.' : 'Проверете имейла си и отворете линка за потвърждение. След това администраторът може да одобри профила ви.', 'ok');
     } else if (form.id === 'pwForm') {
       const { error } = await SB.auth.updateUser({ password: f.get('password') });
       if (error) throw error;
@@ -3677,19 +3927,19 @@ function renderAdmin(){
   const key = isAdmin() + '|' + USERS.map(u => u.id + (u.approved ? 1 : 0)).join(',');
   if (key === ADMIN_KEY && box.firstChild) return;
   ADMIN_KEY = key;
-  if (!isAdmin()) { box.innerHTML = '<p class="muted">Admins only.</p>'; return; }
+  if (!isAdmin()) { box.innerHTML = '<p class="muted">Само за администратори.</p>'; return; }
   const pending = USERS.filter(u => !u.approved && u.role !== 'admin');
-  const rows = u => `<tr><td><b>${esc(u.display_name || '—')}</b><div class="muted">${esc(u.email || '')}</div><div class="muted">registered ${esc(fmtDay(Date.parse(u.created_at)))}</div></td>
-    <td>${u.role === 'admin' ? 'Admin' : u.approved ? 'Approved' : '<b>Pending</b>'}</td>
-    <td>${u.role === 'admin' ? '' : u.approved ? `<button class="small" data-approve="${esc(u.id)}" data-val="0">Revoke</button>` : `<button class="small primary" data-approve="${esc(u.id)}" data-val="1">Approve</button>`}</td></tr>`;
-  box.innerHTML = `<div class="card"><h2>Members</h2><p class="muted">${pending.length} waiting for approval · ${USERS.length} total</p>
-    <table class="users"><thead><tr><th>Member</th><th>Status</th><th></th></tr></thead><tbody>${pending.concat(USERS.filter(u => !pending.includes(u))).map(rows).join('')}</tbody></table>
-    <div class="bar"><button id="btnUsers">Reload</button></div></div>
-    <p class="muted">Approved members can upload videos and comment on them. Admins can delete any video or comment from the Videos page (comments can't be edited, by anyone). Each member can also keep private notes on a clip — no one else sees them, admins included; the member edits or deletes them.</p>`;
+  const rows = u => `<tr><td><b>${esc(u.display_name || '—')}</b><div class="muted">${esc(u.email || '')}</div><div class="muted">регистриран ${esc(fmtDay(Date.parse(u.created_at)))}</div></td>
+    <td>${u.role === 'admin' ? 'Администратор' : u.approved ? 'Одобрен' : '<b>Чака</b>'}</td>
+    <td>${u.role === 'admin' ? '' : u.approved ? `<button class="small" data-approve="${esc(u.id)}" data-val="0">Отнеми</button>` : `<button class="small primary" data-approve="${esc(u.id)}" data-val="1">Одобри</button>`}</td></tr>`;
+  box.innerHTML = `<div class="card"><h2>Членове</h2><p class="muted">${pending.length} чакат одобрение · общо ${USERS.length}</p>
+    <table class="users"><thead><tr><th>Член</th><th>Статус</th><th></th></tr></thead><tbody>${pending.concat(USERS.filter(u => !pending.includes(u))).map(rows).join('')}</tbody></table>
+    <div class="bar"><button id="btnUsers">Презареди</button></div></div>
+    <p class="muted">Одобрените членове качват клипове и ги коментират. Администраторите могат да изтрият всеки клип или коментар от страницата „Видео“ (коментарите не се редактират от никого). Всеки член може да пази и лични бележки към клип — никой друг не ги вижда, включително администраторите; членът ги редактира или изтрива.</p>`;
 }
 async function setApproved(id, val){
   const { error } = await SB.from('profiles').update({ approved: val }).eq('id', id);
-  if (error) alert('Could not update: ' + error.message);
+  if (error) alertT('Не можа да се обнови: ' + error.message);
   loadUsers();
 }
 
@@ -3721,14 +3971,14 @@ async function loadComps(){
   if (VIEW === 'results') renderResults(true);
 }
 if (!LEAGUES[FB.league]) FB.league = 'efbet';
-const BG_DAYS = ['Нед', 'Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб'], BG_MONTHS = ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
+const BG_DAYS = EN ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] : ['Нед', 'Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб'], BG_MONTHS = EN ? MON_SHORT : ['Яну', 'Фев', 'Мар', 'Апр', 'Май', 'Юни', 'Юли', 'Авг', 'Сеп', 'Окт', 'Ное', 'Дек'];
 function sofiaParts(iso){
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Sofia', weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
     .formatToParts(new Date(iso)).map(x => [x.type, x.value]));
   const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday);
   return { day: BG_DAYS[wd] || '', d: Number(p.day), m: BG_MONTHS[Number(p.month) - 1] || '', time: `${p.hour}:${p.minute}` };
 }
-const bgDate = iso => { if (!iso) return 'дата неизвестна'; const p = sofiaParts(iso); return `${p.day} ${p.d}, ${p.m} в ${p.time}`; };
+const bgDate = iso => { if (!iso) return 'дата неизвестна'; const p = sofiaParts(iso); return EN ? `${p.day} ${p.d} ${p.m}, ${p.time}` : `${p.day} ${p.d}, ${p.m} в ${p.time}`; };
 const initials = n => teamName(n).split(/\s+/).filter(w => !/^(\d+|I+|ОФК)$/.test(w)).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const isGongVid = v => !!(v && v.id && /gong/i.test(v.channel || ''));
 // every report from channels other than Gong (also any non-Gong video still saved as Репортаж/Разширен)
@@ -3756,7 +4006,7 @@ const crestOf = src => { const k = (String(src).match(/^https:\/\/(?:www\.)?mr-b
 const logoSrc = src => { src = crestOf(src); return /^https:\/\/(?:(?:www\.)?mr-bit\.bg|media\.bgclubs\.eu)\//.test(src) ? '/logo?u=' + encodeURIComponent(src) : src; };
 const logoHtml = (src, name) => src && /^https:\/\//.test(src)
   ? `<img class="tlogo" src="${esc(logoSrc(src))}" alt="" loading="lazy" referrerpolicy="no-referrer" data-init="${esc(initials(name))}">`
-  : `<span class="tinit">${esc(initials(name))}</span>`;
+  : `<span class="tinit" data-noi18n>${esc(initials(name))}</span>`;
 
 // World competitions on the Results page: ESPN gives no matchday, so the rounds are worked out from the fixture list.
 // A league or group stage: every team plays once per round. Matches are taken in kickoff order and a round closes when
@@ -3939,26 +4189,56 @@ function bansByMatch(matches, posts){
   }
   return out;
 }
-// on a match card: the referee (and VAR), the whole crew behind a button
+// the referees of a match: the committee's appointments, with the towns, the delegate and the observer from the match
+// sheet (ebfu.net) when there is one; no appointments, the sheet's referees
+const roleSort = (a, b) => (ROLE_ORDER.indexOf(a.r) + 1 || 99) - (ROLE_ORDER.indexOf(b.r) + 1 || 99);
+const offSrc = url => /bfunion/.test(url || '') ? 'Съдийска комисия на БФС' : /ebfu/.test(url || '') ? 'БФС Електронно първенство' : 'БФС, Трета лига';
+function crewOf(m){
+  const d = FB.data[m.league], o = d && d.officials && d.officials[m.id], s = SHEETS.byMatch.get(String(m.id));
+  const sheet = s && s.officials && s.officials.length ? s.officials.filter(x => x && x.n) : [];
+  let crew = o && o.crew && o.crew.length ? o.crew.filter(c => c && c.n && !/:/.test(c.n)).map(c => ({ ...c })) : [];
+  let src = crew.length ? { url: o.src_url, title: o.src_title } : null;
+  if (!crew.length && sheet.length) { crew = sheet.map(x => ({ r: x.r, n: x.n })); src = { url: SHEET_SRC, title: 'протокол на мача' }; }
+  if (!crew.length) return null;
+  const town = new Map(sheet.map(x => [shortName(x.n), x.town]));
+  crew.forEach(c => { c.t = town.get(shortName(c.n)) || ''; });
+  for (const x of sheet) if (!crew.some(c => c.r === x.r)) crew.push({ r: x.r, n: x.n, t: x.town || '' });
+  return { crew: crew.sort(roleSort), src };
+}
+// on a match row: the referee and the VAR
 function officialsHtml(m){
-  const d = FB.data[m.league];
-  let o = d && d.officials && d.officials[m.id];
-  // the committee's appointments have none: the referees on the match sheet (ebfu.net), when there is one
-  if (!o || !o.crew || !o.crew.length) { const s = SHEETS.byMatch.get(String(m.id)); if (s && s.officials && s.officials.length) o = { crew: s.officials.map(x => ({ r: x.r, n: x.n })), src_url: SHEET_SRC, src_title: 'протокол на мача' }; }
-  if (!d || (!d.officials && !o)) return '';
-  if (!o || !o.crew || !o.crew.length) {
+  const c = crewOf(m);
+  if (!c) {
     // the committee names the referees a day or two before the match: until then a quiet note on the coming ones
-    const t = m.kickoff ? Date.parse(m.kickoff) : 0;
-    return m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? `<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>` : '';
+    const t = m.kickoff ? Date.parse(m.kickoff) : 0, d = FB.data[m.league];
+    return d && d.officials && m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? `<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>` : '';
   }
-  const crew = o.crew.filter(c => c && c.n && !/:/.test(c.n)).sort((a, b) => (ROLE_ORDER.indexOf(a.r) + 1 || 99) - (ROLE_ORDER.indexOf(b.r) + 1 || 99));
-  if (!crew.length) return '';
-  const ref = crew.find(c => c.r === 'ГС'), vr = crew.find(c => c.r === 'ВАР'), open = FB.open.has('crew:' + m.id);
-  const who = c => `<b>${esc(offName(c))}</b>`;
-  return `<div class="mref">${WHISTLE}${ref ? `<span class="rl">Съдия</span>${who(ref)}` : ''}${vr ? `<span class="sep" aria-hidden="true">·</span><span class="rl">ВАР</span>${who(vr)}` : ''}
-      <button class="crewbtn" data-crew="${esc(m.id)}" aria-expanded="${open}">Бригада <span class="chev">${open ? '▴' : '▾'}</span></button></div>
-    <div class="crew" data-crewbox="${esc(m.id)}"${open ? '' : ' hidden'}><dl>${crew.map(c => `<div><dt>${esc(ROLE_BG[c.r] || c.r)}</dt><dd>${esc(offName(c))}</dd></div>`).join('')}</dl>
-      <a class="src" href="${esc(o.src_url)}" target="_blank" rel="noopener">${esc(/bfunion/.test(o.src_url || '') ? 'Съдийска комисия на БФС' : /ebfu/.test(o.src_url || '') ? 'БФС Електронно първенство' : 'БФС · Трета лига')} — ${esc(o.src_title || 'назначения')}</a></div>`;
+  const ref = c.crew.find(x => x.r === 'ГС'), vr = c.crew.find(x => x.r === 'ВАР');
+  if (!ref && !vr) return '';
+  return `<div class="mref">${WHISTLE}${ref ? `<span class="rl">Съдия</span><b>${esc(offName(ref))}</b>` : ''}${vr ? `<span class="rl" style="margin-left:8px">ВАР</span><b>${esc(offName(vr))}</b>` : ''}</div>`;
+}
+// small line icons
+const ICO = {
+  sheet: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4.5" width="14" height="16" rx="2"/><path d="M9 4.5V3h6v1.5M8.5 10h7M8.5 13.5h7M8.5 17h4"/></svg>',
+  play: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M10.3 8.8v6.4l5.2-3.2z"/></svg>',
+  news: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4.5" width="16" height="15" rx="2"/><path d="M8 9h8M8 12.5h8M8 16h5"/></svg>',
+  share: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 7.5L12 3.5l4 4M6 11.5H5a1 1 0 0 0-1 1V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-6.5a1 1 0 0 0-1-1h-1"/></svg>',
+  back: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+};
+const matchHref = m => `#match/${encodeURIComponent(m.league)}/${encodeURIComponent(m.id)}`;
+const hasSheet = s => !!(s && s.found && [s.home, s.away].some(x => x && x.xi && x.xi.length));
+function matchArtCount(m){
+  const lg = m.league, idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(String(m.id))) || [], cov = LEAGUES[lg] ? matchCoverage(m) : [];
+  return ss.reduce((a, s) => a + s.arts.length, 0) + cov.reduce((a, g) => a + 1 + g.also.length, 0);
+}
+// under a match row: what its page has (the squads, videos, articles, players who sit it out)
+function matchHints(m){
+  const out = [], v = matchVideos(m).count, n = matchArtCount(m), d = FB.data[m.league], b = d && d.banned && d.banned[m.id];
+  if (hasSheet(SHEETS.byMatch.get(String(m.id)))) out.push(`<span class="yes">${ICO.sheet}Състави</span>`);
+  if (v) out.push(`<span class="yes">${ICO.play}${v} видео</span>`);
+  if (n) out.push(`<span>${ICO.news}${n} ${n === 1 ? 'статия' : 'статии'}</span>`);
+  if (b && b.length) out.push(`<span>${cardIc('red')}${b.length} ${b.length === 1 ? 'наказан' : 'наказани'}</span>`);
+  return out.join('');
 }
 // ── the match sheets: the teams' starting elevens, substitutes and coaches, and the refereeing team, from BFU's
 // electronic championship (ebfu.net; sheets-sync reads it every 10 minutes). Loaded a round at a time.
@@ -4005,7 +4285,7 @@ function sheetHtml(m){
       s.complete ? '' : '<span class="note">непълни</span>'}<span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
     <div class="sheet" data-sheetbox="${esc(m.id)}"${open ? '' : ' hidden'}>${sheetBody(m, s)}</div>`;
 }
-function sheetBody(m, s){
+function sheetBody(m, s, noOffs){
   const row = p => `<li${p.gk ? ' class="gk"' : ''}><span class="no">${esc(p.n || '')}</span><span class="pn" title="${esc(p.name)}">${esc(shortName(p.name))}</span>${
     p.cap ? '<span class="tag cap" title="Капитан">К</span>' : ''}${p.gk ? '<span class="tag" title="Вратар">В</span>' : ''}</li>`;
   const side = (t, name) => { t = t || {};
@@ -4013,7 +4293,7 @@ function sheetBody(m, s){
       ${t.xi && t.xi.length ? `<ol class="xi">${t.xi.map(row).join('')}</ol>` : '<p class="muted">Съставът още не е подаден.</p>'}
       ${t.subs && t.subs.length ? `<div class="subh">Резерви</div><ol class="subs">${t.subs.map(row).join('')}</ol>` : ''}
       ${t.coach ? `<div class="coach"><span class="muted">Треньор</span> ${esc(shortName(t.coach))}</div>` : ''}</div>`; };
-  const offs = (s.officials || []).slice().sort((a, b) => (ROLE_ORDER.indexOf(a.r) + 1 || 99) - (ROLE_ORDER.indexOf(b.r) + 1 || 99));
+  const offs = noOffs ? [] : (s.officials || []).slice().sort(roleSort);
   return `<div class="sides">${side(s.home, m.home_name)}${side(s.away, m.away_name)}</div>
     ${offs.length ? `<div class="subh">Съдии и официални лица</div><dl class="soff">${offs.map(o => `<div><dt>${esc(o.role || ROLE_BG[o.r] || o.r)}</dt><dd>${esc(shortName(o.n))}${o.town ? ` <span class="muted">${esc(o.town)}</span>` : ''}</dd></div>`).join('')}</dl>` : ''}
     <div class="src">${s.stadium ? `${esc(s.stadium)} · ` : ''}Източник: <a href="${SHEET_SRC}" target="_blank" rel="noopener">БФС Електронно първенство</a>${s.fetched_at ? ` · проверено ${esc(bgDate(s.fetched_at))}` : ''}</div>`;
@@ -4049,13 +4329,8 @@ function disciplineHtml(lg, r, list, d){
     ${total ? `<button class="dall" data-discall aria-expanded="${openAll}">${openAll ? 'Скрий' : 'Покажи'} всички наказани играчи през сезона (${total}) <span class="chev">${openAll ? '▴' : '▾'}</span></button>
       ${openAll ? `<ul class="dlist all">${all.slice().reverse().flatMap(p => (p.players || []).map(x => row(x, p.round))).join('')}</ul>` : ''}` : ''}</section>`;
 }
-function matchCard(m, top){
-  if (typeof top !== 'string') top = '';     // also called straight from Array.map
-  const L = LEAGUES[m.league];
-  const played = m.status === 'finished' || m.status === 'live';
-  const past = m.kickoff && Date.parse(m.kickoff) < Date.now() - 3 * 3600e3;
-  const score = played ? `<div class="mscore${m.status === 'live' ? ' live' : ''}">${m.home_score ?? ''}-${m.away_score ?? ''}</div>`
-    : `<div class="mscore time">${m.status === 'postponed' || past ? 'отложен' : m.kickoff && !noTime(m) ? esc(sofiaParts(m.kickoff).time) : '—'}</div>`;
+// the videos of a match: Gong.bg's Репортаж and Разширен, other channels' reports, the referee clips; the one open plays
+function matchVideos(m){
   const vb = (kind, v, label) => !v || !v.id ? '' : v.embed === false
     ? `<a class="vbtn yt" href="${ytWatch(v.id)}" target="_blank" rel="noopener noreferrer" data-kind="${kind}" title="${esc(v.title || '')} · ${esc(v.channel || '')}">
       <span class="ic">▶</span>${label}<span class="len">${esc(v.length || '')}</span></a>`
@@ -4071,7 +4346,7 @@ function matchCard(m, top){
   const rb = refs.length ? `<button class="vbtn ref${FB.open.has(m.id + ':ref') ? ' on' : ''}" data-mid="${esc(m.id)}" data-kind="ref" title="Съдийски ситуации, съдията и интервютата след мача">
       <span class="ic">⚖</span>Съдийство<span class="len">${refs.length} ${refs.length === 1 ? 'клип' : 'клипа'}</span></button>` : '';
   const btns = vb('short', sv, 'Репортаж') + vb('long', lv, 'Разширен') + ob + rb;
-  const left = [m.ht_home != null && m.status === 'finished' ? `Полувреме ${m.ht_home}-${m.ht_away}` : m.status === 'live' ? 'На живо' : '', venueOf(m)].filter(Boolean).join(' · ');
+  const count = (sv ? 1 : 0) + (lv ? 1 : 0) + others.length + refs.length;
   const openKind = ['short', 'long', 'other', 'ref'].find(k => FB.open.has(m.id + ':' + k));
   let ov = openKind === 'short' ? sv : openKind === 'long' ? lv : null, chips = '';
   if (openKind === 'other' || openKind === 'ref') {
@@ -4091,19 +4366,124 @@ function matchCard(m, top){
   const player = ov || chips ? `<div class="mplayer">${chips}${ov ? `${playerHtml({ kind: 'YouTube', src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ov.id)}?autoplay=1&rel=0` })}
       <div class="mfoot"><span class="mnote">${esc(ov.title)} · ${esc(ov.channel)}<br>Ако клипът не тръгва тук, гледай го в YouTube.</span>
       <a class="ytbtn" href="${ytWatch(ov.id)}" target="_blank" rel="noopener noreferrer"><span class="yti" aria-hidden="true"></span>Гледай в YouTube</a></div>` : ''}</div>` : '';
-  const none = !top && played && m.status === 'finished' && !btns && VIDEO_LEAGUES.includes(m.league) ? '<span class="mnote">Видеото още не е намерено</span>' : '';
-  const when = !m.kickoff ? 'дата неизвестна' : noTime(m) ? (p => `${p.day} ${p.d}, ${p.m}`)(sofiaParts(m.kickoff)) : bgDate(m.kickoff);
-  return `<article class="mcard" data-mid="${esc(m.id)}">
-    <div class="mtop"><span>${esc(top || `${L} - ${m.round} Кръг`)}</span><span>${esc(when)}</span></div>
+  const none = m.status === 'finished' && !btns && VIDEO_LEAGUES.includes(m.league);
+  return { btns, player, none, count };
+}
+const matchWhen = m => !m.kickoff ? 'дата неизвестна' : noTime(m) ? (p => `${p.day} ${p.d}, ${p.m}`)(sofiaParts(m.kickoff)) : bgDate(m.kickoff);
+const isPast = m => m.kickoff && Date.parse(m.kickoff) < Date.now() - 3 * 3600e3;
+// a match in the round's list: the teams, the score, the referee and what its page has; the whole row opens the page
+function matchCard(m, top){
+  if (typeof top !== 'string') top = '';     // also called straight from Array.map
+  const played = m.status === 'finished' || m.status === 'live';
+  const score = played ? `<div class="mscore${m.status === 'live' ? ' live' : ''}">${m.home_score ?? ''}:${m.away_score ?? ''}</div>`
+    : `<div class="mscore time">${m.status === 'postponed' || isPast(m) ? 'отложен' : m.kickoff && !noTime(m) ? esc(sofiaParts(m.kickoff).time) : '—'}</div>`;
+  return `<a class="mcard" href="${matchHref(m)}" data-mid="${esc(m.id)}">
+    <div class="mtop"><span>${esc(top || `${LEAGUES[m.league]}, ${m.round} кръг`)}${m.status === 'live' ? '<span class="livetag">на живо</span>' : ''}</span><span>${esc(matchWhen(m))}</span></div>
     <div class="mrow">
       <div class="mteam home"><span class="tname">${esc(teamName(m.home_name))}</span>${logoHtml(m.home_logo, m.home_name)}</div>
       ${score}
       <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(teamName(m.away_name))}</span></div>
     </div>
-    ${officialsHtml(m)}${sheetHtml(m)}${bansHtml(m)}
-    ${left || btns || none ? `<div class="mbottom"><span class="muted">${esc(left)}</span>${btns ? `<div class="vbtns">${btns}</div>` : none}</div>` : ''}
-    ${player}
-  </article>`;
+    ${officialsHtml(m)}
+    <div class="mhints" data-mh="${esc(m.id)}">${matchHints(m)}</div>
+  </a>`;
+}
+// ── the match page (#match/<league>/<id>): a pitch strip with the score in the centre circle, then the referee team,
+// the players who sit it out, the squads, the videos and the articles
+function roundLabelOf(m){
+  if (LEAGUES[m.league]) return `${m.round} кръг`;
+  const d = FB.data[m.league], r = d && d.rounds && d.rounds.find(x => x.matches.some(y => String(y.id) === String(m.id)));
+  return r ? (r.ko ? (m.note || r.label) : r.label) : '';
+}
+function matchPageHtml(m){
+  const lg = m.league, comp = LEAGUES[lg] || (compOf(lg) || {}).name || '', rl = roundLabelOf(m);
+  const played = m.status === 'finished' || m.status === 'live', t = Date.parse(m.kickoff) || 0, now = Date.now();
+  const sc = played ? `${m.home_score ?? ''}:${m.away_score ?? ''}` : m.status === 'postponed' || isPast(m) ? 'отложен' : m.kickoff && !noTime(m) ? sofiaParts(m.kickoff).time : '—';
+  const sub = [m.status === 'live' ? 'На живо' : '', m.ht_home != null && m.status === 'finished' ? `Полувреме ${m.ht_home}:${m.ht_away}` : '', matchWhen(m), venueOf(m)]
+    .filter(Boolean).map(x => `<span>${esc(x)}</span>`).join('');
+  const hero = `<section class="pitch mhero">
+    <div class="mh-top">${esc(comp)}${rl ? `, ${esc(rl)}` : ''}</div>
+    <div class="mh-row">
+      <div class="mh-team">${logoHtml(m.home_logo, m.home_name)}<b>${esc(teamName(m.home_name))}</b></div>
+      <div class="mh-score${played ? '' : ' pre'}${m.status === 'live' ? ' live' : ''}"><svg class="ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="57"/></svg><span class="sc">${esc(sc)}</span></div>
+      <div class="mh-team">${logoHtml(m.away_logo, m.away_name)}<b>${esc(teamName(m.away_name))}</b></div>
+    </div>
+    <div class="mh-sub">${sub}</div></section>`;
+  const sec = (title, body) => `<section class="msec"><h2>${title}</h2>${body}</section>`;
+  const c = crewOf(m), d = FB.data[lg];
+  const crew = c ? sec('Съдийски екип', `<ul class="crewlist">${c.crew.map(x => `<li><span class="r">${esc(ROLE_BG[x.r] || x.r)}</span><b>${esc(offName(x))}${x.t ? `<span class="t">${esc(x.t)}</span>` : ''}</b></li>`).join('')}</ul>
+      ${c.src && c.src.url ? `<a class="msrc" href="${esc(c.src.url)}" target="_blank" rel="noopener">${esc(offSrc(c.src.url))}, ${esc(c.src.title || 'назначения')}</a>` : ''}`)
+    : d && d.officials && m.status === 'scheduled' && t > now && t - now < 4 * 864e5 ? sec('Съдийски екип', '<p class="mempty">Съдиите за мача още не са обявени.</p>') : '';
+  const b = d && d.banned && d.banned[m.id];
+  const bans = b && b.length ? sec('Не играят', `<ul class="crewlist">${b.map(p => `<li><span>${cardIc(p.reason)} ${esc(p.name)}</span><b>${esc(teamName(p.team))}</b></li>`).join('')}</ul>`) : '';
+  const s = SHEETS.byMatch.get(String(m.id));
+  const squads = hasSheet(s) ? sec(`Състави${s.complete ? '' : ' <span class="muted">непълни</span>'}`, `<div class="sheet">${sheetBody(m, s, true)}</div>`)
+    : SHEET_LEAGUES.includes(lg) && m.status === 'scheduled' && t > now && t - now < 864e5
+      ? sec('Състави', `<p class="mempty">Съставите излизат около час–два преди мача${t - now < 3 * 3600e3 ? ' — проверяваме на всеки 10 минути' : ''}.</p>`) : '';
+  const V = matchVideos(m);
+  const vids = V.btns || V.player ? sec('Видео', `${V.btns ? `<div class="vbtns">${V.btns}</div>` : ''}${V.player}`) : V.none ? sec('Видео', '<p class="mempty">Видеото още не е намерено.</p>') : '';
+  return `<div class="mpage" data-mid="${esc(m.id)}">
+    <div class="mpbar"><a class="mback" href="#results" data-mback>${ICO.back}Мачове</a><button class="mshare small" data-mshare>${ICO.share}Сподели</button></div>
+    ${hero}${crew}${bans}${squads}${vids}${sec('Статии', mnWrap(lg, m, true))}
+  </div>`;
+}
+const canMorph = () => !!document.startViewTransition && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+let MP_FROM_LIST = false, MP_SEEN = '';
+function renderMatchPage(box, force){
+  const { lg, id } = FB.match;
+  const back = `<div class="mpage"><div class="mpbar"><a class="mback" href="#results" data-mback>${ICO.back}Мачове</a></div>`;
+  if (isWorld(lg) && !FB.comps) { box.innerHTML = back + '<p class="muted">Зареждане…</p></div>'; return; }
+  const d = FB.data[lg];
+  if (!d) { box.innerHTML = back + `<p class="muted">${FB.err ? esc('Не можа да се зареди: ' + FB.err) : 'Зареждане…'}</p></div>`; loadFootball(lg); return; }
+  loadFootball(lg);   // refreshed quietly when older than 5 minutes
+  const m = (d.matches || []).find(x => String(x.id) === String(id));
+  if (!m) { box.innerHTML = back + '<p class="mempty">Мачът не е намерен. Може да е от друг сезон.</p></div>'; RES_KEY = ''; return; }
+  // back to the list shows the match's round
+  if (LEAGUES[lg]) FB.round[lg] = m.round;
+  else if (d.rounds) { const gi = d.rounds.findIndex(r => r.matches.some(x => String(x.id) === String(id))); if (gi >= 0) FB.round[lg] = gi; }
+  if (LEAGUES[lg]) { loadMatchCoverage(lg, [m]); loadSheets(lg, [m]); }
+  if (MP_SEEN !== lg + '|' + id) {
+    MP_SEEN = lg + '|' + id;
+    const idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(String(id))) || [];
+    queueExtract(ss.slice(0, 10).flatMap(st => extractTargets(st).slice(0, 2)));
+  }
+  const key = ['match', lg, id, d.ver, SHEETS.ver, [...FB.open].join(',')].join('|');
+  if (!force && key === RES_KEY && box.firstChild) return;
+  if (!force && box.dataset.shown === 'match:' + id && box.querySelector('.player iframe, .player video')) return;   // a video playing keeps playing
+  RES_KEY = key;
+  box.dataset.shown = 'match:' + id;
+  box.innerHTML = matchPageHtml(m);
+  afterMatchNews(box);
+}
+// from a row to its page: the score travels into the centre circle (where the browser can, and motion is welcome)
+function openMatchPage(lg, id, fromEl){
+  MP_FROM_LIST = VIEW === 'results' && !FB.match;
+  FB.listY = MP_FROM_LIST ? window.scrollY : null;
+  const h = `match/${encodeURIComponent(lg)}/${encodeURIComponent(id)}`;
+  const nav = () => new Promise(res => {
+    window.addEventListener('hashchange', () => { window.scrollTo(0, 0); res(); }, { once: true });
+    location.hash = h;
+  });
+  const sc = fromEl && fromEl.querySelector('.mscore');
+  if (sc && canMorph()) { sc.style.viewTransitionName = 'mscore'; document.startViewTransition(nav); } else nav();
+}
+function closeMatchPage(){
+  const nav = () => new Promise(res => {
+    window.addEventListener('hashchange', () => res(), { once: true });
+    if (MP_FROM_LIST) history.back(); else location.hash = 'results';
+  });
+  MP_FROM_LIST ? (canMorph() ? document.startViewTransition(nav) : nav()) : nav();
+}
+async function shareMatch(){
+  const d = FB.match && FB.data[FB.match.lg], m = d && (d.matches || []).find(x => String(x.id) === String(FB.match.id));
+  if (!m) return;
+  const played = m.status === 'finished' || m.status === 'live';
+  const title = `${teamName(m.home_name)} ${played ? `${m.home_score}:${m.away_score}` : '–'} ${teamName(m.away_name)}`;
+  const url = location.origin + location.pathname + matchHref(m);
+  try {
+    if (navigator.share) { await navigator.share({ title, url }); return; }
+    await navigator.clipboard.writeText(url); toast('Линкът към мача е копиран');
+  } catch (e) { if (e && e.name !== 'AbortError') toast('Линкът: ' + url); }
 }
 // "Обзор на кръга" — the round's review show (Diema, uploaded by Gong.bg), shown above the round's matches
 function roundReviewHtml(lg, r, list, d){
@@ -4289,18 +4669,19 @@ function standingsHtml(lg, inner){
 let RES_KEY = '';
 function renderResults(force){
   const box = $('#resultsBox');
-  if (AUTH === 'off' || AUTH === 'error') { box.innerHTML = '<div class="warn">Results need the database connection, which is not available right now.</div>'; return; }
+  if (AUTH === 'off' || AUTH === 'error') { box.innerHTML = '<div class="warn">Мачовете изискват връзка с базата данни, която в момента не е достъпна.</div>'; return; }
   if (!FB.comps) loadComps();
+  if (FB.match) return renderMatchPage(box, force);
   // the World news links here: open the section the reader was looking at
   if (FB.want && FB.comps) { const c = visibleComps().find(x => x.grp === FB.want); if (c) FB.league = FB.last[FB.want] || c.key; FB.want = ''; }
   if (isWorld(FB.league) && FB.comps && !visibleComps().some(c => c.key === FB.league)) FB.league = 'efbet';
-  if (isWorld(FB.league) && !FB.comps) { box.innerHTML = '<p class="muted">Loading results…</p>'; return; }
+  if (isWorld(FB.league) && !FB.comps) { box.innerHTML = '<p class="muted">Зареждаме мачовете…</p>'; return; }
   const lg = FB.league, d = FB.data[lg];
-  if (!d) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Could not load: ' + FB.err) : 'Loading results…'}</p>`; loadFootball(lg); return; }
+  if (!d) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Не се зареди: ' + FB.err) : 'Зареждаме мачовете…'}</p>`; loadFootball(lg); return; }
   if (d.world) return renderWorldResults(box, lg, d, force);
   loadFootball(lg);   // refresh quietly when older than 5 minutes
   const ms = d.matches;
-  if (!ms.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>' + standingsHtml(lg); return; }
+  if (!ms.length) { box.innerHTML = leagueBar() + '<p class="muted">Още няма мачове.</p>' + standingsHtml(lg); return; }
   const rounds = [...new Set(ms.map(m => m.round))].sort((a, b) => a - b);
   const total = Math.max(...rounds);
   if (FB.goMatch) { const gm = ms.find(x => String(x.id) === FB.goMatch); if (gm) FB.round[lg] = gm.round; }
@@ -4318,17 +4699,17 @@ function renderResults(force){
   RES_KEY = key;
   box.dataset.shown = lg;   // not data-lg: the clicks inside would read as a league switch
   box.innerHTML = leagueBar() + `<div class="roundnav">
-      <button data-rnd="${r - 1}" ${r <= rounds[0] ? 'disabled' : ''} aria-label="Previous round">‹</button>
+      <button data-rnd="${r - 1}" ${r <= rounds[0] ? 'disabled' : ''} aria-label="Предишен кръг">‹</button>
       <div class="mid"><h2>Кръг ${r} от ${total}</h2><div class="muted">${esc(span)}${finished && VIDEO_LEAGUES.includes(lg) ? ` · видео за ${withVid} от ${finished} мача` : ''}</div>
-        <select id="rndSel" aria-label="Round">${rounds.map(x => `<option value="${x}"${x === r ? ' selected' : ''}>Кръг ${x}</option>`).join('')}</select></div>
-      <button data-rnd="${r + 1}" ${r >= total ? 'disabled' : ''} aria-label="Next round">›</button></div>
+        <select id="rndSel" aria-label="Кръг">${rounds.map(x => `<option value="${x}"${x === r ? ' selected' : ''}>Кръг ${x}</option>`).join('')}</select></div>
+      <button data-rnd="${r + 1}" ${r >= total ? 'disabled' : ''} aria-label="Следващ кръг">›</button></div>
     ${roundReviewHtml(lg, r, list, d)}
-    ${list.map(m => matchCard(m) + mnWrap(lg, m)).join('')}
+    ${list.map(m => matchCard(m)).join('')}
     ${disciplineHtml(lg, r, list, d)}
     ${standingsHtml(lg)}
     <p class="muted">${lg === 'sw3'
-      ? 'Results and table: <a href="https://bulgarian-football.com/yugozapadna-treta-liga.html" target="_blank" rel="noopener">bulgarian-football.com</a> · Referee appointments and punishments: <a href="https://bfu-tournaments.com/leagues/third-sw/news" target="_blank" rel="noopener">bfu-tournaments.com</a>'
-      : `Results and table: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Referee appointments: <a href="https://bfunion.bg/%D0%A1%D1%8A%D0%B4%D0%B8%D0%B9%D1%81%D0%BA%D0%B0-%D0%BA%D0%BE%D0%BC%D0%B8%D1%81%D0%B8%D1%8F" target="_blank" rel="noopener">bfunion.bg</a> · Videos: YouTube (Gong.bg and others)`} · updated every 30 minutes</p>`;
+      ? 'Резултати и класиране: <a href="https://bulgarian-football.com/yugozapadna-treta-liga.html" target="_blank" rel="noopener">bulgarian-football.com</a> · Наряди и наказания: <a href="https://bfu-tournaments.com/leagues/third-sw/news" target="_blank" rel="noopener">bfu-tournaments.com</a>'
+      : `Резултати и класиране: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Наряди: <a href="https://bfunion.bg/%D0%A1%D1%8A%D0%B4%D0%B8%D0%B9%D1%81%D0%BA%D0%B0-%D0%BA%D0%BE%D0%BC%D0%B8%D1%81%D0%B8%D1%8F" target="_blank" rel="noopener">bfunion.bg</a> · Видео: YouTube (Gong.bg и други)`} · обновява се на всеки 30 минути</p>`;
   afterMatchNews(box);
   // an old #table link opens Results at the table
   if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
@@ -4345,7 +4726,7 @@ function defaultWorldRound(rounds){
 }
 function renderWorldResults(box, lg, d, force){
   const comp = compOf(lg) || { name: lg, grp: '' }, rounds = d.rounds;
-  if (!rounds.length) { box.innerHTML = leagueBar() + '<p class="muted">No matches yet.</p>' + standingsHtml(lg); return; }
+  if (!rounds.length) { box.innerHTML = leagueBar() + '<p class="muted">Още няма мачове.</p>' + standingsHtml(lg); return; }
   if (FB.goMatch) { const gi = rounds.findIndex(x => x.matches.some(m => String(m.id) === FB.goMatch)); if (gi >= 0) FB.round[lg] = gi; }
   let i = FB.round[lg];
   if (i == null || !rounds[i]) i = FB.round[lg] = defaultWorldRound(rounds);
@@ -4361,19 +4742,25 @@ function renderWorldResults(box, lg, d, force){
   box.dataset.shown = lg;   // not data-lg: the clicks inside would read as a league switch
   const top = m => `${comp.name} - ${R.ko ? (m.note || R.label) : R.label + (m.note && /^Група /.test(m.note) ? ' · ' + m.note : '')}`;
   box.innerHTML = leagueBar() + `<div class="roundnav">
-      <button data-rnd="${i - 1}" ${i <= 0 ? 'disabled' : ''} aria-label="Previous round">‹</button>
+      <button data-rnd="${i - 1}" ${i <= 0 ? 'disabled' : ''} aria-label="Предишен кръг">‹</button>
       <div class="mid"><h2>${esc(R.label)}${total ? ` от ${total}` : ''}</h2><div class="muted">${esc(span)}${R.ko || !R.stage || / · /.test(R.label) ? '' : ' · ' + esc(R.stage)}</div>
-        <select id="rndSel" aria-label="Round">${rounds.map((x, k) => `<option value="${k}"${k === i ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
-      <button data-rnd="${i + 1}" ${i >= rounds.length - 1 ? 'disabled' : ''} aria-label="Next round">›</button></div>
-    ${list.map(m => matchCard(m, top(m)) + mnWrap(lg, m)).join('')}
+        <select id="rndSel" aria-label="Кръг">${rounds.map((x, k) => `<option value="${k}"${k === i ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
+      <button data-rnd="${i + 1}" ${i >= rounds.length - 1 ? 'disabled' : ''} aria-label="Следващ кръг">›</button></div>
+    ${list.map(m => matchCard(m, top(m))).join('')}
     ${standingsHtml(lg)}
-    <p class="muted">Results and tables: <a href="https://www.espn.com/soccer/" target="_blank" rel="noopener">ESPN</a> · updated every 30 minutes${comp.grp === 'nat' ? ' · national-team competitions are listed only while they or their qualifiers are being played' : ''}</p>`;
+    <p class="muted">Резултати и класирания: <a href="https://www.espn.com/soccer/" target="_blank" rel="noopener">ESPN</a> · обновява се на всеки 30 минути${comp.grp === 'nat' ? ' · турнирите на националните отбори се показват само докато се играят те или квалификациите им' : ''}</p>`;
   afterMatchNews(box);
   if (SCROLL_TO === 'standings') { const el = document.getElementById('standings'); if (el) { el.scrollIntoView({ block: 'start' }); SCROLL_TO = null; } }
 }
 function initFootballUI(){
   bindStoryEvents($('#resultsBox'), refreshMatchNews);
   $('#resultsBox').addEventListener('click', e => {
+    const card = e.target.closest('a.mcard[data-mid]');
+    if (card && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+      e.preventDefault(); FB.open.clear(); openMatchPage(FB.league, card.dataset.mid, card); return;
+    }
+    if (e.target.closest('[data-mback]')) { e.preventDefault(); closeMatchPage(); return; }
+    if (e.target.closest('[data-mshare]')) { shareMatch(); return; }
     const mn = e.target.closest('button[data-mnews]');
     if (mn) { toggleMatchNews(mn.dataset.mnews); return; }
     const ca = e.target.closest('button[data-covall]');
@@ -4429,7 +4816,7 @@ function initFootballUI(){
   // a logo that fails to load becomes the team's initials
   $('#resultsBox').addEventListener('error', e => {
     const img = e.target;
-    if (img.tagName === 'IMG' && img.classList.contains('tlogo')) { const sp = document.createElement('span'); sp.className = 'tinit'; sp.textContent = img.dataset.init || ''; img.replaceWith(sp); }
+    if (img.tagName === 'IMG' && img.classList.contains('tlogo')) { const sp = document.createElement('span'); sp.className = 'tinit'; sp.setAttribute('data-noi18n', ''); sp.textContent = img.dataset.init || ''; img.replaceWith(sp); }
   }, true);
 }
 
@@ -4861,7 +5248,7 @@ function coverageHtml(id, cov){
   const all = FB.covAll.has(id), shown = all ? cov : cov.slice(0, COV_SHOWN);
   const li = g => `<li><div class="m">${esc(dayOnlyTs(g.a.date) ? fmtDay(g.a.date) : fmtDate(g.a.date))} ·${g.tier >= LEADING ? `<b>${esc(g.a.src)}</b>` : esc(g.a.src)}${
       g.also.length ? ` · също ${g.also.map(x => esc(x.src)).join(', ')}` : ''}${isNewArt(g.a) ? ' · <b>new</b>' : ''}</div>
-    <a href="${esc(safeUrl(g.a.link))}" data-aid="${esc(g.a.aid)}" target="_blank" rel="noopener noreferrer">${esc(g.a.title)}</a>${isRead(g.a.aid) ? '<span class="chk" title="Read">✓</span>' : ''}</li>`;
+    <a href="${esc(safeUrl(g.a.link))}" data-aid="${esc(g.a.aid)}" target="_blank" rel="noopener noreferrer">${esc(g.a.title)}</a>${isRead(g.a.aid) ? '<span class="chk" title="Прочетено">✓</span>' : ''}</li>`;
   const part = (label, list) => list.length ? `<li class="covsec">${label}</li>${list.map(li).join('')}` : '';
   return `<div class="mnhead">📰 За мача</div>
     <ul class="arts mcov">${part('След мача', shown.filter(g => !g.pre))}${part('Преди мача', shown.filter(g => g.pre))}${
@@ -4870,10 +5257,13 @@ function coverageHtml(id, cov){
 // the strip under a match card: how much was written about it; a tap opens the refereeing stories, stacked like the
 // news feed, and the match's own coverage under them
 const MN_HTML = {};
-function matchNewsStrip(lg, m){
+function matchNewsStrip(lg, m, page){
   const id = String(m.id), idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(id)) || [], cov = LEAGUES[lg] ? matchCoverage(m) : [];
   const played = m.status === 'finished' || m.status === 'live';
-  if (!ss.length && !cov.length) return `<div class="mnews none">${!played ? 'Още няма статии за този мач' : LEAGUES[lg] ? 'Няма статии за този мач' : 'Няма статии за съдийството в този мач'}</div>`;
+  const none = !played ? 'Още няма статии за този мач.' : LEAGUES[lg] ? 'Няма статии за този мач.' : 'Няма статии за съдийството в този мач.';
+  if (page) return !ss.length && !cov.length ? `<p class="mempty">${none}</p>`
+    : `<div class="mnewsbox">${ss.length && cov.length ? '<div class="mnhead">⚖ Съдийството</div>' : ''}${ss.map(storyCard).join('')}${cov.length ? coverageHtml(id, cov) : ''}</div>`;
+  if (!ss.length && !cov.length) return `<div class="mnews none">${none.slice(0, -1)}</div>`;
   const nRef = ss.reduce((a, s) => a + s.arts.length, 0), nCov = cov.reduce((a, g) => a + 1 + g.also.length, 0), n = nRef + nCov;
   const open = FB.mnOpen.has(id), fresh = ss.some(s => s.hasNew) || cov.some(g => isNewArt(g.a));
   // the headline shown: the best-known outlet's; a refereeing story first among equals
@@ -4886,14 +5276,23 @@ function matchNewsStrip(lg, m){
       <span class="hl">${esc(top.t)}</span><span class="chev">${open ? 'Скрий ▴' : 'Виж ▾'}</span></button>
     ${open ? `<div class="mnewsbox">${ss.length && cov.length ? '<div class="mnhead">⚖ Съдийството</div>' : ''}${ss.map(storyCard).join('')}${cov.length ? coverageHtml(id, cov) : ''}</div>` : ''}`;
 }
-function mnWrap(lg, m){
-  const id = String(m.id), h = matchNewsStrip(lg, m);
+function mnWrap(lg, m, page){
+  const id = String(m.id), h = matchNewsStrip(lg, m, page);
   MN_HTML[id] = h;
-  return `<div class="mnwrap" data-mnw="${esc(id)}">${h}</div>`;
+  return `<div class="mnwrap" data-mnw="${esc(id)}"${page ? ' data-page' : ''}>${h}</div>`;
 }
 // after the round is drawn: remember what each strip shows, open a match that was linked from the news
 function afterMatchNews(box){
   box.querySelectorAll('.mnwrap[data-mnw]').forEach(w => { w._html = MN_HTML[w.dataset.mnw]; });
+  box.querySelectorAll('.mhints[data-mh]').forEach(w => { w._html = w.innerHTML; });
+  // back from a match page: the list where it was, the score travelling back into its row
+  if (FB.backFrom && !FB.match) {
+    const el = [...box.querySelectorAll('.mcard[data-mid]')].find(x => x.dataset.mid === String(FB.backFrom));
+    if (FB.listY != null) window.scrollTo(0, FB.listY); else if (el) el.scrollIntoView({ block: 'center' });
+    const sc = el && el.querySelector('.mscore');
+    if (sc && canMorph()) { sc.style.viewTransitionName = 'mscore'; setTimeout(() => { sc.style.viewTransitionName = ''; }, 900); }
+    FB.backFrom = null; FB.listY = null;
+  }
   if (FB.goMatch) {
     const el = [...box.querySelectorAll('.mcard[data-mid]')].find(x => x.dataset.mid === FB.goMatch);
     FB.goMatch = '';
@@ -4908,9 +5307,14 @@ function refreshMatchNews(){
   const byId = new Map(d.matches.map(m => [String(m.id), m]));
   $('#resultsBox').querySelectorAll('.mnwrap[data-mnw]').forEach(w => {
     const m = byId.get(w.dataset.mnw); if (!m) return;
-    const html = matchNewsStrip(FB.league, m);
+    const html = matchNewsStrip(FB.league, m, w.hasAttribute('data-page'));
     if (w._html === html) return;
     patchHtml(w, w._html = html);                    // in place: a video playing under a story keeps playing
+  });
+  $('#resultsBox').querySelectorAll('.mhints[data-mh]').forEach(w => {
+    const m = byId.get(w.dataset.mh); if (!m) return;
+    const html = matchHints(m);
+    if (w._html !== html) w.innerHTML = w._html = html;
   });
 }
 function toggleMatchNews(id){
@@ -4931,16 +5335,15 @@ function matchLinks(s){
   return `<div class="mlinks">${ms.slice(0, 3).map(m => {
     const lg = m.league, where = LEAGUES[lg] ? `${m.round} кръг` : (compOf(lg) || {}).name || '';
     const score = m.status === 'finished' || m.status === 'live' ? `${m.home_score ?? ''}:${m.away_score ?? ''}` : '–';
-    return `<button class="mlink" data-gomatch="${esc(lg)}|${esc(m.id)}" title="The match on the Results page, with everything written about it">${esc(teamName(m.home_name))} <b>${esc(score)}</b> ${esc(teamName(m.away_name))}<span class="muted">· ${esc(where)}</span></button>`;
-  }).join('')}${ms.length > 3 ? `<span class="muted">+${ms.length - 3} more</span>` : ''}</div>`;
+    return `<button class="mlink" data-gomatch="${esc(lg)}|${esc(m.id)}" title="Страницата на мача, с всичко писано за него">${esc(teamName(m.home_name))} <b>${esc(score)}</b> ${esc(teamName(m.away_name))}<span class="muted">· ${esc(where)}</span></button>`;
+  }).join('')}${ms.length > 3 ? `<span class="muted">+ още ${ms.length - 3}</span>` : ''}</div>`;
 }
-// open the match's round on the Results page, with its stories open
+// a story's match: its own page
 function openMatch(lg, id){
   if (!LEAGUES[lg] && !compOf(lg)) return;
-  FB.league = lg; FB.last[sectOf(lg)] = lg; saveJSON('bgRefWatch.fbLeague', lg);
-  FB.open.clear(); FB.mnOpen.add(String(id)); FB.goMatch = String(id); FB.want = '';
-  RES_KEY = '';
-  if (VIEW === 'results') renderResults(true); else go('results');
+  saveJSON('bgRefWatch.fbLeague', lg);
+  FB.open.clear(); FB.want = ''; RES_KEY = '';
+  openMatchPage(lg, id);
 }
 // clicks inside story cards (news feed and match panels): open / mark read / look for videos again / upload
 function bindStoryEvents(container, redraw){
@@ -4970,6 +5373,11 @@ function bindStoryEvents(container, redraw){
 function initUI(){
   window.addEventListener('hashchange', applyView);
   $('#nav').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) go(b.dataset.view); });
+  $('#acct').addEventListener('click', e => { const b = e.target.closest('[data-view]'); if (b) go(b.dataset.view); });
+  // on a phone the tab bar steps aside while typing, so it never covers a form or the keyboard's suggestions
+  const typing = el => el && el.matches && el.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=button]):not([type=submit]), textarea, select, [contenteditable="true"]');
+  document.addEventListener('focusin', e => { if (typing(e.target)) document.body.classList.add('typing'); });
+  document.addEventListener('focusout', () => setTimeout(() => { if (!typing(document.activeElement)) document.body.classList.remove('typing'); }, 60));
 
   // "Results & tables" opens Results at what is being read: the World section, or the Bulgarian leagues
   $('#newsFilters').addEventListener('click', e => {
@@ -5068,12 +5476,12 @@ function initUI(){
     if (e.target.id === 'btnLogout') { await SB.auth.signOut(); return; }
     if (e.target.id === 'btnEbfuCheck') return ebfuCheck();
     if (e.target.id === 'btnEbfuSend') return ebfuSendReport();
-    if (e.target.id === 'btnEbfuOff') { EBFU = null; EBFU_REPORT = null; saveJSON(EBFU_KEY, null); return ebfuSay('Disconnected from ebfu.net on this device.', 'ok'); }
+    if (e.target.id === 'btnEbfuOff') { EBFU = null; EBFU_REPORT = null; saveJSON(EBFU_KEY, null); return ebfuSay('Връзката с ebfu.net на това устройство е прекъсната.', 'ok'); }
     if (e.target.id === 'btnForgot') {
       const email = $('#accountBox input[name=email]').value.trim();
-      if (!email) return accSay('Type your email first, then tap "Forgot password?".', 'err');
+      if (!email) return accSay('Първо въведете имейла си, после натиснете „Забравена парола?“.', 'err');
       const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: redirectTo() });
-      accSay(error ? error.message : 'Check your email for a link to set a new password.', error ? 'err' : 'ok');
+      accSay(error ? error.message : 'Проверете имейла си за линк за нова парола.', error ? 'err' : 'ok');
     }
   });
   $('#adminBox').addEventListener('click', e => {
@@ -5085,6 +5493,20 @@ function initUI(){
 }
 function autoCheck(){ loadNews(false); loadMatchIndex(); }
 
+// the language switch: Bulgarian ⇄ English, remembered on this device (the page starts again in the other language)
+function drawLangBtn(){
+  const b = $('#langBtn');
+  b.innerHTML = `<span${EN ? '' : ' class="on"'} lang="bg">БГ</span><span${EN ? ' class="on"' : ''} lang="en">EN</span>`;
+  b.setAttribute('aria-label', EN ? 'Превключи на български' : 'Switch to English');
+  b.title = EN ? 'Български' : 'English';
+}
+$('#langBtn').addEventListener('click', () => {
+  if (pageBusy() && !confirmT('Ако смените езика сега, въведеното ще се загуби. Да продължа ли?')) return;
+  saveJSON('bgRefWatch.lang', EN ? 'bg' : 'en');
+  location.reload();
+});
+drawLangBtn();
+I18N.start();
 initUI();
 initFootballUI();
 applyView();
