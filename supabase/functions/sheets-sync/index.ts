@@ -112,6 +112,7 @@ Deno.serve(async (req) => {
           await sleep(300);                         // politely, one request after another
           const s = await ebfuSheet(day, e.id);
           out.read++;
+          if (!E.readable(s)) { out.errors.push(`${e.id}: a page without a sheet on it`); continue; }
           // the session showed another match (it can happen if two runs meet): left for the next run
           if (s.home && E.tokens(s.home.name).join() !== E.tokens(e.home).join()) { out.errors.push(`${e.id}: the sheet showed ${s.home.name}`); continue; }
           const team = (i: number, head: any) => {

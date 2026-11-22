@@ -119,5 +119,35 @@ ok(E.teamScore('ЦСКА 1948', ['ПРОФЕСИОНАЛЕН ФУТБОЛЕН К
 ok(E.teamScore('Славия 1913', ['ПФК Арда Кърджали 1924']) < 0 + 1, 'a different year counts against');
 const sw = E.parseSheet(sheetHtml.replace('<span>БФС Делегат</span>', '<span>БФС Делегат/Наблюдател</span>').replace('Ратко Достанич', 'ДАНИЕЛ АЛЕКСАНДРЕ МОРАЛЕС БАТАЖЕЛО'));
 ok(sw.officials[6].r === 'ДН' && sw.teams[0].coach === 'Даниел Александре Моралес Баталело'.replace('Баталело', 'Батажело'), 'Делегат/Наблюдател → ДН; a coach in capitals in the usual case: ' + sw.teams[0].coach);
+// the newer layout (Лудогорец – ЦСКА 1948, 7 Nov): elevens side by side, substitutes after the tactics picture,
+// "ГЛАВЕН ТРЕНЬОР:" and the referees in capitals, both assistants in one place, C and GK
+const pl = (n, f, l, x = '') => `<tr class="teamPlayer"><td><span>${n}</span></td><td><span>${f}</span>&nbsp;${l}${x}</td></tr>`;
+const C = '<span class="teamFunc">C</span>', GK = '<span class="teamFunc">GK</span>';
+const tbl = rows => `<table><tbody><tr><td colspan="2"></td></tr>${rows.join('')}</tbody></table>`, tblS = rows => `<table><tbody>${rows.join('')}</tbody></table>`;
+const homeXI = [pl(39, 'Хендрик', 'Бонман', C + GK), pl(6, 'Иван', 'Желизко'), pl(11, 'Кайо', 'Видал Роша'), pl(12, 'Руан Филипе', 'Родригес Де Соуза Кр'), pl(14, 'Петър', 'Станич'), pl(15, 'Едвин', 'Куртулус'), pl(17, 'Франциско Хавиер', 'Идалго Гомес'), pl(23, 'Дерой', 'Дуарте'), pl(42, 'Симеон', 'Шишков'), pl(44, 'Омар', 'Рекик'), pl(77, 'Ерик Маркус', 'Дос Сантош Оливейра')];
+const awayXI = [pl(31, 'Алекс', 'Божев', GK), pl(33, 'Ектор', 'Росалес'), pl(5, 'Бен', 'Бен Амар'), pl(3, 'Лаша', 'Двали', C), pl(71, 'Данило', 'Терасенко'), pl(6, 'Емерсон', 'Дос Сантос'), pl(30, 'Жул', 'Мейер'), pl(8, 'Моотаз', 'Земземи'), pl(20, 'Браян', 'Собреро'), pl(77, 'Елиас', 'Франко'), pl(11, 'Георги', 'Русев')];
+const homeSub = [pl(13, 'Иво', 'Гърбич', GK), pl(3, 'Антон', 'Недялков'), pl(18, 'Ивайло', 'Чочев')], awaySub = [pl(1, 'Петър', 'Маринов', GK), pl(9, 'Атанас', 'Илиев')];
+const off = (role, who) => `<td>&nbsp;</td><td class="bfuOfficial">${role}:<br><span class="teamPlayer">${who}</span></td>`;
+const sheetB = `<!doctype html><html><body><table><tbody><tr><td><table><tbody><tr><td colspan="2" class="liga"><img src="images/efbet_league_logo.png"><br>efbet Лига - 13 Кръг, Събота 7, Ное 2026 г. 18:30 часа<br><span class="liga400">Хювефарма Арена - гр.Разград</span></td></tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr><td class="teamTitle_home"><div class="teamLogo"><img src="../images/teamLogo1008.png"/></div><div class="teamMain"><span class="robotoBlackB24">ПФК Лудогорец 1945</span><br><span class="robotoBlackB20">Разград</span></div></td><td class="teamTitle_away"><div class="teamMain"><span class="robotoBlackB24">ФК Централен Спортен Клуб на Армията 1948</span><br><span class="robotoBlackB20">София</span></div></td></tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr><td>${tbl(homeXI)}</td><td>${tbl(awayXI)}</td></tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr><td><span class="schema_Home">Тактическа схема</span></td><td><span class="schema_Away">Тактическа схема</span></td></tr><tr><td><div><img src="images/tacticalSchema.jpg"/></div></td><td><div><img src="images/tacticalSchema.jpg"/></div></td></tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr><td>${tblS(homeSub)}</td><td>${tblS(awaySub)}</td></tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr>${off('ГЛАВЕН ТРЕНЬОР', 'Игор Йовичевич')}<td>&nbsp;</td><td class="bfuOfficial">ГЛАВЕН ТРЕНЬОР:<br><span class="teamPlayer">Огнян Младенов</span></td></tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr>${off('ГЛАВЕН СЪДИЯ', 'Мартин Великов - гр.Варна')}<td></td>${off('АСИСТЕНТ СЪДИИ', 'Христо Хаджийски - гр.Варна<br>Димо Вълчев - гр.Варна')}</tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr><td>&nbsp;</td><td>&nbsp;</td><td></td>${off('ЧЕТВЪРТИ СЪДИЯ', 'Кристиaн Тодоров - гр.Варна')}</tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr><td>&nbsp;</td><td>&nbsp;</td><td></td>${off('ВАР', 'Денислав Сталев - гр.Пловдив')}</tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr><td>&nbsp;</td><td>&nbsp;</td><td></td>${off('АВАР', 'Георги Иванов - гр.Пловдив')}</tr></tbody></table></td></tr>
+<tr><td><table><tbody><tr>${off('БФС ДЕЛЕГАТ', 'Димитър Велинов - гр.София')}<td></td>${off('СЪДИЙСКИ НАБЛЮДАТЕЛ', 'Мартин Богдев - гр.Бургас')}</tr></tbody></table></td></tr>
+<tr><td><img src="images/Wireless.png"><span class="bfuOfficial">HArena26-27</span><div><span class="teamFunc">C</span><span class="bfuOfficial">КАПИТАН</span><span class="teamFunc">GK</span><span class="bfuOfficial">ВРАТАР</span></div></td></tr></tbody></table></body></html>`;
+const b = E.parseSheet(sheetB);
+ok(b.home.name === 'ПФК Лудогорец 1945' && b.away.name === 'ФК Централен Спортен Клуб на Армията 1948' && b.stadium === 'Хювефарма Арена - гр.Разград' && /13 Кръг/.test(b.competition), 'new layout: teams, stadium, round');
+ok(b.teams.length === 2 && b.teams[0].xi.length === 11 && b.teams[1].xi.length === 11 && b.teams[0].subs.length === 3 && b.teams[1].subs.length === 2, 'new layout: both elevens and the substitutes in the right places');
+ok(JSON.stringify(b.teams[0].xi[0]) === JSON.stringify({ n: '39', name: 'Хендрик Бонман', gk: true, cap: true }) && b.teams[1].xi[3].cap && !b.teams[1].xi[3].gk && b.teams[1].xi[0].gk, 'new layout: names, C and GK');
+ok(b.teams[0].xi[3].name === 'Руан Филипе Родригес Де Соуза Кр', 'new layout: a long name kept whole');
+ok(b.teams[0].coach === 'Игор Йовичевич' && b.teams[1].coach === 'Огнян Младенов', 'new layout: both coaches');
+ok(b.officials.map(o => o.r).join() === 'ГС,АС1,АС2,4-ТИ,ВАР,АВАР,ДЕЛЕГАТ,СН' && b.officials[2].n === 'Димо Вълчев' && b.officials[2].role === 'Асистент съдия 2' && b.officials[0].role === 'Главен съдия' && b.officials[7].town === 'Бургас', 'new layout: 8 officials, both assistants split, roles written normally');
+ok(E.complete(b) && E.readable(b), 'new layout: complete');
+ok(!E.readable(E.parseSheet('<html><body><p>Грешка</p></body></html>')) && E.readable(se), 'a page with nothing of a sheet is not saved; an early sheet with only referees is');
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exitCode = fails ? 1 : 0;

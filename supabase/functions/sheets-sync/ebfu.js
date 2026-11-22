@@ -61,9 +61,13 @@ function person(s){
 }
 
 // the match sheet: { home, away, stadium, competition, officials: [{ r, role, n, town }],
-//   teams: [{ name, coach, xi: [{ n, name, gk?, cap? }], subs: [...] }] } — teams empty until the clubs fill them in
+//   teams: [{ name, coach, xi: [{ n, name, gk?, cap? }], subs: [...] }] } — teams empty until the clubs fill them in.
+// Two layouts: the plain one (white headers: the competition, each team, "Резерви"), and a newer one some clubs use
+// (Лудогорец's and Левски's home matches): the elevens side by side, a tactics picture, the substitutes side by side,
+// then "ГЛАВЕН ТРЕНЬОР:" and the referees in capitals, the captain and the goalkeeper marked C and GK.
 export function parseSheet(html){
   const c = compact(html);
+  if (/<tr class="teamPlayer">/.test(c)) return parseSheetB(c);
   const heads = [...c.matchAll(/<span class="robotoBlackB24">([^<]*)<\/span><br><span class="robotoBlackB20">([^<]*)<\/span>/g)].map(m => ({ name: text(m[1]), town: town(m[2]) }));
   const stadium = text((c.match(/Стадион:\s*<span[^>]*>([^<]*)</) || [])[1] || '');
   const competition = text((c.match(/ПЪРВЕНСТВО:\s*<\/span>([^<]*)</) || [])[1] || '');
@@ -88,6 +92,37 @@ export function parseSheet(html){
   }
   return { home: heads[0] || null, away: heads[1] || null, stadium, competition, officials, teams };
 }
+
+// "ГЛАВЕН СЪДИЯ" → "Главен съдия"
+const sentence = s => { s = s.toLowerCase(); return s.charAt(0).toUpperCase() + s.slice(1); };
+function parseSheetB(c){
+  const heads = [...c.matchAll(/<span class="robotoBlackB24">([^<]*)<\/span><br><span class="robotoBlackB20">([^<]*)<\/span>/g)].map(m => ({ name: text(m[1]), town: town(m[2]) }));
+  const liga = c.match(/class="liga">[\s\S]*?<br>([^<]*)<br><span class="liga400">([^<]*)<\/span>/) || [];
+  // the tables of players, in order: the home eleven, the away eleven, the home substitutes, the away substitutes
+  const tables = [...c.matchAll(/<table><tbody>((?:(?!<table>)[\s\S])*?)<\/tbody><\/table>/g)].map(m => m[1]).filter(t => /<tr class="teamPlayer">/.test(t))
+    .map(t => [...t.matchAll(/<tr class="teamPlayer"><td><span>([^<]*)<\/span><\/td><td>([\s\S]*?)<\/td><\/tr>/g)].map(m => {
+      const flags = [...m[2].matchAll(/<span class="teamFunc">([^<]*)<\/span>/g)].map(f => f[1].trim().toUpperCase());
+      const p = { n: text(m[1]) || null, name: nameCase(text(m[2].replace(/<span class="teamFunc">[^<]*<\/span>/g, ''))) };
+      if (flags.includes('GK')) p.gk = true;
+      if (flags.includes('C')) p.cap = true;
+      return p;
+    }).filter(p => p.name));
+  const coaches = [...c.matchAll(/class="bfuOfficial">\s*ГЛАВЕН ТРЕНЬОР:\s*<br><span class="teamPlayer">([^<]*)</g)].map(m => nameCase(text(m[1])) || null);
+  const officials = [];
+  for (const m of c.matchAll(/<td class="bfuOfficial">([^<:]+):\s*<br><span class="teamPlayer">([\s\S]*?)<\/span><\/td>/g)) {
+    const role = text(m[1]);
+    if (/ТРЕНЬОР/i.test(role)) continue;
+    const people = m[2].split(/<br\s*\/?>/).map(person).filter(p => p.n);
+    people.forEach((p, i) => {
+      const many = /^асистент съдии$/i.test(role), key = many ? `асистент съдия ${i + 1}` : roleKey(role);
+      officials.push({ r: ROLES[key] || role, role: many ? `Асистент съдия ${i + 1}` : sentence(role), n: p.n, ...(p.town ? { town: p.town } : {}) });
+    });
+  }
+  const teams = tables.length >= 2 ? [0, 1].map(i => ({ name: (heads[i] || {}).name || '', coach: coaches[i] || null, xi: tables[i] || [], subs: tables[i + 2] || [] })) : [];
+  return { home: heads[0] || null, away: heads[1] || null, stadium: text(liga[2] || ''), competition: text(liga[1] || ''), officials, teams };
+}
+// nothing on the page that a sheet has: not a sheet this reader knows (saved as an error, not as an empty sheet)
+export const readable = s => !!(s && (s.home || s.officials.length || s.teams.length));
 
 /* ───────────── pairing ebfu's matches with ours ───────────── */
 // what tells clubs apart: their names without "ПФК", "Футболен клуб", "Сдружение", "АД"…, and their towns
