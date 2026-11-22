@@ -383,6 +383,31 @@
   .crew dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   .crew dd{margin:1px 0 0;font-size:13.5px;font-weight:600}
   .crew .src{display:block;margin-top:9px;font-size:12px;color:var(--muted)}
+  /* the match sheet: both teams side by side, the officials and the source */
+  .msheet{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:8px;font-size:13px}
+  .msheet .ic{font-size:14px}
+  .msheet .rl{color:var(--muted);font-size:12px}
+  .msheet.none{color:var(--muted);font-size:12.5px}
+  .sheet{margin-top:8px;padding:12px;border-radius:10px;background:var(--chip)}
+  .sheet .sides{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:380px){ .sheet .sides{grid-template-columns:1fr} }
+  .sheet h4{margin:0 0 6px;font-size:13.5px;overflow-wrap:anywhere}
+  .sheet ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+  .sheet li{display:flex;align-items:baseline;gap:6px;font-size:13px;min-width:0}
+  .sheet .no{flex:0 0 22px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+  .sheet .pn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sheet .tag{flex:0 0 auto;font-size:10px;font-weight:700;line-height:1;padding:2px 4px;border-radius:4px;background:var(--card);color:var(--muted);border:1px solid var(--line)}
+  .sheet .tag.cap{color:var(--accent);border-color:var(--accent)}
+  .sheet .subs li{color:var(--muted)}
+  .sheet .subh{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px}
+  .sheet .coach{margin-top:8px;font-size:13px}
+  .sheet .soff{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 14px;margin:0}
+  .sheet .soff dt{font-size:11px;color:var(--muted)}
+  .sheet .soff dd{margin:1px 0 0;font-size:13px;font-weight:600}
+  .sheet .soff dd .muted{font-weight:400;font-size:12px}
+  .sheet .src{margin-top:10px;font-size:12px;color:var(--muted)}
+  .sheet .src a{color:var(--accent)}
+  @media (max-width:480px){ .sheet{padding:10px} .sheet li{font-size:12.5px} .sheet .soff{grid-template-columns:1fr 1fr} }
   .mban{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:6px;font-size:12.5px}
   .mban .ban{display:inline-flex;align-items:center;gap:5px}
   .cardic{display:inline-block;width:9px;height:12px;border-radius:2px;flex:0 0 auto;background:#f2c200;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
@@ -3881,8 +3906,8 @@ function defaultRound(ms){
 }
 /* ── referee appointments and the Third League's punishments ── */
 const WHISTLE = '<svg class="whistle" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5a6 6 0 1 0 11.6-2.2L21 8V4.5h-9A6 6 0 0 0 3.5 12.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="9.5" cy="12.5" r="2" fill="currentColor"/></svg>';
-const ROLE_BG = { 'ГС': 'Главен съдия', 'АС1': 'Асистент-съдия 1', 'АС2': 'Асистент-съдия 2', '4-ТИ': 'Четвърти съдия', 'ВАР': 'ВАР', 'АВАР': 'Асистент-ВАР (АВАР)', 'СН': 'Съдийски наблюдател', 'ДН': 'Делегат', 'РЕЗЕРВЕН': 'Резервен' };
-const ROLE_ORDER = ['ГС', 'АС1', 'АС2', '4-ТИ', 'ВАР', 'АВАР', 'СН', 'ДН', 'РЕЗЕРВЕН'];
+const ROLE_BG = { 'ГС': 'Главен съдия', 'АС1': 'Асистент-съдия 1', 'АС2': 'Асистент-съдия 2', '4-ТИ': 'Четвърти съдия', 'ВАР': 'ВАР', 'АВАР': 'Асистент-ВАР (АВАР)', 'СН': 'Съдийски наблюдател', 'ДН': 'Делегат', 'ДЕЛЕГАТ': 'Делегат на БФС', 'РЕЗЕРВЕН': 'Резервен' };
+const ROLE_ORDER = ['ГС', 'АС1', 'АС2', '4-ТИ', 'ВАР', 'АВАР', 'ДЕЛЕГАТ', 'СН', 'ДН', 'РЕЗЕРВЕН'];
 // the committee writes first, father's and last name ("Никола Антонов Попов"): the site shows first and last name ("Никола Попов")
 const shortName = n => { const w = String(n || '').replace(/[*.]+$/, '').trim().split(/\s+/); return w.length >= 3 ? `${w[0]} ${w[w.length - 1]}` : w.join(' '); };
 // as BFU's own lists of referees and observers write them (refs-sync puts it in "s": "Петър Николаев" where two would
@@ -3906,12 +3931,15 @@ function bansByMatch(matches, posts){
 }
 // on a match card: the referee (and VAR), the whole crew behind a button
 function officialsHtml(m){
-  const d = FB.data[m.league], o = d && d.officials && d.officials[m.id];
-  if (!d || !d.officials) return '';
+  const d = FB.data[m.league];
+  let o = d && d.officials && d.officials[m.id];
+  // the committee's appointments have none: the referees on the match sheet (ebfu.net), when there is one
+  if (!o || !o.crew || !o.crew.length) { const s = SHEETS.byMatch.get(String(m.id)); if (s && s.officials && s.officials.length) o = { crew: s.officials.map(x => ({ r: x.r, n: x.n })), src_url: SHEET_SRC, src_title: 'протокол на мача' }; }
+  if (!d || (!d.officials && !o)) return '';
   if (!o || !o.crew || !o.crew.length) {
     // the committee names the referees a day or two before the match: until then a quiet note on the coming ones
     const t = m.kickoff ? Date.parse(m.kickoff) : 0;
-    return m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? '<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>' : '';
+    return m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? `<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>` : '';
   }
   const crew = o.crew.filter(c => c && c.n && !/:/.test(c.n)).sort((a, b) => (ROLE_ORDER.indexOf(a.r) + 1 || 99) - (ROLE_ORDER.indexOf(b.r) + 1 || 99));
   if (!crew.length) return '';
@@ -3920,7 +3948,64 @@ function officialsHtml(m){
   return `<div class="mref">${WHISTLE}${ref ? `<span class="rl">Съдия</span>${who(ref)}` : ''}${vr ? `<span class="sep" aria-hidden="true">·</span><span class="rl">ВАР</span>${who(vr)}` : ''}
       <button class="crewbtn" data-crew="${esc(m.id)}" aria-expanded="${open}">Бригада <span class="chev">${open ? '▴' : '▾'}</span></button></div>
     <div class="crew" data-crewbox="${esc(m.id)}"${open ? '' : ' hidden'}><dl>${crew.map(c => `<div><dt>${esc(ROLE_BG[c.r] || c.r)}</dt><dd>${esc(offName(c))}</dd></div>`).join('')}</dl>
-      <a class="src" href="${esc(o.src_url)}" target="_blank" rel="noopener">${esc(/bfunion/.test(o.src_url || '') ? 'Съдийска комисия на БФС' : 'БФС · Трета лига')} — ${esc(o.src_title || 'назначения')}</a></div>`;
+      <a class="src" href="${esc(o.src_url)}" target="_blank" rel="noopener">${esc(/bfunion/.test(o.src_url || '') ? 'Съдийска комисия на БФС' : /ebfu/.test(o.src_url || '') ? 'БФС Електронно първенство' : 'БФС · Трета лига')} — ${esc(o.src_title || 'назначения')}</a></div>`;
+}
+// ── the match sheets: the teams' starting elevens, substitutes and coaches, and the refereeing team, from BFU's
+// electronic championship (ebfu.net; sheets-sync reads it every 10 minutes). Loaded a round at a time.
+const SHEET_LEAGUES = ['efbet', 'mrbit', 'sw3'], SHEET_SRC = 'https://ebfu.net/teams/';
+const SHEETS = { byMatch: new Map(), at: new Map(), busy: false, ver: 0 };
+async function loadSheets(lg, ms){
+  if (!SB || !SHEET_LEAGUES.includes(lg) || SHEETS.busy) return;
+  const now = Date.now();
+  // around kick-off every 3 minutes (the clubs fill the teams in about an hour or two before), otherwise every half hour
+  const due = m => now - (SHEETS.at.get(String(m.id)) || 0) > (Math.abs((Date.parse(m.kickoff) || 0) - now) < 6 * 3600e3 ? 3 : 30) * 60e3;
+  const ids = ms.filter(due).map(m => String(m.id));
+  if (!ids.length) return;
+  SHEETS.busy = true;
+  try {
+    const { data, error } = await SB.from('match_sheets').select('match_id,found,complete,home,away,officials,stadium,competition,fetched_at').in('match_id', ids);
+    if (error) throw error;
+    const got = new Map((data || []).map(r => [r.match_id, r]));
+    let changed = false;
+    for (const id of ids) {
+      SHEETS.at.set(id, Date.now());
+      const r = got.get(id) || null;
+      if (JSON.stringify(r) !== JSON.stringify(SHEETS.byMatch.get(id) || null)) { changed = true; r ? SHEETS.byMatch.set(id, r) : SHEETS.byMatch.delete(id); }
+    }
+    if (changed) SHEETS.ver++;
+    SHEETS.busy = false;
+    if (changed && VIEW === 'results') renderResults();
+  } catch (e) {
+    log('The match sheets could not be loaded: ' + (e.message || e));
+    ids.forEach(id => SHEETS.at.set(id, Date.now() - 25 * 60e3));     // tried again in about 5 minutes
+    SHEETS.busy = false;
+  }
+}
+// while the results are open, the teams of the matches about to start come in without a reload
+setInterval(() => { if (VIEW === 'results' && SHEET_LEAGUES.includes(FB.league) && !document.hidden) renderResults(); }, 2 * 60e3);
+function sheetHtml(m){
+  if (!SHEET_LEAGUES.includes(m.league)) return '';
+  const s = SHEETS.byMatch.get(String(m.id)), t = Date.parse(m.kickoff) || 0, now = Date.now();
+  const teams = s && s.found && [s.home, s.away].some(x => x && x.xi && x.xi.length);
+  if (!teams) return m.status === 'scheduled' && t > now && t - now < 864e5
+    ? `<div class="msheet none"><span class="ic" aria-hidden="true">📋</span>Съставите излизат около час–два преди мача${t - now < 3 * 3600e3 ? ' — проверяваме на всеки 10 минути' : ''}</div>` : '';
+  const open = FB.open.has('sheet:' + m.id);
+  return `<div class="msheet"><span class="ic" aria-hidden="true">📋</span><span class="rl">Състави</span>${s.complete ? '' : '<span class="muted">непълни</span>'}
+      <button class="crewbtn" data-sheet="${esc(m.id)}" aria-expanded="${open}">${open ? 'Скрий' : 'Виж'} <span class="chev">${open ? '▴' : '▾'}</span></button></div>
+    <div class="sheet" data-sheetbox="${esc(m.id)}"${open ? '' : ' hidden'}>${sheetBody(m, s)}</div>`;
+}
+function sheetBody(m, s){
+  const row = p => `<li${p.gk ? ' class="gk"' : ''}><span class="no">${esc(p.n || '')}</span><span class="pn" title="${esc(p.name)}">${esc(shortName(p.name))}</span>${
+    p.cap ? '<span class="tag cap" title="Капитан">К</span>' : ''}${p.gk ? '<span class="tag" title="Вратар">В</span>' : ''}</li>`;
+  const side = (t, name) => { t = t || {};
+    return `<div class="side"><h4>${esc(teamName(name))}</h4>
+      ${t.xi && t.xi.length ? `<ol class="xi">${t.xi.map(row).join('')}</ol>` : '<p class="muted">Съставът още не е подаден.</p>'}
+      ${t.subs && t.subs.length ? `<div class="subh">Резерви</div><ol class="subs">${t.subs.map(row).join('')}</ol>` : ''}
+      ${t.coach ? `<div class="coach"><span class="muted">Треньор</span> ${esc(shortName(t.coach))}</div>` : ''}</div>`; };
+  const offs = (s.officials || []).slice().sort((a, b) => (ROLE_ORDER.indexOf(a.r) + 1 || 99) - (ROLE_ORDER.indexOf(b.r) + 1 || 99));
+  return `<div class="sides">${side(s.home, m.home_name)}${side(s.away, m.away_name)}</div>
+    ${offs.length ? `<div class="subh">Съдии и официални лица</div><dl class="soff">${offs.map(o => `<div><dt>${esc(o.role || ROLE_BG[o.r] || o.r)}</dt><dd>${esc(shortName(o.n))}${o.town ? ` <span class="muted">${esc(o.town)}</span>` : ''}</dd></div>`).join('')}</dl>` : ''}
+    <div class="src">${s.stadium ? `${esc(s.stadium)} · ` : ''}Източник: <a href="${SHEET_SRC}" target="_blank" rel="noopener">БФС Електронно първенство</a>${s.fetched_at ? ` · проверено ${esc(bgDate(s.fetched_at))}` : ''}</div>`;
 }
 const cardIc = r => `<i class="cardic ${r === 'red' ? 'r' : r === 'yellow' ? 'y' : 'o'}" title="${r === 'red' ? 'червен картон' : r === 'yellow' ? 'жълти картони' : 'по доклад'}"></i>`;
 function bansHtml(m){
@@ -4004,7 +4089,7 @@ function matchCard(m, top){
       ${score}
       <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(teamName(m.away_name))}</span></div>
     </div>
-    ${officialsHtml(m)}${bansHtml(m)}
+    ${officialsHtml(m)}${sheetHtml(m)}${bansHtml(m)}
     ${left || btns || none ? `<div class="mbottom"><span class="muted">${esc(left)}</span>${btns ? `<div class="vbtns">${btns}</div>` : none}</div>` : ''}
     ${player}
   </article>`;
@@ -4212,10 +4297,11 @@ function renderResults(force){
   const r = FB.round[lg];
   const list = ms.filter(m => m.round === r).sort((a, b) => String(a.kickoff).localeCompare(String(b.kickoff)) || a.home_name.localeCompare(b.home_name));
   loadMatchCoverage(lg, list);
+  loadSheets(lg, list);
   const days = list.map(m => m.kickoff).filter(Boolean).sort();
   const span = days.length ? (() => { const a = sofiaParts(days[0]), b = sofiaParts(days[days.length - 1]); return a.d === b.d && a.m === b.m ? `${a.d} ${a.m}` : `${a.d} ${a.m} – ${b.d} ${b.m}`; })() : '';
   const withVid = list.filter(m => m.short_video || m.long_video || otherVids(m).length).length, finished = list.filter(m => m.status === 'finished').length;
-  const key = [lg, r, d.ver, [...FB.open].join(',')].join('|');
+  const key = [lg, r, d.ver, SHEETS.ver, [...FB.open].join(',')].join('|');
   if (!force && key === RES_KEY && box.firstChild) return;   // keep playing videos alive across background refreshes
   if (!force && keepPlayer(box, lg)) return;
   RES_KEY = key;
@@ -4287,6 +4373,14 @@ function initFootballUI(){
       const id = cb.dataset.crew, k = 'crew:' + id, open = !FB.open.has(k), box = [...$('#resultsBox').querySelectorAll('[data-crewbox]')].find(x => x.dataset.crewbox === id);
       open ? FB.open.add(k) : FB.open.delete(k);
       cb.setAttribute('aria-expanded', open); cb.querySelector('.chev').textContent = open ? '▴' : '▾';
+      if (box) box.hidden = !open;
+      return;
+    }
+    const shb = e.target.closest('button[data-sheet]');
+    if (shb) {   // in place too
+      const id = shb.dataset.sheet, k = 'sheet:' + id, open = !FB.open.has(k), box = [...$('#resultsBox').querySelectorAll('[data-sheetbox]')].find(x => x.dataset.sheetbox === id);
+      open ? FB.open.add(k) : FB.open.delete(k);
+      shb.setAttribute('aria-expanded', open); shb.firstChild.textContent = open ? 'Скрий ' : 'Виж '; shb.querySelector('.chev').textContent = open ? '▴' : '▾';
       if (box) box.hidden = !open;
       return;
     }
