@@ -15,8 +15,12 @@ export const LEAGUES = { 'efbet Лига': 'efbet', 'ВПФЛ': 'mrbit', 'В Ю�
 // the refereeing roles, as the site's other referee data writes them (football_officials.crew: { r, n })
 export const ROLES = {
   'главен съдия': 'ГС', 'асистент съдия 1': 'АС1', 'асистент съдия 2': 'АС2', 'четвърти съдия': '4-ТИ', 'вар': 'ВАР', 'авар': 'АВАР',
-  'бфс делегат': 'ДЕЛЕГАТ', 'делегат': 'ДЕЛЕГАТ', 'съдийски наблюдател': 'СН', 'делегат наблюдател': 'ДН', 'делегат-наблюдател': 'ДН',
+  'делегат': 'ДЕЛЕГАТ', 'съдийски наблюдател': 'СН', 'наблюдател': 'СН', 'делегат/наблюдател': 'ДН',
 };
+// "БФС Делегат/Наблюдател" (the Third League's one person for both) → 'делегат/наблюдател'
+const roleKey = s => s.toLowerCase().replace(/^бфс\s+/, '').replace(/\s*[\/-]\s*/g, '/').replace(/\s+/g, ' ').trim();
+// a name written in capitals ("ДАНИЕЛ АЛЕКСАНДРЕ МОРАЛЕС") in the usual case ("Даниел Александре Моралес")
+export const nameCase = s => /[a-zа-я]/.test(s) ? s : s.toLowerCase().replace(/(^|[\s-])(\S)/g, (m, p, ch) => p + ch.toUpperCase());
 
 // the page without comments, scripts and styles, with only the attributes that say what a thing is, on one line
 export function compact(html){
@@ -45,7 +49,7 @@ export function parseList(html){
 // a player row's text: "Иван Георгиев Андонов - ВРАТАР", "Анатолий Енчев Господинов - КАПИТАН - ВРАТАР"
 export function player(n, s){
   const parts = text(s).split(/\s+-\s+/), flags = parts.slice(1).join(' ').toUpperCase();
-  const p = { n: text(n) || null, name: parts[0] };
+  const p = { n: text(n) || null, name: nameCase(parts[0]) };
   if (/ВРАТАР/.test(flags)) p.gk = true;
   if (/КАПИТАН/.test(flags)) p.cap = true;
   return p;
@@ -53,7 +57,7 @@ export function player(n, s){
 // "Никола Антонов Попов - гр.София" → { n: 'Никола Антонов Попов', town: 'София' }
 function person(s){
   const t = text(s), m = t.match(/^(.*?)\s+-\s+((?:гр|с)\..*)$/i);
-  return m ? { n: m[1].trim(), town: town(m[2]) } : { n: t };
+  return m ? { n: nameCase(m[1].trim()), town: town(m[2]) } : { n: nameCase(t) };
 }
 
 // the match sheet: { home, away, stadium, competition, officials: [{ r, role, n, town }],
@@ -67,7 +71,7 @@ export function parseSheet(html){
   for (const m of c.matchAll(/<tr><td class="robotoBlack20"><span>([^<]*)<\/span><\/td><td class="robotoBlackB20"><span>([^<]*)<\/span><\/td><\/tr>/g)) {
     const role = text(m[1]), p = person(m[2]);
     if (!p.n) continue;
-    officials.push({ r: ROLES[role.toLowerCase()] || role, role, n: p.n, ...(p.town ? { town: p.town } : {}) });
+    officials.push({ r: ROLES[roleKey(role)] || role, role, n: p.n, ...(p.town ? { town: p.town } : {}) });
   }
   // the white headers split the rest: the competition, then each team's name, its substitutes ("Резерви"), the next team…
   const parts = c.split(/<td colspan="2" class="robotoWhiteB20">/).slice(1);
@@ -80,7 +84,7 @@ export function parseSheet(html){
     if (/^Резерви$/i.test(head)) { if (cur) cur.subs.push(...rows); }
     else { cur = { name: head, coach: null, xi: rows, subs: [] }; teams.push(cur); }
     const coach = part.match(/Главен [Тт]реньор:\s*<\/span><span class="robotoBlackB20">([^<]*)</);
-    if (coach && cur) cur.coach = text(coach[1]) || null;
+    if (coach && cur) cur.coach = nameCase(text(coach[1])) || null;
   }
   return { home: heads[0] || null, away: heads[1] || null, stadium, competition, officials, teams };
 }
@@ -111,16 +115,22 @@ function near(a, b){
   return 0;
 }
 // how well one of our team names fits one of ebfu's: shared words count, a reserve team only fits a reserve team
+// the initials of a name's words: "ФК Централен Спортен Клуб на Армията 1948" → "фцска" (ЦСКА written out)
+const initials = s => String(s).toLowerCase().split(/[^a-zа-яё]+/).filter(w => w && !/^(на|и|за|от|в)$/.test(w)).map(w => w[0]).join('');
 export function teamScore(ours, theirs){
-  const a = tokens(ours), b = tokens(...[].concat(theirs));
+  const a = tokens(ours), b = tokens(...[].concat(theirs)), ini = initials([].concat(theirs)[0] || '');
   if (reserve(a) !== reserve(b)) return -10;
   let score = 0;
   for (const t of a) {
     if (/^i{2,3}$/.test(t)) continue;
     let best = 0;
     for (const u of b) best = Math.max(best, /^\d{4}$/.test(t) ? (t === u ? 1 : 0) : near(t, u));
+    if (!best && /^[а-я]{3,4}$/.test(t) && ini.includes(t)) best = 3;        // an abbreviation of the written-out name
     score += best;
   }
+  // both give a year, different ones: another club ("Славия 1913" is not a "… 1924")
+  const ya = a.filter(t => /^\d{4}$/.test(t)), yb = b.filter(t => /^\d{4}$/.test(t));
+  if (ya.length && yb.length && !ya.some(y => yb.includes(y))) score -= 2;
   return score;
 }
 // our matches of one day ([{ id, league, kickoff, home_name, away_name }]) with ebfu's list of that day:

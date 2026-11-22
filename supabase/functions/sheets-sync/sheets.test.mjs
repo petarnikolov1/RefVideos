@@ -102,5 +102,22 @@ ok(se.officials.length === 8 && se.teams.length === 0 && !E.complete(se), 'an ea
 const half = sheetHtml.replace(/(<td colspan="2" class="robotoWhiteB20">&nbsp;ПФК Арда Кърджали 1924<\/td><\/tr>)[\s\S]*?(<\/tbody><\/table><table>)/, '$1$2');
 ok(!E.complete(E.parseSheet(half)), 'one team without its eleven: not complete');
 ok(E.compact(E.compact(sheetHtml)) === E.compact(sheetHtml), 'compact() changes nothing the second time');
+// 22 Nov: ЦСКА 1948 is written out; the Third League's delegate is also the observer; a coach written in capitals
+const l22 = E.parseList(`<table>${[
+  ['ПФК Ботев Враца', 'Враца', 'efbet Лига', '13:00', 'ФК Централен Спортен Клуб на Армията 1948', 'София', 'Враца', '9a6b4'],
+  ['ПФК Левски', 'София', 'efbet Лига', '15:30', 'ФУТБОЛЕН КЛУБ ЛОКОМОТИВ СОФИЯ 1929 ЕАД', 'София', 'Георги Аспарухов - гр.София', '9a6cd'],
+  ['ПФК Ботев АД', 'Пловдив', 'efbet Лига', '18:00', 'ПРОФЕСИОНАЛЕН ФУТБОЛЕН КЛУБ ЦСКА ЕАД', 'София', 'Колежа - гр.Пловдив', '9a6e6'],
+].map((r, i) => block(i, ...r)).join('')}</table>`);
+const p22 = E.pair([
+  { id: 'a', league: 'efbet', kickoff: '2026-11-22T11:00:00Z', home_name: 'Ботев Враца', away_name: 'ЦСКА 1948' },
+  { id: 'b', league: 'efbet', kickoff: '2026-11-22T13:30:00Z', home_name: 'Левски София', away_name: 'ПФК Локомотив София 1929' },
+  { id: 'c', league: 'efbet', kickoff: '2026-11-22T16:00:00Z', home_name: 'Ботев Пловдив', away_name: 'ЦСКА София' },
+], l22);
+ok(p22.get('a') && p22.get('a').id === '9a6b4', 'ЦСКА 1948 pairs with "Централен Спортен Клуб на Армията 1948"');
+ok(p22.get('b') && p22.get('b').id === '9a6cd' && p22.get('c') && p22.get('c').id === '9a6e6', 'Левски – Локомотив and Ботев Пловдив – ЦСКА pair too');
+ok(E.teamScore('ЦСКА 1948', ['ПРОФЕСИОНАЛЕН ФУТБОЛЕН КЛУБ ЦСКА ЕАД', 'София']) < E.teamScore('ЦСКА 1948', ['ФК Централен Спортен Клуб на Армията 1948', 'София']), 'ЦСКА 1948 fits its own written-out name better than ЦСКА София\'s');
+ok(E.teamScore('Славия 1913', ['ПФК Арда Кърджали 1924']) < 0 + 1, 'a different year counts against');
+const sw = E.parseSheet(sheetHtml.replace('<span>БФС Делегат</span>', '<span>БФС Делегат/Наблюдател</span>').replace('Ратко Достанич', 'ДАНИЕЛ АЛЕКСАНДРЕ МОРАЛЕС БАТАЖЕЛО'));
+ok(sw.officials[6].r === 'ДН' && sw.teams[0].coach === 'Даниел Александре Моралес Баталело'.replace('Баталело', 'Батажело'), 'Делегат/Наблюдател → ДН; a coach in capitals in the usual case: ' + sw.teams[0].coach);
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exitCode = fails ? 1 : 0;
