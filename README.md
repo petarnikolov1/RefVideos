@@ -1,4 +1,4 @@
-# RefVideos — BG Referee Watch
+# RefVideos — eRefBG
 
 A news site for refereeing in Bulgarian football — efbet Liga (1st League), 2nd League, 3rd League and the Bulgarian Cup — with match videos.
 

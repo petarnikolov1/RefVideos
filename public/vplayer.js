@@ -1,4 +1,4 @@
-// The video player of BG Referee Watch: full screen, one clip after another, zoom, slow motion and frame by frame.
+// The video player of eRefBG: full screen, one clip after another, zoom, slow motion and frame by frame.
 // A plain script: the page loads it as window.VPlayer.
 //
 //   VPlayer.open({ items, index, details, onChange, onClose })   plays items[index]; the next ones follow on their own
@@ -865,7 +865,7 @@
   function media(x){
     if (!('mediaSession' in navigator)) return;
     try {
-      navigator.mediaSession.metadata = new window.MediaMetadata({ title: x.title || '', artist: 'BG Referee Watch', artwork: x.poster ? [{ src: x.poster }] : [] });
+      navigator.mediaSession.metadata = new window.MediaMetadata({ title: x.title || '', artist: 'eRefBG', artwork: x.poster ? [{ src: x.poster }] : [] });
       const h = { play: () => mPlay(), pause: () => mPause(), previoustrack: () => go(-1), nexttrack: () => go(1),
         seekbackward: () => mSeek(mTime() - 5), seekforward: () => mSeek(mTime() + 5) };
       Object.entries(h).forEach(([k, f]) => { try { navigator.mediaSession.setActionHandler(k, f); } catch (e) {} });

@@ -1,4 +1,4 @@
-// Cloudflare Pages "advanced mode" worker for BG Referee Watch.
+// Cloudflare Pages "advanced mode" worker for eRefBG.
 //
 //   /feed?url=...                 Google News / Bing News RSS relay (only those hosts).
 //   /extract?url=...&title=&src=  Opens a news article and returns, as JSON only, the videos embedded in it,

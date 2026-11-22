@@ -1,4 +1,4 @@
--- BG Referee Watch — Supabase setup
+-- eRefBG — Supabase setup
 -- Already applied to the RefVideos Supabase project (eu-central-1).
 -- To set up a new project: Dashboard → SQL Editor → New query → paste → Run.
 -- It is safe to run again (everything is "create if missing" / "replace").
