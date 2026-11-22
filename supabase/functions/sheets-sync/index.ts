@@ -89,7 +89,8 @@ Deno.serve(async (req) => {
       }
     }
     if (!todo.length) return Response.json({ ...out, seconds: (Date.now() - started) / 1000 });
-    const prev: Sheet[] = await rest(`match_sheets?select=match_id,found,complete,fetched_at,tries,home,away&match_id=${inList(todo.map(m => m.id))}`);
+    const prev: Sheet[] = await rest(`match_sheets?select=match_id,found,complete,fetched_at,tries,home,away&match_id=${inList(todo.map(m => m.id))}`)
+      .catch(e => { if (dry) return []; throw e; });     // a dry run works before the table exists
     const prevBy = new Map(prev.map(s => [s.match_id, s]));
 
     // a day at a time: its list, then the sheets
