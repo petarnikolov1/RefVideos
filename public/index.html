@@ -385,6 +385,9 @@
   .crew .src{display:block;margin-top:9px;font-size:12px;color:var(--muted)}
   /* the match sheet: both teams side by side, the officials and the source */
   .msheet{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:8px;font-size:13px}
+  button.msheet{width:100%;padding:4px 0;border:0;border-radius:6px;background:none;text-align:left;font-size:13px;color:var(--text)}
+  button.msheet:hover .pill{border-color:var(--accent)}
+  .msheet .pill{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);background:var(--card);color:var(--text)}
   .msheet .ic{font-size:14px}
   .msheet .rl{color:var(--muted);font-size:12px}
   .msheet.none{color:var(--muted);font-size:12.5px}
@@ -3990,8 +3993,9 @@ function sheetHtml(m){
   if (!teams) return m.status === 'scheduled' && t > now && t - now < 864e5
     ? `<div class="msheet none"><span class="ic" aria-hidden="true">📋</span>Съставите излизат около час–два преди мача${t - now < 3 * 3600e3 ? ' — проверяваме на всеки 10 минути' : ''}</div>` : '';
   const open = FB.open.has('sheet:' + m.id);
-  return `<div class="msheet"><span class="ic" aria-hidden="true">📋</span><span class="rl">Състави</span>${s.complete ? '' : '<span class="muted">непълни</span>'}
-      <button class="crewbtn" data-sheet="${esc(m.id)}" aria-expanded="${open}">${open ? 'Скрий' : 'Виж'} <span class="chev">${open ? '▴' : '▾'}</span></button></div>
+  // the whole row is the button (a tap on "Състави" opens it too, not only on the pill)
+  return `<button class="msheet" data-sheet="${esc(m.id)}" aria-expanded="${open}"><span class="ic" aria-hidden="true">📋</span><span class="rl">Състави</span>${s.complete ? '' : '<span class="muted">непълни</span>'}
+      <span class="crewbtn pill"><span class="lbl">${open ? 'Скрий' : 'Виж'}</span> <span class="chev">${open ? '▴' : '▾'}</span></span></button>
     <div class="sheet" data-sheetbox="${esc(m.id)}"${open ? '' : ' hidden'}>${sheetBody(m, s)}</div>`;
 }
 function sheetBody(m, s){
@@ -4380,7 +4384,7 @@ function initFootballUI(){
     if (shb) {   // in place too
       const id = shb.dataset.sheet, k = 'sheet:' + id, open = !FB.open.has(k), box = [...$('#resultsBox').querySelectorAll('[data-sheetbox]')].find(x => x.dataset.sheetbox === id);
       open ? FB.open.add(k) : FB.open.delete(k);
-      shb.setAttribute('aria-expanded', open); shb.firstChild.textContent = open ? 'Скрий ' : 'Виж '; shb.querySelector('.chev').textContent = open ? '▴' : '▾';
+      shb.setAttribute('aria-expanded', open); shb.querySelector('.lbl').textContent = open ? 'Скрий' : 'Виж'; shb.querySelector('.chev').textContent = open ? '▴' : '▾';
       if (box) box.hidden = !open;
       return;
     }
