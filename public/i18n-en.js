@@ -9,7 +9,7 @@ window.BGRW_EN = {
     'Превключи на български': 'Switch to Bulgarian', 'Има нова версия на сайта.': 'There is a new version of the site.', 'Обнови': 'Refresh',
     'Ако смените езика сега, въведеното ще се загуби. Да продължа ли?': 'If you change the language now, what you typed will be lost. Continue?',
     // the news
-    'Търси: отбор, съдия, дума…': 'Search: team, referee, word…', 'Търси в новините': 'Search the news', 'Филтри': 'Filters',
+    'Отбор, съдия, дума…': 'Team, referee, word…', 'Търси в новините': 'Search the news', 'Филтри': 'Filters',
     'Провери за нови статии': 'Check for new articles', 'Дивизия': 'Division', 'Тема': 'Topic', 'Турнир': 'Competition', 'Кръг': 'Round',
     'Първа лига (efbet)': 'First League (efbet)', 'Втора лига': 'Second League', 'Трета лига': 'Third League', 'Купа на България': 'Bulgarian Cup',
     'Юноши': 'Youth', 'Европа и чужбина': 'Europe and abroad', 'Некласифицирани': 'Unclassified',
