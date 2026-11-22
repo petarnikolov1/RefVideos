@@ -383,11 +383,18 @@
   .crew dt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   .crew dd{margin:1px 0 0;font-size:13.5px;font-weight:600}
   .crew .src{display:block;margin-top:9px;font-size:12px;color:var(--muted)}
+  /* a newer version of the site: a bar at the bottom */
+  .updbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:10000;display:flex;align-items:center;gap:12px;max-width:calc(100% - 32px);
+    padding:8px 8px 8px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:14px}
   /* the match sheet: both teams side by side, the officials and the source */
   .msheet{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:8px;font-size:13px}
-  button.msheet{width:100%;padding:4px 0;border:0;border-radius:6px;background:none;text-align:left;font-size:13px;color:var(--text)}
-  button.msheet:hover .pill{border-color:var(--accent)}
-  .msheet .pill{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);background:var(--card);color:var(--text)}
+  .sheetbtn{display:inline-flex;align-items:center;gap:7px;margin-top:10px;padding:8px 14px;min-height:38px;border-radius:999px;font-size:14px;font-weight:650;
+    border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));background:color-mix(in srgb,var(--accent) 12%,var(--card));color:var(--accent)}
+  .sheetbtn:hover{background:color-mix(in srgb,var(--accent) 20%,var(--card))}
+  .sheetbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .sheetbtn[aria-expanded="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .sheetbtn .note{font-weight:400;font-size:12px;opacity:.8}
+  .sheetbtn .chev{font-size:12px}
   .msheet .ic{font-size:14px}
   .msheet .rl{color:var(--muted);font-size:12px}
   .msheet.none{color:var(--muted);font-size:12.5px}
@@ -3993,9 +4000,9 @@ function sheetHtml(m){
   if (!teams) return m.status === 'scheduled' && t > now && t - now < 864e5
     ? `<div class="msheet none"><span class="ic" aria-hidden="true">📋</span>Съставите излизат около час–два преди мача${t - now < 3 * 3600e3 ? ' — проверяваме на всеки 10 минути' : ''}</div>` : '';
   const open = FB.open.has('sheet:' + m.id);
-  // the whole row is the button (a tap on "Състави" opens it too, not only on the pill)
-  return `<button class="msheet" data-sheet="${esc(m.id)}" aria-expanded="${open}"><span class="ic" aria-hidden="true">📋</span><span class="rl">Състави</span>${s.complete ? '' : '<span class="muted">непълни</span>'}
-      <span class="crewbtn pill"><span class="lbl">${open ? 'Скрий' : 'Виж'}</span> <span class="chev">${open ? '▴' : '▾'}</span></span></button>
+  // a button that looks like one: a coloured pill, filled while the squads are open
+  return `<button class="sheetbtn" data-sheet="${esc(m.id)}" aria-expanded="${open}"><span aria-hidden="true">📋</span><span class="lbl">${open ? 'Скрий съставите' : 'Виж съставите'}</span>${
+      s.complete ? '' : '<span class="note">непълни</span>'}<span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span></button>
     <div class="sheet" data-sheetbox="${esc(m.id)}"${open ? '' : ' hidden'}>${sheetBody(m, s)}</div>`;
 }
 function sheetBody(m, s){
@@ -4384,7 +4391,7 @@ function initFootballUI(){
     if (shb) {   // in place too
       const id = shb.dataset.sheet, k = 'sheet:' + id, open = !FB.open.has(k), box = [...$('#resultsBox').querySelectorAll('[data-sheetbox]')].find(x => x.dataset.sheetbox === id);
       open ? FB.open.add(k) : FB.open.delete(k);
-      shb.setAttribute('aria-expanded', open); shb.querySelector('.lbl').textContent = open ? 'Скрий' : 'Виж'; shb.querySelector('.chev').textContent = open ? '▴' : '▾';
+      shb.setAttribute('aria-expanded', open); shb.querySelector('.lbl').textContent = open ? 'Скрий съставите' : 'Виж съставите'; shb.querySelector('.chev').textContent = open ? '▴' : '▾';
       if (box) box.hidden = !open;
       return;
     }
@@ -5093,9 +5100,57 @@ setInterval(() => {
   const d = FB.data[FB.league];
   if (d && inPlay(d.matches) && Date.now() - d.at > 55e3) loadFootball(FB.league, true);
 }, 20e3);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) autoCheck(); });
+// ── staying current. A page left open, or asleep in a phone's background, misses the site's updates (new buttons,
+// fixes) and new data. The page notes its own version (the address's ETag) when it loads and asks again when it comes
+// back into view and every 10 minutes: a new version reloads the page by itself when the reader is just coming back
+// (or isn't looking) and nothing would be lost — nothing typed, uploading, playing or a test under way; otherwise a bar
+// offers "Обнови". Back after more than a minute, what is on screen is read again.
+let PAGE_SIG = null, HIDDEN_AT = 0, UPD_BAR = null;
+async function pageSig(){
+  try {
+    const r = await fetch(location.pathname || '/', { method: 'HEAD', cache: 'no-store' });
+    return r.ok ? (r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || null) : null;
+  } catch (e) { return null; }
+}
+// something a reload would lose
+function pageBusy(){
+  if ([...document.querySelectorAll('textarea, input[type=text], input[type=search]:not(#fq):not(#qzq):not(#qzaq), input[type=email], input[type=url], input:not([type])')]
+    .some(el => el.value.trim() && el.defaultValue !== el.value)) return true;
+  if ([...document.querySelectorAll('input[type=file]')].some(f => f.files && f.files.length)) return true;
+  if (document.querySelector('.prog:not([hidden])')) return true;          // an upload
+  if (window.VPlayer && VPlayer.isOpen()) return true;
+  return Quiz.active();
+}
+async function checkVersion(mayReload){
+  const sig = await pageSig();
+  if (!sig) return;
+  if (PAGE_SIG === null) { PAGE_SIG = sig; return; }
+  if (sig === PAGE_SIG) return;
+  if (mayReload && !pageBusy()) { location.reload(); return; }
+  if (UPD_BAR) return;
+  UPD_BAR = document.createElement('div');
+  UPD_BAR.className = 'updbar'; UPD_BAR.setAttribute('role', 'status');
+  UPD_BAR.innerHTML = '<span>Има нова версия на сайта.</span><button class="small primary">Обнови</button>';
+  UPD_BAR.querySelector('button').addEventListener('click', () => location.reload());
+  document.body.appendChild(UPD_BAR);
+}
+// what is on screen, read again
+function refreshShown(){
+  autoCheck();
+  if (VIEW === 'results') { SHEETS.at.clear(); loadFootball(FB.league, true); }
+  if (approved()) { if (VIEW === 'videos') loadVideos(); else if (VIEW === 'forum' && !pageBusy()) Forum.load(); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { HIDDEN_AT = Date.now(); return; }
+  const away = HIDDEN_AT ? Date.now() - HIDDEN_AT : 0;
+  checkVersion(away > 30e3);
+  away > 60e3 ? refreshShown() : autoCheck();
+});
+window.addEventListener('pageshow', e => { if (e.persisted) { checkVersion(true); refreshShown(); } });   // back from the browser's page cache
+setTimeout(() => checkVersion(false), 1500);
+setInterval(() => checkVersion(document.hidden), 10 * 60e3);
 
-window.BGRW = { forum: Forum, loadNews, buildStories, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
+window.BGRW = { forum: Forum, checkVersion, loadNews, buildStories, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
 })();
 </script>
 </body>
