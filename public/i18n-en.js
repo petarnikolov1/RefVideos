@@ -33,8 +33,10 @@ window.BGRW_EN = {
       'Refereeing in the efbet League, the Second and Third Leagues and the Bulgarian Cup, and Bulgarian clubs and referees in Europe and abroad. Articles about the same incident are grouped into one topic.',
     'Съдийството в националните отбори, евротурнирите (Шампионска лига, Лига Европа, Лига на конференциите) и петте водещи първенства: Англия, Испания, Италия, Германия и Франция.':
       'Refereeing in the national teams, the European cups (Champions League, Europa League, Conference League) and the top five leagues: England, Spain, Italy, Germany and France.',
-    'Статиите идват от Google News и Bing News, търсени на всеки 30 минути на сървъра, и водят към оригиналните издания. Групирането, дивизиите и темите се определят автоматично, така че някои може да са неточни.':
-      'Articles come from Google News and Bing News, searched every 30 minutes on the server, and link to the original publishers. Grouping, divisions and topics are automatic, so a few may be off.',
+    'Статиите идват от Google News и Bing News, търсени на всеки 30 минути, и водят към оригиналните издания. Статиите за един и същ случай се събират в една тема автоматично.':
+      'Articles come from Google News and Bing News, searched every 30 minutes, and link to the original publishers. Articles about the same incident are grouped into one topic automatically.',
+    // the story cards: the toggle, the opened card, the match groups
+    'Още': 'More', 'ново': 'new', 'Минути в статиите:': 'Minutes in the articles:',
     'Видеоархив на ebfu.net': 'ebfu.net video archive', 'Ситуации:': 'Situations:', 'Ситуации в': 'Situations at', 'Отвори в ebfu.net': 'Open in ebfu.net',
     'Отваря се с вашия вход в ebfu.net. Скок направо до мача и минутата предстои.': 'Opens with your own ebfu.net login. Jumping straight to the match and minute comes next.',
     'Търсенето на видео в статиите работи на публикувания сайт.': 'Finding videos inside articles works on the published site.',
@@ -179,6 +181,8 @@ window.BGRW_EN = {
     ['(\\d+) теми · (\\d+) статии', '$1 topics · $2 articles'], ['(\\d+) тема · (\\d+) статии', '$1 topic · $2 articles'], ['(\\d+) теми · (\\d+) статия', '$1 topics · $2 article'], ['(\\d+) тема · (\\d+) статия', '$1 topic · $2 article'],
     ['(\\d+) статия', '$1 article'], ['(\\d+) статии', '$1 articles'], ['(\\d+) видео', '$1 videos'], ['(\\d+) наказан', '$1 suspended'], ['(\\d+) наказани', '$1 suspended'],
     ['· (\\d+) източника', '· $1 sources'], ['(\\d+) статии от (\\d+) източника', '$1 articles from $2 sources'], ['(\\d+) статия от (\\d+) източник', '$1 article from $2 source'],
+    ['\\+ още (\\d+) (?:теми|тема) за мача', '+ $1 more about this match'], ['\\+ още (\\d+) мача', '+ $1 more matches'], ['\\+ още (\\d+) мач', '+ $1 more match'],
+    ['(\\d+) кръг', 'round $1'], ['(\\d+) теми', '$1 topics'], ['(\\d+) тема', '$1 topic'],
     ['\\+ още (\\d+) статии', '+ $1 more articles'], ['\\+ още (\\d+) статия', '+ $1 more article'], ['\\+ още (\\d+)', '+ $1 more'],
     ['▾ Всички (\\d+) статии и видео', '▾ All $1 articles and video'],
     ['(\\d+) запазени статии · най-новата е от (.+) · нови се търсят на всеки 30 минути', '$1 saved articles · newest from $2 · new ones are searched for every 30 minutes'],

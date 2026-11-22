@@ -17,6 +17,18 @@
   } catch (e) { /* no storage */ }
 </script>
 <title>eRefBG</title>
+<!-- what a link to the site shows in Viber, Facebook, Telegram, X and search results -->
+<meta name="description" content="Съдийството в българския футбол: новините за съдиите, събрани по теми, мачовете с наряда и спорните ситуации.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="eRefBG">
+<meta property="og:title" content="eRefBG — съдийството в българския футбол">
+<meta property="og:description" content="Новините за съдиите, събрани по теми, мачовете с наряда и спорните ситуации.">
+<meta property="og:url" content="https://refvideos.pages.dev/">
+<meta property="og:image" content="https://refvideos.pages.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="bg_BG">
+<meta name="twitter:card" content="summary_large_image">
 <!--
   eRefBG — refereeing stories from Bulgarian football (efbet Liga, 2nd League, 3rd League,
   Bulgarian Cup) plus a separate World section (top-5 leagues + Champions League, biggest stories only).
@@ -691,10 +703,54 @@
   @media (max-width:340px){ .bname{font-size:17px} .mark{width:26px;height:26px} }
 
   /* the news: one column of stories, divided by chalk lines rather than boxed */
-  #feed .card{background:none;border:0;border-top:1px solid var(--line);border-radius:0;margin:0;padding:16px 2px 18px}
+  #feed .card{background:none;border:0;border-top:1px solid var(--line);border-radius:0;margin:0;padding:14px 2px 8px}
   #feed .dayhead+.card{border-top:0}
   #feed .card h2,.mnewsbox .card h2{font:700 20px/1.22 var(--f-head);margin:6px 0 4px;letter-spacing:-.005em}
   .card.read h2{font-weight:600;color:var(--muted)}
+  /* a story, closed: kicker, headline, the match, then outlet · time with "N статии ⌄" on the right */
+  .story .kick{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;font:650 13px/1.35 var(--f-body);color:var(--ok)}
+  .story .kick .khot{color:var(--text);font-weight:800}
+  .story .kick i{font-style:normal;font-weight:400;color:var(--muted)}
+  #feed .story .kick+h2,.mnewsbox .story .kick+h2{margin-top:3px}
+  .story .mlinks{margin-top:2px}
+  .story .mlink{border:0;background:none;padding:3px 0;border-radius:0;font-size:13.5px;color:var(--text);gap:4px;text-align:left}
+  .story .mlink .muted{color:var(--muted)}
+  .story .mlink .mgo{color:var(--muted);margin-left:2px}
+  .story .mlink:hover{text-decoration:underline;text-underline-offset:.18em}
+  .story.open>.mlinks .mmore{display:none}
+  .smeta{display:flex;flex-wrap:wrap;align-items:center;gap:0 10px;min-height:36px;font-size:13.5px;color:var(--muted)}
+  .smeta .ssrc{font-weight:600}
+  .smeta time{font-variant-numeric:tabular-nums}
+  .smeta .ndot{width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:-4px;flex:0 0 auto}
+  .smeta .svid{color:var(--text);font-weight:650}
+  .smeta .sread{color:var(--ok)}
+  .smeta .stog{margin-left:auto;display:inline-flex;align-items:center;gap:3px;min-height:40px;padding:0 2px 0 12px;border:0;background:none;color:var(--muted);font:600 13.5px/1 var(--f-body);cursor:pointer;white-space:nowrap}
+  .smeta .stog svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+  .smeta .stog:hover{color:var(--text)}
+  .smeta .stog[aria-expanded="true"]{color:var(--text)}
+  .smeta .stog[aria-expanded="true"] svg{transform:rotate(180deg)}
+  .story .panel{margin-top:4px;padding-bottom:8px}
+  .story .panel>.desc:first-child{margin-top:4px}
+  .story .mins{font-size:14px;margin:10px 0 0}
+  .story .panel .mlinks{margin-top:10px}
+  /* the stories about one match, under the match: the score in the score type, the cards hung from a chalk line */
+  #feed .mgroup{border-top:1px solid var(--line);padding-bottom:4px}
+  #feed .dayhead+.mgroup{border-top:0}
+  .mghead{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 7px;width:100%;margin:0;padding:14px 2px 6px;border:0;border-radius:0;background:none;color:var(--text);text-align:left;cursor:pointer;font:700 16px/1.25 var(--f-head)}
+  .mghead .mgs{font:800 21px/1 var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .mghead .mgs.live{color:var(--rc)}
+  .mghead .mgw{font:500 13px/1.3 var(--f-body);color:var(--muted);margin-left:2px}
+  .mghead .mgo{color:var(--muted);font-weight:500}
+  .mghead:hover .mgt{text-decoration:underline;text-underline-offset:.18em}
+  #feed .mgroup>.card{border-top:0;margin-left:3px;padding:8px 2px 2px 14px;box-shadow:inset 2px 0 0 var(--line)}
+  #feed .mgroup>.card+.card{padding-top:12px}
+  .mgmore{display:inline-flex;align-items:center;gap:3px;min-height:40px;margin:2px 0 4px 17px;padding:0;border:0;background:none;color:var(--ok);font:650 14px/1 var(--f-body);cursor:pointer}
+  .mgmore svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .mgmore:hover{text-decoration:underline;text-underline-offset:.18em}
+  #feed .mgroup>.card+.card::before{content:"";display:block;height:1px;margin:-12px 0 11px;background:var(--line);opacity:.6}
+  .vh{position:absolute !important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  h1.bname{margin:0}
+  @media (prefers-reduced-motion: reduce){ .smeta .stog svg{transition:none} }
   .desc{font-size:15px;line-height:1.45}
   .meta{font-size:13.5px;gap:4px 10px}
   .badge{font:700 11.5px/1 var(--f-body);padding:4px 7px;border-radius:5px}
@@ -803,7 +859,7 @@
   <div class="wrap toprow">
     <a class="brand" href="#bg" aria-label="eRefBG">
       <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><line x1="16" y1="1" x2="16" y2="31"/><circle class="ring" cx="16" cy="16" r="12"/><circle class="spot" cx="16" cy="16" r="2.4"/></svg>
-      <span class="bname" data-noi18n>eRefBG</span>
+      <h1 class="bname" data-noi18n>eRefBG</h1>
     </a>
     <nav id="nav" aria-label="Раздели"></nav>
     <div class="tools">
@@ -846,7 +902,7 @@
         <div class="fpfoot"><span id="lastRun" class="muted"></span><button id="fdone" class="small">Готово</button></div>
       </div>
       <div id="sectChips" class="chips seg" hidden></div>
-      <div class="fstat"><span id="pills"></span><span id="count" class="muted"></span><a id="resLink" class="flink" href="#results"></a></div>
+      <div class="fstat" id="fstat" hidden><span id="pills"></span><span id="count" class="muted"></span></div>
       <div id="roundBar" class="roundnav newsround" hidden></div>
     </div>
     <div id="warn" class="warn" hidden></div>
@@ -858,8 +914,7 @@
       <pre id="log"></pre>
     </details>
     <footer>
-      Статиите идват от Google News и Bing News, търсени на всеки 30 минути на сървъра, и водят към оригиналните издания.
-      Групирането, дивизиите и темите се определят автоматично, така че някои може да са неточни.
+      Статиите идват от Google News и Bing News, търсени на всеки 30 минути, и водят към оригиналните издания. Статиите за един и същ случай се събират в една тема автоматично.
     </footer>
   </section>
 
@@ -1893,57 +1948,61 @@ function renderChips(el, labels, sel, list, key){
     `<button class="chip${sel.has(k) ? ' on' : ''}" data-k="${k}">${esc(label)}<span class="n">${counts[k] || 0}</span></button>`).join('');
 }
 
-// the other articles of a story, listed under its headline: no re-posts, best-known outlets first, one per outlet first
-function relatedArts(s){
-  const r = s.rep, seen = new Set([r.src]);
-  const list = s.arts.filter(a => a !== r && !DUP.has(a.aid) && DUP.get(r.aid) !== a.aid)
-    .sort((x, y) => (mediaTier(y.src) - mediaTier(x.src)) || (y.date - x.date));
-  const first = [], rest = [];
-  for (const a of list) (seen.has(a.src) ? rest : first).push(a), seen.add(a.src);
-  return first.concat(rest);
-}
-const REL_SHOWN = 3;
 // an article from an international outlet says its language (EN, ES, IT, DE, FR)
 const LANG_NAME = { en: 'английски', es: 'испански', it: 'италиански', de: 'немски', fr: 'френски' };
 const langTag = a => a.lang && LANG_NAME[a.lang] ? `<span class="lng" title="${LANG_NAME[a.lang]}">${a.lang.toUpperCase()}</span>` : '';
-function storyCard(s){
-  const read = storyRead(s), r = s.rep;
-  const srcLine = langTag(r) + esc(r.src) + (s.sources > 1 ? ` <span class="muted">· ${s.sources} източника</span>` : '');
-  const rel = relatedArts(s), more = s.arts.length - 1 - Math.min(REL_SHOWN, rel.length);
-  const relHtml = rel.length ? `<ul class="rel">${rel.slice(0, REL_SHOWN).map(a => `<li><span class="rs">${langTag(a)}${esc(a.src)}</span><a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${isRead(a.aid) ? '<span class="chk" title="Прочетено">✓</span>' : ''}</li>`).join('')}${
-    more > 0 ? `<li><button class="more" data-act="expand">+ още ${more} ${more > 1 ? 'статии' : 'статия'}</button></li>` : ''}</ul>` : '';
-  const compTags = s.comps.map(c => `<span class="tag div">${esc(COMPS[c] || c)}</span>`);
+// A story, closed, is four short lines a reader can take in at a glance:
+//   what kind of story it is (hot, the league when it isn't efbet Лига, up to two topics)
+//   the headline
+//   the match it is about, with the score (opens the match page)
+//   the outlet and the time (just the time under a day's heading), a dot when it is new, ▶ when it has video,
+//   and on the right "3 статии ⌄", which opens everything else: the other articles, the video, the minutes, the buttons.
+// (The cards used to carry all of that up front: badges, a second and third headline, the division on every card, tag
+// pills and three buttons, so a phone's first screen held barely one story.)
+const hhmm = t => { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+const CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 9.5 12 15l5.5-5.5"/></svg>';
+function storyKicker(s, worldTags){
+  const where = worldTags ? s.comps.slice(0, 1).map(c => COMPS[c] || c)
+    : s.divs.filter(d => d !== 'd1' && d !== 'unk').slice(0, 1).map(d => DIVS[d] || d);
+  const what = s.cats.filter(c => c !== 'other').slice(0, where.length ? 1 : 2).map(c => CATS[c] || c);   // three labels at most
+  const parts = [...where, ...what].map(t => `<span>${esc(t)}</span>`);
+  if (s.hot) parts.unshift('<b class="khot">Горещо</b>');
+  return parts.length ? `<div class="kick">${parts.join('<i aria-hidden="true">·</i>')}</div>` : '';
+}
+function storyCard(s, dayed, grouped){
+  dayed = dayed === true;          // only withDays says the card sits under its day's heading (map() passes an index here)
+  grouped = grouped === true;      // …and under its match's heading, so the card doesn't repeat the match
+  const read = storyRead(s), r = s.rep, open = EXPANDED.has(s.key), n = s.arts.length;
   const worldTags = VIEW === 'world' || (VIEW === 'results' && isWorld(FB.league));
-  const tags = (worldTags ? compTags : s.divs.map(d => `<span class="tag div">${esc(DIVS[d] || d)}</span>`).concat(s.world ? compTags : []))
-    .concat(s.cats.map(c => `<span class="tag">${esc(CATS[c] || c)}</span>`));
-  const M = storyMedia(s);
-  if (M.mins.length) tags.unshift(`<span class="tag">⏱ ${M.mins.slice(0, 4).map(minLabel).join(' ')}${M.mins.length > 4 ? ' …' : ''}</span>`);
-  if (storyHasVideo(s, M)) tags.unshift('<span class="tag vid">▶ Видео</span>');
-  const open = EXPANDED.has(s.key);
+  const M = storyMedia(s), vid = storyHasVideo(s, M);
+  const meta = `<div class="smeta">${s.hasNew && !read ? '<i class="ndot" aria-hidden="true"></i><span class="vh">Ново</span>' : ''}` +
+    `<span class="ssrc">${langTag(r)}${esc(r.src)}</span><time>${esc(dayed ? hhmm(s.date) : fmtDate(s.date))}</time>` +
+    `${vid ? '<span class="svid">▶ Видео</span>' : ''}${read ? '<span class="sread">✓ Прочетено</span>' : ''}` +
+    `<button class="stog" data-act="expand" aria-expanded="${open}">${n > 1 ? `${n} статии` : 'Още'}${CHEVRON}</button></div>`;
   let panel = '';
   if (open) {
     const media = mediaHtml(s);
     panel = `<div class="panel">
-      <h3>${s.arts.length} ${s.arts.length > 1 ? 'статии' : 'статия'} от ${s.sources} ${s.sources > 1 ? 'източника' : 'източник'}</h3>
-      <ul class="arts">${s.arts.map(a => `<li><div class="m">${esc(fmtDate(a.date))} · ${langTag(a)}${esc(a.src)}${isNewArt(a) ? ' · <b>new</b>' : ''}</div>
-        <a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${DUP.has(a.aid) ? '<span class="dup">Дубликат</span>' : ''}${isRead(a.aid) ? '<span class="chk" title="Прочетено">✓</span>' : ''}</li>`).join('')}</ul>
+      ${r.desc ? `<p class="desc">${esc(r.desc)}</p>` : ''}
+      ${n > 1 ? `<h3>${n} статии от ${s.sources} ${s.sources > 1 ? 'източника' : 'източник'}</h3>
+      <ul class="arts">${s.arts.map(a => `<li><div class="m">${esc(fmtDate(a.date))} · ${langTag(a)}${esc(a.src)}${isNewArt(a) ? ' · <b>ново</b>' : ''}</div>
+        <a href="${esc(safeUrl(a.link))}" data-aid="${esc(a.aid)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a>${DUP.has(a.aid) ? '<span class="dup">Дубликат</span>' : ''}${isRead(a.aid) ? '<span class="chk" title="Прочетено">✓</span>' : ''}</li>`).join('')}</ul>` : ''}
+      ${M.mins.length ? `<p class="mins"><span class="muted">Минути в статиите:</span> ${M.mins.map(minLabel).join(' · ')}</p>` : ''}
+      ${matchLinks(s, 1, 4)}
       <h3>Видео</h3>
       <div class="media" data-key="${esc(s.key)}" data-sig="${esc(media.sig)}">${media.html}</div>
-      <div class="actions">${approved() ? '<button class="small" data-act="upload">⬆ Качи видео към тази статия</button>'
-        : SB ? `<span class="muted">${USER ? 'За качване на видео профилът ви трябва да е одобрен от администратор.' : '<a href="#account">Влезте</a>, за да качите видео към тази статия.'}</span>` : ''}</div>
+      <div class="actions">
+        <button class="small" data-act="read">${read ? 'Непрочетено' : 'Прочетено'}</button>
+        ${s.bgOnly ? `<a class="btn small" href="${esc(EBFU_URL)}" target="_blank" rel="noopener" title="Видео от мача в архива на ebfu.net (с вашия вход)">🎥 ebfu.net</a>` : ''}
+        ${approved() ? '<button class="small" data-act="upload">⬆ Качи видео към тази статия</button>'
+          : SB ? `<span class="muted">${USER ? 'За качване на видео профилът ви трябва да е одобрен от администратор.' : '<a href="#account">Влезте</a>, за да качите видео към тази статия.'}</span>` : ''}
+      </div>
     </div>`;
   }
-  return `<article class="card${read ? ' read' : ''}" data-key="${esc(s.key)}">
-    <div class="meta">${s.hot ? '<span class="badge hot">Горещо</span>' : ''}${s.hasNew ? '<span class="badge new">Ново</span>' : ''}${read ? '<span class="badge read">✓ Прочетено</span>' : ''}
-      <span>${esc(fmtDate(s.date))}</span><span>${srcLine}</span></div>
+  return `<article class="card story${read ? ' read' : ''}${open ? ' open' : ''}" data-key="${esc(s.key)}">
+    ${storyKicker(s, worldTags)}
     <h2><a href="${esc(safeUrl(r.link))}" data-aid="${esc(r.aid)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></h2>
-    ${r.desc ? `<p class="desc">${esc(r.desc)}</p>` : ''}${relHtml}
-    <div class="tags">${tags.join('')}</div>${matchLinks(s)}
-    <div class="actions">
-      <button class="small" data-act="expand">${open ? '▴ Скрий' : '▾ ' + (s.arts.length > 1 ? `Всички ${s.arts.length} статии и видео` : 'Подробно и видео')}</button>
-      <button class="small" data-act="read">${read ? 'Непрочетено' : 'Прочетено'}</button>
-      ${s.bgOnly ? `<a class="btn small" href="${esc(EBFU_URL)}" target="_blank" rel="noopener" title="Видео от мача в архива на ebfu.net (с вашия вход)">🎥 ebfu.net</a>` : ''}
-    </div>${panel}
+    ${grouped ? '' : matchLinks(s, 0, 1)}${meta}${panel}
   </article>`;
 }
 
@@ -1961,29 +2020,54 @@ function renderPills(world, sel){
   const n = p.filter(([k]) => k !== 'q').length, fc = $('#fcount');
   fc.hidden = !n; fc.textContent = n;
   $('#ftoggle').setAttribute('aria-label', n ? `Филтри, включени ${n}` : 'Филтри');
+  return p.length;
 }
 
 // The feed a day at a time (newest first): a heading for each day — "Днес · петък, 13 ноември", "Вчера · …",
-// "Сряда, 11 ноември" — with how many stories and articles the day has
+// "Сряда, 11 ноември" — and under it the cards show just the time. (The day's counts of stories and articles are gone:
+// nobody reads the feed for them, and they were one more line of numbers above the first story.)
 const dayNo = t => Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 864e5);   // the day, in this browser's time
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-function dayHead(t, stories, arts, now = Date.now()){
+function dayHead(t, now = Date.now()){
   const d = new Date(t), y = new Date(now);
   const rel = dayNo(t) === dayNo(now) ? 'Днес' : dayNo(t) === dayNo(now) - 1 ? 'Вчера' : '';
   let txt = d.toLocaleDateString(LOC, { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== y.getFullYear() ? { year: 'numeric' } : {}) });
   if (!rel) txt = txt.charAt(0).toUpperCase() + txt.slice(1);
-  return `<div class="dayhead" role="heading" aria-level="2">${rel ? `<span class="dnow">${rel}</span><span>·</span>` : ''}<span>${esc(txt)}</span>` +
-    `<span class="n">${plural(stories, 'тема', 'теми')} · ${plural(arts, 'статия', 'статии')}</span></div>`;
+  return `<div class="dayhead" role="heading" aria-level="2">${rel ? `<span class="dnow">${rel}</span><span>·</span>` : ''}<span>${esc(txt)}</span></div>`;
 }
-// the cards on screen, with a heading where a new day starts (the counts are for the whole day, not just what is shown)
-function withDays(page, all){
-  const n = new Map(), a = new Map();
-  for (const s of all) { const k = dayNo(s.date); n.set(k, (n.get(k) || 0) + 1); a.set(k, (a.get(k) || 0) + s.arts.length); }
-  let cur = null, out = '';
-  for (const s of page) {
-    const k = dayNo(s.date);
-    if (k !== cur) { cur = k; out += dayHead(s.date, n.get(k), a.get(k)); }
-    out += storyCard(s);
+// The cards on screen, with a heading where a new day starts. Inside a day, the stories about one match stand together
+// under that match (its score, its round, how many stories), at the place of its first story: a round's evening
+// otherwise showed "Ботев Враца 1:1 ЦСКА 1948" three times in a row, once on each card.
+function matchHead(m, n){
+  const lg = m.league, where = LEAGUES[lg] ? `${m.round} кръг` : (compOf(lg) || {}).name || '';
+  const played = m.status === 'finished' || m.status === 'live';
+  return `<button class="mghead" data-gomatch="${esc(lg)}|${esc(m.id)}" title="Страницата на мача, с всичко писано за него">` +
+    `<span class="mgt">${esc(teamName(m.home_name))}</span><b class="mgs${m.status === 'live' ? ' live' : ''}">${played ? `${esc(m.home_score ?? '')}:${esc(m.away_score ?? '')}` : '–'}</b><span class="mgt">${esc(teamName(m.away_name))}</span>` +
+    `<span class="mgw"><span>${esc(where)}</span> · <span>${plural(n, 'тема', 'теми')}</span></span><span class="mgo" aria-hidden="true">›</span></button>`;
+}
+// A match with many stories shows its first two (the leading outlets first) and "+ още 3 теми за мача" for the rest.
+const MG_SHOWN = 2, MG_OPEN = new Set();
+function withDays(page){
+  const idx = VIEW === 'results' ? null : matchNewsIndex().byStory, first = s => idx && (idx.get(s.key) || [])[0];
+  let out = '';
+  for (let i = 0; i < page.length;) {
+    const k = dayNo(page[i].date); let j = i;
+    while (j < page.length && dayNo(page[j].date) === k) j++;
+    const groups = new Map();
+    for (const s of page.slice(i, j)) {
+      const m = first(s), g = m ? 'm ' + m.league + '|' + m.id : 's ' + s.key;
+      if (!groups.has(g)) groups.set(g, { m, list: [] });
+      groups.get(g).list.push(s);
+    }
+    out += dayHead(page[i].date);
+    for (const { m, list } of groups.values()) {
+      if (!m || list.length < 2) { out += storyCard(list[0], true); continue; }
+      const gk = m.league + '|' + m.id, open = MG_OPEN.has(gk) || list.length <= MG_SHOWN + 1, shown = open ? list : list.slice(0, MG_SHOWN);
+      out += `<section class="mgroup" data-key="mg ${esc(gk)}" aria-label="${esc(teamName(m.home_name) + ' – ' + teamName(m.away_name))}">${matchHead(m, list.length)}` +
+        shown.map(s => storyCard(s, true, true)).join('') +
+        (open ? '' : `<button class="mgmore" data-mgmore="${esc(gk)}">+ още ${plural(list.length - MG_SHOWN, 'тема', 'теми')} за мача${CHEVRON}</button>`) + '</section>';
+    }
+    i = j;
   }
   return out;
 }
@@ -2044,7 +2128,7 @@ function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
   $('#intro').innerHTML = world
     ? 'Съдийството в националните отбори, евротурнирите (Шампионска лига, Лига Европа, Лига на конференциите) и петте водещи първенства: Англия, Испания, Италия, Германия и Франция. <a href="#results" data-world-results>Мачове и класирания</a>'
-    : 'Съдийството в efbet Лига, Втора и Трета лига и Купата на България, и българските клубове и съдии в Европа и чужбина. Статиите за един и същ случай са събрани в една тема.';
+    : 'Съдийството в efbet Лига, Втора и Трета лига и Купата на България, и българските клубове и съдии в Европа и чужбина. Статиите за един и същ случай са събрани в една тема. <a href="#results" data-bg-results>Мачове и класиране</a>';
   let base = filteredStories();
   // World: a section first (national teams / European cups / top 5 leagues), then the competitions inside it
   const sectEl = $('#sectChips');
@@ -2077,12 +2161,10 @@ function render(){
   list.sort(!byDay ? (a, b) => b.score - a.score || b.date - a.date
     : (a, b) => dayNo(b.date) - dayNo(a.date) || (b.lead - a.lead) || b.date - a.date);
 
-  const totalArts = list.reduce((n, s) => n + s.arts.length, 0);
-  $('#count').textContent = `${list.length} ${list.length === 1 ? 'тема' : 'теми'} · ${totalArts} ${totalArts === 1 ? 'статия' : 'статии'}`;
-  renderPills(world, sel);
-  const rl = $('#resLink');
-  rl.textContent = world ? 'Мачове и класирания' : 'Мачове и класиране';
-  rl.toggleAttribute('data-world-results', world); rl.toggleAttribute('data-bg-results', !world);
+  // how many stories: only once something narrows the feed (a search, a filter), when the number answers "how many matched?"
+  const totalArts = list.reduce((n, s) => n + s.arts.length, 0), narrowed = renderPills(world, sel) > 0;
+  $('#count').textContent = narrowed ? `${list.length} ${list.length === 1 ? 'тема' : 'теми'} · ${totalArts} ${totalArts === 1 ? 'статия' : 'статии'}` : '';
+  $('#fstat').hidden = !narrowed;
   const feed = $('#feed');
   // updated in place: a video being watched under a story keeps playing
   if (!list.length) {
@@ -5328,15 +5410,17 @@ function toggleMatchNews(id){
   }
 }
 // the matches a story is about, for its card in the news feed
-function matchLinks(s){
+// (the closed card shows the first match, from = 0, to = 1, with "+ още N"; the opened card lists the next ones)
+function matchLinks(s, from = 0, to = 3){
   if (VIEW === 'results') return '';
-  const ms = matchNewsIndex().byStory.get(s.key) || [];
+  const ms = (matchNewsIndex().byStory.get(s.key) || []).slice(from);
   if (!ms.length) return '';
-  return `<div class="mlinks">${ms.slice(0, 3).map(m => {
+  const k = to - from;
+  return `<div class="mlinks">${ms.slice(0, k).map(m => {
     const lg = m.league, where = LEAGUES[lg] ? `${m.round} кръг` : (compOf(lg) || {}).name || '';
     const score = m.status === 'finished' || m.status === 'live' ? `${m.home_score ?? ''}:${m.away_score ?? ''}` : '–';
-    return `<button class="mlink" data-gomatch="${esc(lg)}|${esc(m.id)}" title="Страницата на мача, с всичко писано за него">${esc(teamName(m.home_name))} <b>${esc(score)}</b> ${esc(teamName(m.away_name))}<span class="muted">· ${esc(where)}</span></button>`;
-  }).join('')}${ms.length > 3 ? `<span class="muted">+ още ${ms.length - 3}</span>` : ''}</div>`;
+    return `<button class="mlink" data-gomatch="${esc(lg)}|${esc(m.id)}" title="Страницата на мача, с всичко писано за него">${esc(teamName(m.home_name))} <b>${esc(score)}</b> ${esc(teamName(m.away_name))}<span class="muted">· ${esc(where)}</span><span class="mgo" aria-hidden="true">›</span></button>`;
+  }).join('')}${ms.length > k ? `<span class="muted mmore">+ още ${ms.length - k} ${ms.length - k > 1 ? 'мача' : 'мач'}</span>` : ''}</div>`;
 }
 // a story's match: its own page
 function openMatch(lg, id){
@@ -5353,6 +5437,8 @@ function bindStoryEvents(container, redraw){
   container.addEventListener('click', e => {
     const g = e.target.closest('[data-gomatch]');
     if (g) { const [lg, id] = g.dataset.gomatch.split('|'); openMatch(lg, id); return; }
+    const mg = e.target.closest('[data-mgmore]');
+    if (mg) { MG_OPEN.add(mg.dataset.mgmore); redraw(); return; }
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const card = b.closest('.card'), s = card && buildStories().find(x => x.key === card.dataset.key); if (!s) return;
     if (b.dataset.act === 'expand') { EXPANDED.has(s.key) ? EXPANDED.delete(s.key) : EXPANDED.add(s.key); if (EXPANDED.has(s.key)) queueExtract(extractTargets(s), true); redraw(); }

@@ -8,8 +8,9 @@ import { join } from 'node:path';
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const cut = (a, b) => { const i = html.indexOf(a), j = html.indexOf(b, i); if (i < 0 || j < 0) throw new Error('not found: ' + a); return html.slice(i, j); };
 const src = [
-  "const DAY = 864e5; const DUP = new Map(); const esc = s => String(s);",
-  "const storyCard = s => `<card ${s.key}>`;",
+  "const DAY = 864e5; const DUP = new Map(); const esc = s => String(s); const EN = false, LOC = 'bg-BG';",
+  "const storyCard = (s, dayed, grouped) => `<card ${s.key}${grouped === true ? ' grouped' : ''}>`; const CHEVRON = '';",
+  "let VIEW = 'bg'; const MATCHES_OF = new Map(); const matchNewsIndex = () => ({ byStory: MATCHES_OF }); const teamName = n => n; const compOf = () => null;",
   "const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига', sw3: 'Трета лига Югозапад' };",
   cut('const BG_DAYS =', 'const bgDate ='),
   cut('// World competitions on the Results page', '// a short fingerprint'),
@@ -17,7 +18,7 @@ const src = [
   cut("/* ── the competitions' rounds, for the news ── */", 'let RIDX'),
   cut('// the round a headline names', 'function storyRounds'),
   cut('// a tile shows the round', 'function renderRoundPick'),
-  'export { roundNos, buildRounds, roundsOfStory, dayHead, withDays, dayNo, tileLabel };',
+  'export { roundNos, buildRounds, roundsOfStory, dayHead, withDays, dayNo, tileLabel, MATCHES_OF, MG_OPEN };',
 ].join('\n');
 const dir = mkdtempSync(join(tmpdir(), 'rounds-'));
 writeFileSync(join(dir, 'page.mjs'), src);
@@ -78,16 +79,30 @@ ok(eq(ids(story('g', [{ title: 'Глоби за Левски' }]), []), []), 'no
 
 // the feed a day at a time
 const now = Date.parse('2026-11-13T16:00:00');
-const h0 = P.dayHead(Date.parse('2026-11-13T10:00:00'), 3, 7, now), h1 = P.dayHead(Date.parse('2026-11-12T22:00:00'), 1, 1, now), h2 = P.dayHead(Date.parse('2026-11-10T09:00:00'), 2, 5, now);
-ok(h0.includes('Днес') && h0.includes('13 ноември') && h0.includes('3 теми · 7 статии'), 'today: "Днес · петък, 13 ноември · 3 теми · 7 статии"');
-ok(h1.includes('Вчера') && h1.includes('1 тема · 1 статия'), 'yesterday: "Вчера", and one story is "1 тема"');
+const h0 = P.dayHead(Date.parse('2026-11-13T10:00:00'), now), h1 = P.dayHead(Date.parse('2026-11-12T22:00:00'), now), h2 = P.dayHead(Date.parse('2026-11-10T09:00:00'), now);
+ok(h0.includes('Днес') && h0.includes('13 ноември') && !/теми|статии/.test(h0), 'today: "Днес · петък, 13 ноември", with no counts');
+ok(h1.includes('Вчера'), 'yesterday: "Вчера"');
 ok(h2.includes('Вторник, 10 ноември') && !h2.includes('Днес'), 'older days: "Вторник, 10 ноември"');
-ok(P.dayHead(Date.parse('2025-12-30T12:00:00'), 1, 1, now).includes('2025'), 'another year says the year');
+ok(P.dayHead(Date.parse('2025-12-30T12:00:00'), now).includes('2025'), 'another year says the year');
 const day = (key, d) => ({ key, date: Date.parse(d), arts: [{}, {}] });
 const feed = [day('x', '2026-11-13T12:00:00'), day('y', '2026-11-13T09:00:00'), day('z', '2026-11-12T20:00:00')];
-const out = P.withDays(feed.slice(0, 2), feed);
-ok((out.match(/dayhead/g) || []).length === 1 && out.includes('2 теми · 4 статии') && out.indexOf('dayhead') < out.indexOf('<card x>'), 'a heading where a day starts, counted for the whole day');
-ok((P.withDays(feed, feed).match(/dayhead/g) || []).length === 2, 'two days, two headings');
+const out = P.withDays(feed.slice(0, 2));
+ok((out.match(/dayhead/g) || []).length === 1 && out.indexOf('dayhead') < out.indexOf('<card x>') && out.includes('<card y>'), 'a heading where a day starts');
+ok((P.withDays(feed).match(/dayhead/g) || []).length === 2, 'two days, two headings');
+
+// the stories about one match stand together under it, at the place of the first one; a long run shows two and "+ още"
+const m1 = { id: 'm1', league: 'efbet', round: 15, status: 'finished', home_name: 'Ботев Враца', away_name: 'ЦСКА 1948', home_score: 1, away_score: 1 };
+const run = [day('a', '2026-11-13T15:00:00'), day('b', '2026-11-13T14:00:00'), day('c', '2026-11-13T13:00:00'), day('d', '2026-11-13T12:30:00'), day('e', '2026-11-13T12:00:00')];
+['a', 'c', 'd', 'e'].forEach(k => P.MATCHES_OF.set(k, [m1]));
+const g = P.withDays(run);
+ok((g.match(/class="mgroup"/g) || []).length === 1 && g.indexOf('<card a grouped>') < g.indexOf('<card b>') && g.indexOf('<card c grouped>') < g.indexOf('<card b>'),
+  "a match's stories come together where its first story is; a story without the match stays on its own");
+ok(g.includes('1:1') && g.includes('15 кръг') && g.includes('4 теми'), 'the match heading: the score, the round, how many stories');
+ok(!g.includes('<card d grouped>') && g.includes('+ още 2 теми за мача'), 'four stories: two shown, "+ още 2 теми за мача"');
+P.MG_OPEN.add('efbet|m1');
+ok(P.withDays(run).includes('<card e grouped>'), 'opened: all of them');
+P.MATCHES_OF.set('b', []); P.MATCHES_OF.delete('c'); P.MATCHES_OF.delete('d'); P.MATCHES_OF.delete('e');
+ok(!P.withDays(run).includes('mgroup'), 'one story about a match: no group, the card shows its match itself');
 
 console.log(fails ? `\n${fails} failed` : '\nall passed');
 process.exit(fails ? 1 : 0);
