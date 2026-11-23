@@ -441,6 +441,8 @@
   .mref b{font-weight:600}
   .mref .sep{color:var(--muted);margin:0 2px}
   .mref.none{color:var(--muted);font-size:12.5px}
+  .mref .rp{display:inline-flex;align-items:baseline;white-space:nowrap;margin-right:10px}
+  .mtop.bare{justify-content:flex-start}
   .crewbtn{margin-left:auto;font-size:12px;padding:3px 10px;border-radius:999px}
   .crew{margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--chip)}
   .crew dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 16px;margin:0}
@@ -823,10 +825,6 @@
   .mscore.live{color:var(--hot)}
   .mref{border-top:1px solid var(--line);font-size:14px}
   .mref .whistle{color:currentColor}
-  .mhints{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:13.5px;color:var(--muted)}
-  .mhints:empty{display:none}
-  .mhints span{display:inline-flex;align-items:center;gap:6px}
-  .mhints .yes{color:var(--text);font-weight:600}
   .ico{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   @media (max-width:560px){ .mscore{font-size:34px;min-width:66px} .mscore.time{font-size:21px} }
 
@@ -4647,7 +4645,7 @@ function officialsHtml(m){
   }
   const ref = c.crew.find(x => x.r === 'ГС'), vr = c.crew.find(x => x.r === 'ВАР');
   if (!ref && !vr) return '';
-  return `<div class="mref">${WHISTLE}${ref ? `<span class="rl">Съдия</span><b>${esc(offName(ref))}</b>` : ''}${vr ? `<span class="rl" style="margin-left:8px">ВАР</span><b>${esc(offName(vr))}</b>` : ''}</div>`;
+  return `<div class="mref">${WHISTLE}${ref ? `<span class="rp"><span class="rl">Съдия</span><b>${esc(offName(ref))}</b></span>` : ''}${vr ? `<span class="rp"><span class="rl">ВАР</span><b>${esc(offName(vr))}</b></span>` : ''}</div>`;
 }
 // small line icons
 const ICO = {
@@ -4659,19 +4657,6 @@ const ICO = {
 };
 const matchHref = m => `#match/${encodeURIComponent(m.league)}/${encodeURIComponent(m.id)}`;
 const hasSheet = s => !!(s && s.found && [s.home, s.away].some(x => x && x.xi && x.xi.length));
-function matchArtCount(m){
-  const lg = m.league, idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(String(m.id))) || [], cov = LEAGUES[lg] ? matchCoverage(m) : [];
-  return ss.reduce((a, s) => a + s.arts.length, 0) + cov.reduce((a, g) => a + 1 + g.also.length, 0);
-}
-// under a match row: what its page has (the squads, videos, articles, players who sit it out)
-function matchHints(m){
-  const out = [], v = matchVideos(m).count, n = matchArtCount(m), d = FB.data[m.league], b = d && d.banned && d.banned[m.id];
-  if (hasSheet(SHEETS.byMatch.get(String(m.id)))) out.push(`<span class="yes">${ICO.sheet}Състави</span>`);
-  if (v) out.push(`<span class="yes">${ICO.play}${v} видео</span>`);
-  if (n) out.push(`<span>${ICO.news}${n} ${n === 1 ? 'статия' : 'статии'}</span>`);
-  if (b && b.length) out.push(`<span>${cardIc('red')}${b.length} ${b.length === 1 ? 'наказан' : 'наказани'}</span>`);
-  return out.join('');
-}
 // ── the match sheets: the teams' starting elevens, substitutes and coaches, and the refereeing team, from BFU's
 // electronic championship (ebfu.net; sheets-sync reads it every 10 minutes). Loaded a round at a time.
 const SHEET_LEAGUES = ['efbet', 'mrbit', 'sw3'], SHEET_SRC = 'https://ebfu.net/teams/';
@@ -4803,21 +4788,22 @@ function matchVideos(m){
 }
 const matchWhen = m => !m.kickoff ? 'дата неизвестна' : noTime(m) ? (p => `${p.day} ${p.d}, ${p.m}`)(sofiaParts(m.kickoff)) : bgDate(m.kickoff);
 const isPast = m => m.kickoff && Date.parse(m.kickoff) < Date.now() - 3 * 3600e3;
-// a match in the round's list: the teams, the score, the referee and what its page has; the whole row opens the page
+// a match in the round's list: when, the teams, the score and the referees, nothing else (the squads, videos, articles
+// and punishments are on its page); the whole card opens the page. Under a Bulgarian round's heading the card doesn't
+// repeat the league and the round; a world round's cards name their group.
 function matchCard(m, top){
   if (typeof top !== 'string') top = '';     // also called straight from Array.map
   const played = m.status === 'finished' || m.status === 'live';
   const score = played ? `<div class="mscore${m.status === 'live' ? ' live' : ''}">${m.home_score ?? ''}:${m.away_score ?? ''}</div>`
     : `<div class="mscore time">${m.status === 'postponed' || isPast(m) ? 'отложен' : m.kickoff && !noTime(m) ? esc(sofiaParts(m.kickoff).time) : '—'}</div>`;
   return `<a class="mcard" href="${matchHref(m)}" data-mid="${esc(m.id)}">
-    <div class="mtop"><span>${esc(top || `${LEAGUES[m.league]}, ${m.round} кръг`)}${m.status === 'live' ? '<span class="livetag">на живо</span>' : ''}</span><span>${esc(matchWhen(m))}</span></div>
+    <div class="mtop${top ? '' : ' bare'}">${top ? `<span>${esc(top)}</span>` : ''}<span>${esc(matchWhen(m))}${m.status === 'live' ? '<span class="livetag">на живо</span>' : ''}</span></div>
     <div class="mrow">
       <div class="mteam home"><span class="tname">${esc(teamName(m.home_name))}</span>${logoHtml(m.home_logo, m.home_name)}</div>
       ${score}
       <div class="mteam away">${logoHtml(m.away_logo, m.away_name)}<span class="tname">${esc(teamName(m.away_name))}</span></div>
     </div>
     ${officialsHtml(m)}
-    <div class="mhints" data-mh="${esc(m.id)}">${matchHints(m)}</div>
   </a>`;
 }
 // ── the match page (#match/<league>/<id>): a pitch strip with the score in the centre circle, then the referee team,
@@ -5716,7 +5702,6 @@ function mnWrap(lg, m, page){
 // after the round is drawn: remember what each strip shows, open a match that was linked from the news
 function afterMatchNews(box){
   box.querySelectorAll('.mnwrap[data-mnw]').forEach(w => { w._html = MN_HTML[w.dataset.mnw]; });
-  box.querySelectorAll('.mhints[data-mh]').forEach(w => { w._html = w.innerHTML; });
   // back from a match page: the list where it was, the score travelling back into its row
   if (FB.backFrom && !FB.match) {
     const el = [...box.querySelectorAll('.mcard[data-mid]')].find(x => x.dataset.mid === String(FB.backFrom));
@@ -5742,11 +5727,6 @@ function refreshMatchNews(){
     const html = matchNewsStrip(FB.league, m, w.hasAttribute('data-page'));
     if (w._html === html) return;
     patchHtml(w, w._html = html);                    // in place: a video playing under a story keeps playing
-  });
-  $('#resultsBox').querySelectorAll('.mhints[data-mh]').forEach(w => {
-    const m = byId.get(w.dataset.mh); if (!m) return;
-    const html = matchHints(m);
-    if (w._html !== html) w.innerHTML = w._html = html;
   });
 }
 function toggleMatchNews(id){
