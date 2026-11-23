@@ -287,6 +287,89 @@ select n, s from (values
 ) as d(n, s)
 where not exists (select 1 from public.video_categories);
 
+-- ───────────────────────── cuts of a video (откъси) ─────────────────────────
+-- A cut is a named stretch of one video (start–end, in seconds), played by the site's player without a new file.
+-- A cut can hold cuts of its own (parent_id), which must lie inside it: "Дузпа 67'" → "Контактът" → "Падането".
+-- Every approved member sees them; the video's uploader and the admins make, change and delete them.
+create table if not exists public.video_cuts (
+  id           bigint generated always as identity primary key,
+  video_id     bigint not null references public.videos(id) on delete cascade,
+  parent_id    bigint references public.video_cuts(id) on delete cascade,
+  title        text not null check (char_length(btrim(title)) between 1 and 200),
+  start_s      numeric(9,2) not null check (start_s >= 0),
+  end_s        numeric(9,2) not null,
+  note         text check (note is null or char_length(note) <= 2000),
+  created_by   uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  creator_name text,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint video_cuts_range check (end_s - start_s >= 0.2)
+);
+create index if not exists video_cuts_video_idx on public.video_cuts (video_id, start_s);
+create index if not exists video_cuts_parent_idx on public.video_cuts (parent_id);
+alter table public.video_cuts enable row level security;
+
+-- may the person signed in cut this video? an admin, or the approved member who uploaded it
+create or replace function private.can_cut(p_video bigint) returns boolean
+language sql stable security definer set search_path = public as $$
+  select private.is_admin()
+      or (private.is_approved() and exists (select 1 from public.videos v where v.id = p_video and v.uploaded_by = auth.uid()));
+$$;
+revoke execute on function private.can_cut(bigint) from public, anon;
+grant execute on function private.can_cut(bigint) to authenticated;
+
+-- who made a cut is set by the database; a cut stays on its video; a cut inside another lies within it, and a change
+-- may not leave the cuts inside it sticking out, nor put a cut inside itself
+create or replace function public.video_cuts_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare p record; a bigint; n int := 0;
+begin
+  if tg_op = 'INSERT' then
+    new.created_by := auth.uid();
+    new.creator_name := (select display_name from public.profiles where id = auth.uid());
+    new.created_at := now();
+  else
+    new.created_by := old.created_by; new.creator_name := old.creator_name;
+    new.video_id := old.video_id; new.created_at := old.created_at;
+  end if;
+  new.title := btrim(new.title);
+  new.note := nullif(btrim(coalesce(new.note, '')), '');
+  new.updated_at := now();
+  if new.parent_id is not null then
+    select c.video_id, c.start_s, c.end_s into p from public.video_cuts c where c.id = new.parent_id;
+    if not found or p.video_id <> new.video_id then
+      raise exception 'Откъсът може да е само в откъс от същото видео.' using errcode = 'check_violation';
+    end if;
+    if new.start_s < p.start_s or new.end_s > p.end_s then
+      raise exception 'Откъсът трябва да е вътре в откъса, към който принадлежи.' using errcode = 'check_violation';
+    end if;
+    if tg_op = 'UPDATE' then
+      a := new.parent_id;
+      while a is not null and n < 100 loop
+        if a = new.id then raise exception 'Откъс не може да е вътре в себе си.' using errcode = 'check_violation'; end if;
+        select c.parent_id into a from public.video_cuts c where c.id = a; n := n + 1;
+      end loop;
+    end if;
+  end if;
+  if tg_op = 'UPDATE' and exists (select 1 from public.video_cuts c where c.parent_id = new.id and (c.start_s < new.start_s or c.end_s > new.end_s)) then
+    raise exception 'Откъсите вътре в този трябва да остават в него.' using errcode = 'check_violation';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists video_cuts_guard on public.video_cuts;
+create trigger video_cuts_guard before insert or update on public.video_cuts for each row execute function public.video_cuts_guard();
+revoke execute on function public.video_cuts_guard() from public, anon, authenticated;
+
+drop policy if exists "cuts: approved members read" on public.video_cuts;
+create policy "cuts: approved members read" on public.video_cuts for select to authenticated using (private.is_approved());
+drop policy if exists "cuts: owner or admin add" on public.video_cuts;
+create policy "cuts: owner or admin add" on public.video_cuts for insert to authenticated with check (private.can_cut(video_id));
+drop policy if exists "cuts: owner or admin change" on public.video_cuts;
+create policy "cuts: owner or admin change" on public.video_cuts for update to authenticated
+  using (private.can_cut(video_id)) with check (private.can_cut(video_id));
+drop policy if exists "cuts: owner or admin delete" on public.video_cuts;
+create policy "cuts: owner or admin delete" on public.video_cuts for delete to authenticated using (private.can_cut(video_id));
+
 -- ───────────────────────── ebfu.net archive reports ─────────────────────────
 -- structure reports of the ebfu.net video archive, sent by approved members; only admins can read them
 create table if not exists public.ebfu_reports (

@@ -9,6 +9,14 @@
 //   VPlayer.duration(id)             a clip's length once it is known (kept in this browser)
 //   VPlayer.watch(container)         muted previews of the tiles [data-vprev]: on hover with a mouse, the tile in the
 //                                     middle of the screen on a phone
+//   VPlayer.range({ start, end, label }) plays only that stretch of the video on screen (a cut, "откъс"): the bar and the
+//                                     time show the stretch, playing stops at its end (or starts it again with loop on),
+//                                     and a badge names it with ✕ for the whole video. range(null): the whole video.
+//                                     A new video on screen drops the range. opt.onRange(null) says the viewer left it.
+//   VPlayer.getRange()               the stretch being played, or null
+//   VPlayer.marks({ a, b })          the start and end being chosen for a new cut, shown on the bar; marks(null) clears
+//   VPlayer.time(), seek(t)          the position in the video on screen, in seconds (time() is null when the player
+//                                     can't tell: another site's player); canCut() says whether it can
 //
 // item: { id, title, kind: 'file' | 'yt' | 'embed' | 'link', src, cors, poster, posterBig, fallback, href, host, thumbKey, ytid, msg,
 //         heavy (a big original: not previewed or got ready ahead on a phone's mobile data) }
@@ -94,6 +102,8 @@
   .vp-seek:hover .vp-tr,.vp-seek.drag .vp-tr{top:8px;height:6px}
   .vp-buf,.vp-played{position:absolute;left:0;top:0;bottom:0;width:0}
   .vp-buf{background:rgba(255,255,255,.32)} .vp-played{background:var(--vpa)}
+  .vp-mk{position:absolute;top:0;bottom:0;background:rgba(238,243,236,.5);box-shadow:inset 2px 0 0 #eef3ec,inset -2px 0 0 #eef3ec;pointer-events:none}
+  .vp-mk.one{width:3px !important;margin-left:-1px;background:#eef3ec;box-shadow:none}
   .vp-knob{position:absolute;top:5px;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:var(--vpa);transform:scale(0);transition:transform .12s;box-shadow:0 0 0 3px rgba(45,212,191,.25)}
   .vp-seek:hover .vp-knob,.vp-seek.drag .vp-knob,.vp-seek:focus-visible .vp-knob{transform:scale(1)}
   .vp-seek:focus-visible{outline:none}
@@ -128,6 +138,9 @@
   .vp-badge .vp-btn{width:34px;height:34px}
   .vp-badge .vp-btn svg{width:19px;height:19px}
   .vp-badge.rate{padding:0 11px;color:#04201c;background:var(--vpa)}
+  .vp-badge.cut{max-width:min(78vw,420px);gap:8px;padding-left:12px}
+  .vp-badge.cut .vp-cutt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .vp-badge.cut .vp-cutr{font-weight:500;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap}
   .vp-menu{position:absolute;right:8px;bottom:70px;background:rgba(18,20,24,.97);border:1px solid #2a2f37;border-radius:14px;padding:8px;z-index:5;box-shadow:0 8px 28px rgba(0,0,0,.5);width:236px}
   .vp-menu h4{margin:2px 4px 8px;font-size:12px;font-weight:600;color:#98a1ad;text-transform:uppercase;letter-spacing:.6px}
   .vp-menu .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
@@ -203,6 +216,7 @@
   let sideWanted = load(K.side) !== false, sideOpen = false;
   let z = { s: 1, x: 0, y: 0 }, ar = 16 / 9;
   let yt = null, ytReady = null, ytTime = 0, ytDur = 0, ytState = -1;
+  let rng = null, mk = null;          // a cut being played { start, end, label, wait }; the marks of a cut being made { a, b }
   let idleT = 0, flashT = 0, nextT = 0, noteT = 0, loadT = 0, raf = 0, wasPlaying = false, failed = false, opener = null;
   const DUR = load(K.dur) || {};
 
@@ -227,7 +241,7 @@
           <button class="vp-btn" data-a="side" aria-label="Списък" title="Списък">${IC.list}</button>
         </div>
         <div class="vp-ctrl">
-          <div class="vp-seek" role="slider" tabindex="0" aria-label="Позиция" aria-valuemin="0"><div class="vp-tr"><div class="vp-buf"></div><div class="vp-played"></div></div><div class="vp-knob"></div><div class="vp-tip"></div></div>
+          <div class="vp-seek" role="slider" tabindex="0" aria-label="Позиция" aria-valuemin="0"><div class="vp-tr"><div class="vp-buf"></div><div class="vp-played"></div><div class="vp-mk" hidden></div></div><div class="vp-knob"></div><div class="vp-tip"></div></div>
           <div class="vp-row">
             <button class="vp-btn" data-a="toggle" aria-label="Пусни / спри" title="Пусни / спри (интервал)">${IC.play}</button>
             <button class="vp-btn when-paused" data-a="fback" aria-label="Кадър назад" title="Кадър назад (,)">${IC.fback}</button>
@@ -298,6 +312,12 @@
     if (mode === 'file') vid().currentTime = t;
     else if (mode === 'yt' && yt && yt.seekTo) { yt.seekTo(t, true); ytTime = t; }
   }
+  // the stretch the bar stands for: a cut being played, or the whole video
+  const lo = () => (rng ? rng.start : 0);
+  const hi = () => (rng ? Math.min(rng.end, mDur() || rng.end) : mDur());
+  const span = () => Math.max(0, hi() - lo());
+  const seekIn = t => mSeek(rng ? clamp(t, rng.start, hi()) : t);
+  const atEnd = () => rng && mTime() >= hi() - 0.05;
   function mBuffered(){
     if (mode === 'yt' && yt && yt.getVideoLoadedFraction) try { return yt.getVideoLoadedFraction() || 0; } catch (e) { return 0; }
     if (mode !== 'file') return 0;
@@ -420,6 +440,7 @@
     const x = it();
     failed = false; clearMsg(); if (NOTE) NOTE.hidden = true;
     clearTimeout(loadT); hideMenu();
+    rng = null; mk = null; drawMarks();
     resetZoom(true);
     if (yt) { try { yt.destroy(); } catch (e) {} yt = null; }
     FRAME.innerHTML = ''; FRAME.hidden = true;
@@ -496,6 +517,7 @@
     show(j, how);
   }
   function ended(){
+    if (rng) { if (loop) { mSeek(rng.start); mPlay(); } else { paint(); poke(); } return; }
     if (loop) { mSeek(0); mPlay(); return; }
     if (auto && nextIndex(1) >= 0) { go(1, 'auto'); return; }
     paint(); poke();
@@ -541,6 +563,8 @@
     // what is changed from normal stays on screen: the speed and the zoom
     BADGES.innerHTML = (z.s > 1.01 ? `<div class="vp-badge">${z.s.toFixed(1)}×<button class="vp-btn" data-a="zreset" aria-label="Нормален размер" title="Нормален размер (0)">${IC.reset}</button></div>` : '')
       + (rate !== 1 && canRate() ? `<div class="vp-badge rate">${rateLabel(rate)}</div>` : '')
+      // a cut: its name and stretch, and ✕ for the whole video
+      + (rng ? `<div class="vp-badge cut" title="${esc(rng.label || '')}"><span class="vp-cutt">✂ ${esc(rng.label || 'Откъс')}</span><span class="vp-cutr">${fmt(rng.start)}–${fmt(rng.end)}</span><button class="vp-btn" data-a="rangex" aria-label="Цялото видео" title="Цялото видео">${IC.close}</button></div>` : '')
       // muted (remembered from before): said plainly, and one tap brings the sound back
       + (vol.m && (mode === 'file' || mode === 'yt') ? `<button class="vp-badge mute" data-a="unmute" title="Пусни звука (M)">${IC.mute}Без звук · пусни звука</button>` : '');
   }
@@ -548,7 +572,16 @@
     raf = requestAnimationFrame(tick);
     if (!R || R.hidden) return;
     if (mode === 'yt') ytTick();
-    const d = mDur(), t = mTime();
+    if (rng) {
+      // a cut: start at its beginning once the video can seek, and stop (or loop) at its end
+      if (rng.wait && mDur()) { rng.wait = false; mSeek(rng.start); }
+      else if (!rng.wait && !SEEK.classList.contains('drag') && !mPaused()) {
+        if (mTime() >= hi() - 0.03) { if (loop) mSeek(rng.start); else { mPause(); mSeek(hi()); paint(); poke(); } }
+        else if (mTime() < rng.start - 0.3) mSeek(rng.start);
+      }
+    }
+    if (mk) drawMarks();
+    const d = span(), t = clamp(mTime() - lo(), 0, d || 0);
     if (!SEEK.classList.contains('drag')) {
       const p = d ? t / d : 0;
       PLAYED.style.width = (p * 100) + '%'; KNOB.style.left = (p * 100) + '%';
@@ -572,7 +605,7 @@
     if (!canFrames()) return;
     mPause();
     R.classList.add('stepping');
-    mSeek(mTime() + d / FPS);
+    seekIn(mTime() + d / FPS);
     flash(d < 0 ? '‹ кадър' : 'кадър ›');
   }
   function drawMenu(){
@@ -721,7 +754,7 @@
   function bindSeek(){
     let wasP = true;
     const at = e => { const r = SEEK.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1); };
-    const showTip = p => { TIP.textContent = fmt(p * mDur()); TIP.style.left = (p * 100) + '%'; };
+    const showTip = p => { TIP.textContent = fmt(p * span()); TIP.style.left = (p * 100) + '%'; };
     SEEK.addEventListener('pointermove', e => { if (!SEEK.classList.contains('drag')) showTip(at(e)); });
     SEEK.addEventListener('pointerdown', e => {
       if (!canRate() || !mDur()) return;
@@ -729,22 +762,22 @@
       try { SEEK.setPointerCapture(e.pointerId); } catch (er) {}
       SEEK.classList.add('drag');
       wasP = mPaused(); if (!wasP) mPause();
-      const p = at(e); mSeek(p * mDur()); showTip(p); PLAYED.style.width = KNOB.style.left = (p * 100) + '%';
+      const p = at(e); mSeek(lo() + p * span()); showTip(p); PLAYED.style.width = KNOB.style.left = (p * 100) + '%';
     });
     SEEK.addEventListener('pointermove', e => {
       if (!SEEK.classList.contains('drag')) return;
-      const p = at(e); mSeek(p * mDur()); showTip(p); PLAYED.style.width = KNOB.style.left = (p * 100) + '%';
+      const p = at(e); mSeek(lo() + p * span()); showTip(p); PLAYED.style.width = KNOB.style.left = (p * 100) + '%';
     });
     const end = () => { if (!SEEK.classList.contains('drag')) return; SEEK.classList.remove('drag'); if (!wasP) mPlay(); idle(); };
     SEEK.addEventListener('pointerup', end); SEEK.addEventListener('pointercancel', end);
     SEEK.addEventListener('keydown', e => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); mSeek(mTime() + (e.key === 'ArrowLeft' ? -5 : 5)); }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); seekIn(mTime() + (e.key === 'ArrowLeft' ? -5 : 5)); }
     });
   }
 
   function togglePlay(){
     if (mode === 'none' || mode === 'embed') return;
-    if (mPaused()) { if (mode === 'file' && vid().ended) mSeek(0); mPlay(); } else mPause();
+    if (mPaused()) { if (atEnd()) mSeek(rng.start); else if (mode === 'file' && vid().ended) mSeek(0); mPlay(); } else mPause();
     paint(); poke();
   }
   function toggleSide(){
@@ -775,6 +808,7 @@
     else if (a === 'zin') zoomAt(z.s * 1.5, null, null, true);
     else if (a === 'zout') zoomAt(z.s / 1.5, null, null, true);
     else if (a === 'zreset') resetZoom();
+    else if (a === 'rangex') { setRange(null); if (opt.onRange) try { opt.onRange(null); } catch (er) {} }
     else if (a === 'loop') { loop = !loop; flash(loop ? 'Повтаря клипа' : 'Без повторение'); paintButtons(); }
     else if (a === 'auto') setAuto(!auto);
     else if (a === 'mute') { vol.m = !vol.m; save(K.vol, vol); applyVol(); paintButtons(); }
@@ -799,8 +833,8 @@
     const done = () => { e.preventDefault(); poke(); };
     if (k === ' ' || k === 'k' || k === 'K') { if (e.target.closest && e.target.closest('button') && k === ' ') return; togglePlay(); done(); }
     else if (k === 'Escape') { if (!MENU.hidden) hideMenu(); else if (document.fullscreenElement || document.webkitFullscreenElement) return; else if (sideOpen) toggleSide(); else close(); done(); }
-    else if (k === 'ArrowLeft' && e.target !== SEEK) { mSeek(mTime() - (e.shiftKey ? 1 : 5)); flash('− ' + (e.shiftKey ? 1 : 5) + ' с'); done(); }
-    else if (k === 'ArrowRight' && e.target !== SEEK) { mSeek(mTime() + (e.shiftKey ? 1 : 5)); flash('+ ' + (e.shiftKey ? 1 : 5) + ' с'); done(); }
+    else if (k === 'ArrowLeft' && e.target !== SEEK) { seekIn(mTime() - (e.shiftKey ? 1 : 5)); flash('− ' + (e.shiftKey ? 1 : 5) + ' с'); done(); }
+    else if (k === 'ArrowRight' && e.target !== SEEK) { seekIn(mTime() + (e.shiftKey ? 1 : 5)); flash('+ ' + (e.shiftKey ? 1 : 5) + ' с'); done(); }
     else if (k === ',') { frame(-1); done(); }
     else if (k === '.') { frame(1); done(); }
     else if (k === '[' || k === '<') { stepRate(-1); done(); }
@@ -816,9 +850,9 @@
     else if (k === 'l' || k === 'L') { loop = !loop; flash(loop ? 'Повтаря клипа' : 'Без повторение'); paintButtons(); done(); }
     else if (k === 'a' || k === 'A') { setAuto(!auto); done(); }
     else if (k === 'i' || k === 'I') { R.querySelector('[data-a="info"]').click(); done(); }
-    else if (k === 'Home') { mSeek(0); done(); }
-    else if (k === 'End') { mSeek(mDur() - 0.1); done(); }
-    else if (/^[1-9]$/.test(k) && mDur()) { mSeek(mDur() * Number(k) / 10); done(); }
+    else if (k === 'Home') { mSeek(lo()); done(); }
+    else if (k === 'End') { mSeek(hi() - 0.1); done(); }
+    else if (/^[1-9]$/.test(k) && span()) { mSeek(lo() + span() * Number(k) / 10); done(); }
   }
 
   /* ───────────── the list and the details ───────────── */
@@ -850,6 +884,27 @@
     }
   }
 
+  /* ───────────── cuts: a stretch of the video, and the marks of a new one ───────────── */
+  function setRange(r){
+    if (!R) return;
+    const ok = r && isFinite(r.start) && isFinite(r.end) && r.end > r.start && canRate();
+    rng = ok ? { start: Math.max(0, +r.start), end: +r.end, label: r.label || '', wait: !mDur() } : null;
+    if (rng && !rng.wait) mSeek(rng.start);
+    if (rng) { R.classList.remove('stepping'); mPlay(); }
+    drawMarks(); paint(); poke();
+  }
+  function drawMarks(){
+    if (!R) return;
+    const el = R.querySelector('.vp-mk');
+    const d = span(), ok = mk && d && (isFinite(mk.a) || isFinite(mk.b));
+    el.hidden = !ok;
+    if (!ok) return;
+    const pos = t => clamp((t - lo()) / d, 0, 1) * 100;
+    const a = isFinite(mk.a) ? pos(mk.a) : null, b = isFinite(mk.b) ? pos(mk.b) : null;
+    el.style.left = (a ?? b) + '%';
+    el.style.width = a != null && b != null ? Math.max(0, b - a) + '%' : '0';
+    el.classList.toggle('one', a == null || b == null);
+  }
   function layout(){
     if (!R || R.hidden) return;
     const W = innerWidth, H = innerHeight, fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
@@ -880,6 +935,7 @@
     if (!items.length) return;
     opener = document.activeElement;
     stopPreview();
+    rng = null; mk = null;
     R.hidden = false;
     document.documentElement.style.overflow = 'hidden';
     tab = 'queue';
@@ -1047,6 +1103,12 @@
     current: () => (R && !R.hidden ? it() : null),
     refreshDetails: () => { if (R && !R.hidden && tab === 'info') drawSide(); },
     duration: id => DUR[id] || 0,
+    range: r => setRange(r),
+    getRange: () => (rng ? { start: rng.start, end: rng.end, label: rng.label } : null),
+    marks: m => { mk = m && (isFinite(m.a) || isFinite(m.b)) ? { a: m.a, b: m.b } : null; drawMarks(); },
+    time: () => (R && !R.hidden && canRate() ? mTime() : null),
+    seek: t => { if (R && !R.hidden && canRate()) { mPause(); seekIn(t); paint(); } },
+    canCut: () => !!(R && !R.hidden && canRate()),
     get root(){ build(); return R; },
   };
 })();

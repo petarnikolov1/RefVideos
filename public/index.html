@@ -247,6 +247,40 @@
   .comments .vtabs{margin:6px 0 4px}
   .vtabs .n{font-weight:500;opacity:.75;font-variant-numeric:tabular-nums}
   .vhint{font-size:12px;color:var(--muted);margin:8px 0 2px}
+  /* cuts (откъси): a tree hung from chalk lines, the one playing marked */
+  .vcut{position:absolute;left:6px;bottom:6px;z-index:2;background:rgba(0,0,0,.78);color:#fff;font-size:11.5px;font-weight:700;padding:1px 6px;border-radius:5px}
+  #videoList.selecting .vcut{display:none}
+  .vcuts{border-top:1px solid var(--line);margin-top:14px;padding-top:10px}
+  .vcuts .vch{display:flex;align-items:center;gap:10px;min-height:32px}
+  .vcuts h3{margin:0;font:700 16px/1.2 var(--f-head);flex:1}
+  .vcuts h3 .n{font:500 13px/1 var(--f-body);color:var(--muted)}
+  .vcuts ul{list-style:none;margin:0;padding:0}
+  .vcuts .cuts{margin-top:4px}
+  .vcuts li ul{margin:2px 0 2px 5px;padding-left:12px;border-left:2px solid var(--line)}
+  .vcuts .cut{padding:3px 0}
+  .vcuts .cutrow{display:flex;align-items:baseline;gap:4px 10px;flex-wrap:wrap}
+  .vcuts .cutp{display:inline-flex;align-items:baseline;gap:7px;min-height:30px;padding:4px 0;border:0;background:none;color:inherit;font:600 14.5px/1.3 var(--f-body);text-align:left;cursor:pointer;flex:1 1 10em;min-width:0}
+  .vcuts .cutp:disabled{cursor:default;opacity:.85}
+  .vcuts .cutp:not(:disabled):hover .ct{text-decoration:underline;text-underline-offset:.18em}
+  .vcuts .ci{color:var(--muted);font-size:12px;width:12px;flex:0 0 auto}
+  .vcuts .cut.on>.cutrow .cutp,.vcuts .cut.on>.cutrow .ci{color:var(--accent)}
+  .vcuts .cr{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .vcuts .cn{font-size:13px;color:var(--muted);margin:0 0 2px 19px;white-space:pre-wrap}
+  .vcuts .cuta{display:flex;flex-wrap:wrap;gap:0 14px;margin-left:19px}
+  .vcuts .cuta .small.link{padding:2px 0;font-size:12.5px;min-height:28px}
+  .vcuts .cutnew{margin-top:8px}
+  .cutform{margin:8px 0 6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;display:grid;gap:8px}
+  .cutform .cuthd{font-size:13.5px}
+  .cutform .cutpn{font-weight:600}
+  .cutform label{display:grid;gap:3px;font-size:12.5px;color:var(--muted)}
+  .cutform input,.cutform textarea{font:inherit;font-size:14px;color:var(--text);background:transparent;border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0}
+  .cutform .cutt{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 12px}
+  .cutform .cutf{display:flex;gap:6px;align-items:center}
+  .cutform .cutf input{width:6.5em;font-variant-numeric:tabular-nums}
+  .cutform .cutlen{font-size:13px;color:var(--muted);padding-bottom:9px;font-variant-numeric:tabular-nums}
+  .cutform .bar{display:flex;flex-wrap:wrap;gap:6px}
+  .cutform .msg:empty{display:none}
+  .cutform .vhint{margin:0}
   .vnote{position:absolute;right:6px;top:6px;z-index:2;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.62);display:grid;place-items:center;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
   button.link{border:none;background:none;padding:0 4px;color:var(--muted);text-decoration:underline;font-size:12px}
 
@@ -1681,7 +1715,7 @@ async function handleSession(session){
 // the members' videos, their categories and comments — approved members only (the database enforces it too)
 async function loadVideos(){
   if (!SB) return;
-  if (!approved()) { VIDEOS = []; CATS_V = []; VCAT = {}; COMMENTS = {}; NOTES = {}; VID_VER++; CATV_VER++; renderAll(); return; }
+  if (!approved()) { VIDEOS = []; CATS_V = []; VCAT = {}; COMMENTS = {}; NOTES = {}; CUTS = {}; VID_VER++; CATV_VER++; CUT_VER++; renderAll(); return; }
   const [v, c, i] = await Promise.all([
     SB.from('videos').select('*').order('created_at', { ascending: false }).limit(1000),
     SB.from('video_categories').select('id,name,sort').order('sort', { ascending: true }).order('name', { ascending: true }),
@@ -1696,7 +1730,7 @@ async function loadVideos(){
   else for (const r of i.data || []) (VCAT[r.video_id] || (VCAT[r.video_id] = new Set())).add(r.category_id);
   await signVideos();
   VID_VER++;
-  await Promise.all([loadComments(), loadNotes()]);
+  await Promise.all([loadComments(), loadNotes(), loadCuts()]);
   renderAll();
 }
 async function signVideos(){
@@ -1768,6 +1802,200 @@ async function deleteNote(id){
   await loadNotes();
   renderAll();
 }
+/* --- cuts (откъси): named stretches of a video, which can hold cuts of their own --- */
+// "Дузпа 67'" (1:05–1:21) → "Контактът" (1:08–1:12) → "Падането" (1:10–1:11). Every approved member sees and plays
+// them; the video's uploader and the admins make, change and delete them (the database's rules, video_cuts: a cut
+// inside another must lie within it). Nothing is re-encoded: the player plays that stretch of the same video, so it
+// works wherever the player controls the time (an uploaded file, Google Drive through the site, YouTube).
+let CUTS = {}, CUT_VER = 0;     // video id -> its cuts, by start
+let CUT_ON = 0;                 // the cut playing, 0 = the whole video
+let CUT_FORM = null;            // the cut being made or changed: { vid, id (0 = new), parent, a, b, title, note, msg }
+let PENDING_CUT = 0;            // #video-12-c5: the cut to play once its video is open
+const canCut = v => !!(v && USER && approved() && (isAdmin() || v.uploaded_by === USER.id));
+async function loadCuts(){
+  if (!SB || !VIDEOS.length) { CUTS = {}; CUT_VER++; return; }
+  const { data, error } = await SB.from('video_cuts').select('id,video_id,parent_id,title,start_s,end_s,note,creator_name,created_at')
+    .order('start_s', { ascending: true }).limit(10000);
+  if (error) { log('Could not load cuts: ' + error.message); return; }
+  CUTS = {};
+  (data || []).forEach(c => { c.start_s = Number(c.start_s); c.end_s = Number(c.end_s); (CUTS[c.video_id] = CUTS[c.video_id] || []).push(c); });
+  for (const k in CUTS) CUTS[k].sort((x, y) => x.start_s - y.start_s || y.end_s - x.end_s);
+  CUT_VER++;
+  if (PENDING_CUT && VPlayer.isOpen()) pendingCut();   // a link to a cut, whose video opened before the cuts came
+}
+const cutOf = id => { if (!id) return null; for (const k in CUTS) { const c = CUTS[k].find(x => x.id === Number(id)); if (c) return c; } return null; };
+const cutKids = (vid, parent) => (CUTS[vid] || []).filter(c => (c.parent_id || 0) === (Number(parent) || 0));
+const cutCount = (vid, id) => cutKids(vid, id).reduce((n, c) => n + 1 + cutCount(vid, c.id), 0);   // inside it, at any depth
+const cutInside = (id, outer) => { let c = cutOf(id); while (c) { if (c.id === Number(outer)) return true; c = cutOf(c.parent_id); } return false; };
+// "1:05.4" ⇄ 65.4 s ("1:05,4", "65.4" and "65" work too)
+function parseT(t){
+  const m = /^(?:(\d+):)?(\d+(?:[.,]\d+)?)$/.exec(String(t || '').trim());
+  return m ? (m[1] ? Number(m[1]) * 60 : 0) + Number(m[2].replace(',', '.')) : NaN;
+}
+const fmtT = t => { if (!isFinite(t)) return ''; t = Math.max(0, Math.round(t * 10) / 10); const m = Math.floor(t / 60), x = t - m * 60; return `${m}:${x < 10 ? '0' : ''}${x.toFixed(1)}`; };
+const fmtLen = t => (t < 60 ? `${String(Math.round(t * 10) / 10).replace('.', ',')} с` : fmtDur(t));
+// play a cut of the video on screen: the bar becomes the cut, the address names it (#video-12-c5)
+function playCut(id){
+  const c = cutOf(id), cur = VPlayer.current();
+  if (!c || !cur || cur.id !== c.video_id) return;
+  if (!VPlayer.canCut()) { toast('Този плейър не може да пуска откъси.'); return; }
+  CUT_ON = c.id;
+  VPlayer.range({ start: c.start_s, end: c.end_s, label: c.title });
+  cutHash(); VPlayer.refreshDetails();
+}
+function wholeVideo(){ CUT_ON = 0; VPlayer.range(null); cutHash(); VPlayer.refreshDetails(); }
+function cutHash(){
+  const cur = VPlayer.current(); if (!cur) return;
+  const h = '#video-' + cur.id + (CUT_ON ? '-c' + CUT_ON : '');
+  if (location.hash !== h) history.replaceState(history.state, '', h);
+}
+// the viewer left a cut with the player's ✕: back to the cut being cut into, if there is one, else the whole video
+function cutLeft(){
+  const p = CUT_FORM && cutOf(CUT_FORM.parent);
+  if (p) { playCut(p.id); return; }
+  CUT_ON = 0; cutHash(); VPlayer.refreshDetails();
+}
+// a new cut (inside `parent`, or of the whole video), or a change to cut `edit`; the bar shows the stretch it lives in
+function startCut(vid, parent, edit){
+  const c = cutOf(edit), p = cutOf(c ? c.parent_id : parent), t = VPlayer.time();
+  if (p) playCut(p.id); else if (CUT_ON) wholeVideo();
+  const inP = x => (p ? Math.min(Math.max(x, p.start_s), p.end_s) : x);
+  CUT_FORM = c ? { vid, id: c.id, parent: c.parent_id || 0, a: c.start_s, b: c.end_s, title: c.title, note: c.note || '', msg: '' }
+    : { vid, id: 0, parent: p ? p.id : 0, a: p ? p.start_s : t != null ? inP(t) : NaN, b: NaN, title: '', note: '', msg: '' };
+  cutMarks(); VPlayer.refreshDetails();
+  setTimeout(() => { const el = VPlayer.root.querySelector('.cutform'); if (el) el.scrollIntoView({ block: 'nearest' }); }, 0);
+}
+function stopCut(){ CUT_FORM = null; cutMarks(); VPlayer.refreshDetails(); }
+const cutMarks = () => VPlayer.marks(CUT_FORM ? { a: CUT_FORM.a, b: CUT_FORM.b } : null);
+// what is wrong with the cut being made, in words, or ''
+function cutProblem(f){
+  if (!isFinite(f.a)) return 'Изберете начало.';
+  if (!isFinite(f.b)) return 'Изберете край.';
+  if (f.b - f.a < 0.2) return 'Краят трябва да е поне 0,2 секунди след началото.';
+  const p = cutOf(f.parent);
+  if (p && (f.a < p.start_s - 0.001 || f.b > p.end_s + 0.001)) return 'Откъсът трябва да е вътре в откъса, към който принадлежи.';
+  const d = VPlayer.duration(f.vid);
+  if (d && f.b > d + 1) return 'Краят е след края на видеото.';
+  if (f.id && cutKids(f.vid, f.id).some(k => k.start_s < f.a - 0.001 || k.end_s > f.b + 0.001)) return 'Откъсите вътре в този трябва да остават в него.';
+  if (!f.title.trim()) return 'Дайте име на откъса.';
+  return '';
+}
+// the form's fields → CUT_FORM; the marks on the bar and the length follow as one types
+function cutInput(form){
+  const f = CUT_FORM; if (!f) return;
+  const v = n => (form.querySelector(`[name="${n}"]`) || {}).value || '';
+  f.a = parseT(v('cut_a')); f.b = parseT(v('cut_b')); f.title = v('cut_title'); f.note = v('cut_note');
+  const len = form.querySelector('.cutlen');
+  if (len) len.textContent = isFinite(f.a) && isFinite(f.b) && f.b > f.a ? fmtLen(f.b - f.a) : '';
+  cutMarks();
+}
+function cutNow(form, which){
+  const t = VPlayer.time(); if (t == null || !CUT_FORM) return;
+  form.querySelector(`[name="cut_${which}"]`).value = fmtT(t);
+  cutInput(form);
+}
+async function saveCut(form){
+  const f = CUT_FORM; if (!f) return;
+  cutInput(form);
+  const bad = cutProblem(f), msg = form.querySelector('.msg'), btn = form.querySelector('button[type=submit]');
+  const say = (t, cls) => { if (msg) { msg.textContent = I18N.tr(t); msg.className = 'msg ' + (cls || ''); } };
+  if (bad) { say(bad, 'err'); return; }
+  const row = { title: f.title.trim().slice(0, 200), note: f.note.trim().slice(0, 2000) || null, parent_id: f.parent || null,
+    start_s: Math.round(f.a * 100) / 100, end_s: Math.round(f.b * 100) / 100 };
+  btn.disabled = true; say('Записване…');
+  const { data, error } = f.id ? await SB.from('video_cuts').update(row).eq('id', f.id).select('id').single()
+    : await SB.from('video_cuts').insert({ ...row, video_id: f.vid }).select('id').single();
+  btn.disabled = false;
+  if (error) { say('Откъсът не е запазен: ' + error.message, 'err'); return; }
+  const id = (data && data.id) || f.id;
+  CUT_FORM = null; cutMarks();
+  await loadCuts();
+  renderAll();
+  if (id && cutOf(id)) playCut(id); else VPlayer.refreshDetails();
+  toast('Откъсът е запазен.');
+}
+async function deleteCut(id){
+  const c = cutOf(id); if (!c) return;
+  if (!confirmT(cutCount(c.video_id, c.id) ? 'Да изтрия ли този откъс и откъсите в него?' : 'Да изтрия ли този откъс?')) return;
+  const { error } = await SB.from('video_cuts').delete().eq('id', c.id);
+  if (error) { alertT('Откъсът не е изтрит: ' + error.message); return; }
+  if (CUT_FORM && (CUT_FORM.id === c.id || cutInside(CUT_FORM.parent, c.id))) { CUT_FORM = null; cutMarks(); }
+  const on = CUT_ON && cutInside(CUT_ON, c.id), parent = cutOf(c.parent_id);
+  await loadCuts();
+  if (on) { if (parent) playCut(parent.id); else wholeVideo(); }
+  renderAll(); VPlayer.refreshDetails();
+}
+// the buttons of the cuts section (inside the player); true when the click was one of them
+function cutClick(e){
+  const k = e.target.closest('[data-cutplay],[data-cutall],[data-cutnew],[data-cutin],[data-cutedit],[data-cutdel],[data-cutcopy],[data-cutnow],[data-cuttry],[data-cutcancel]');
+  if (!k) return false;
+  const ds = k.dataset, form = k.closest('.cutform');
+  if (ds.cutplay) playCut(ds.cutplay);
+  else if ('cutall' in ds) wholeVideo();
+  else if (ds.cutnew) startCut(Number(ds.cutnew), 0);
+  else if (ds.cutin) { const c = cutOf(ds.cutin); if (c) startCut(c.video_id, c.id); }
+  else if (ds.cutedit) { const c = cutOf(ds.cutedit); if (c) startCut(c.video_id, 0, c.id); }
+  else if (ds.cutdel) deleteCut(ds.cutdel);
+  else if (ds.cutnow && form) cutNow(form, ds.cutnow);
+  else if ('cuttry' in ds && form) {
+    // play the stretch chosen, before saving it (the badge's ✕ goes back)
+    cutInput(form);
+    const f = CUT_FORM, bad = f && cutProblem({ ...f, title: f.title || '-' }), m = form.querySelector('.msg');
+    if (bad) { if (m) { m.textContent = I18N.tr(bad); m.className = 'msg err'; } }
+    else if (f) { if (m) m.textContent = ''; CUT_ON = 0; VPlayer.range({ start: f.a, end: f.b, label: f.title.trim() || I18N.tr('Проба') }); cutMarks(); }
+  }
+  else if ('cutcancel' in ds) { const p = CUT_FORM && cutOf(CUT_FORM.parent); stopCut(); if (p && CUT_ON !== p.id) playCut(p.id); }
+  else if (ds.cutcopy) {
+    const c = cutOf(ds.cutcopy); if (!c) return true;
+    const url = location.origin + location.pathname + '#video-' + c.video_id + '-c' + c.id;
+    const ok = () => toast('Линкът към откъса е копиран.');
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, () => prompt(I18N.tr('Линк към откъса:'), url));
+    else prompt(I18N.tr('Линк към откъса:'), url);
+  }
+  return true;
+}
+// the cuts of a video, in the player's details: a tree, each with ▷, its stretch and length; the owner's and the
+// admins' buttons; the form in the place the cut will stand
+function cutsHtml(v){
+  const list = CUTS[v.id] || [], can = canCut(v), f = CUT_FORM && CUT_FORM.vid === v.id ? CUT_FORM : null, play = VPlayer.canCut();
+  if (!list.length && !can) return '';
+  const row = c => {
+    const kids = cutKids(v.id, c.id), on = CUT_ON === c.id;
+    return `<li class="cut${on ? ' on' : ''}">
+      <div class="cutrow">
+        <button class="cutp" data-cutplay="${esc(c.id)}"${play ? '' : ' disabled'} aria-pressed="${on}"><span class="ci" aria-hidden="true">${on ? '▶' : '▷'}</span><span class="ct" data-noi18n>${esc(c.title)}</span></button>
+        <span class="cr" data-noi18n>${esc(fmtT(c.start_s))}–${esc(fmtT(c.end_s))}</span><span class="cr cl">${esc(fmtLen(c.end_s - c.start_s))}</span>
+      </div>
+      ${c.note ? `<div class="cn" data-noi18n>${esc(c.note)}</div>` : ''}
+      <div class="cuta"><button class="small link" data-cutcopy="${esc(c.id)}" title="Копирай линк към откъса">🔗 линк</button>${can ? `<button class="small link" data-cutin="${esc(c.id)}" title="Нов откъс вътре в този">+ откъс вътре</button><button class="small link" data-cutedit="${esc(c.id)}">редактирай</button><button class="small link" data-cutdel="${esc(c.id)}">изтрий</button>` : ''}</div>
+      ${f && (f.id === c.id || (!f.id && f.parent === c.id)) ? cutFormHtml(v, f) : ''}
+      ${kids.length ? `<ul>${kids.map(row).join('')}</ul>` : ''}
+    </li>`;
+  };
+  return `<section class="vcuts">
+    <div class="vch"><h3>✂ Откъси${list.length ? ` <span class="n">${list.length}</span>` : ''}</h3>${CUT_ON ? '<button class="small" data-cutall>Цялото видео</button>' : ''}</div>
+    ${play ? '' : '<p class="vhint">Откъсите се пускат в плейъра на сайта: качени файлове, Google Drive и YouTube.</p>'}
+    ${list.length ? `<ul class="cuts">${cutKids(v.id, 0).map(row).join('')}</ul>`
+      : '<p class="vhint">Още няма откъси. Пуснете видеото, отбележете начало и край и дайте име, например „Дузпа 67′“. Всеки откъс може да има свои откъси вътре.</p>'}
+    ${can && play ? (f && !f.id && !f.parent ? cutFormHtml(v, f) : f ? '' : `<button class="small primary cutnew" data-cutnew="${esc(v.id)}">✂ Нов откъс</button>`) : ''}
+  </section>`;
+}
+function cutFormHtml(v, f){
+  const p = cutOf(f.parent), ok = isFinite(f.a) && isFinite(f.b) && f.b > f.a;
+  return `<form class="cutform" id="cutf-${esc(v.id)}-${esc(f.id)}-${esc(f.parent)}" data-vid="${esc(v.id)}" novalidate>
+    <div class="cuthd"><b>${f.id ? 'Редактиране на откъса' : 'Нов откъс'}</b>${p ? `<span class="muted"> · вътре в </span><span class="cutpn" data-noi18n>${esc(p.title)}</span> <span class="muted" data-noi18n>${esc(fmtT(p.start_s))}–${esc(fmtT(p.end_s))}</span>` : ''}</div>
+    <div class="cutt">
+      <label>Начало<span class="cutf"><input name="cut_a" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0:00.0" value="${esc(fmtT(f.a))}"><button type="button" class="small" data-cutnow="a" title="Моментът, в който е видеото сега">⌖ Сега</button></span></label>
+      <label>Край<span class="cutf"><input name="cut_b" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0:00.0" value="${esc(fmtT(f.b))}"><button type="button" class="small" data-cutnow="b" title="Моментът, в който е видеото сега">⌖ Сега</button></span></label>
+      <span class="cutlen" aria-live="polite">${ok ? esc(fmtLen(f.b - f.a)) : ''}</span>
+    </div>
+    <label>Име<input name="cut_title" maxlength="200" autocomplete="off" value="${esc(f.title)}" placeholder="Напр. Дузпа 67′ — контакт в наказателното поле"></label>
+    <label>Бележка (по желание)<textarea name="cut_note" maxlength="2000" rows="2" placeholder="Решението, правилото, какво да се гледа">${esc(f.note)}</textarea></label>
+    <div class="bar"><button class="small primary" type="submit">${f.id ? 'Запази промените' : 'Запази откъса'}</button><button class="small" type="button" data-cuttry>▶ Пробвай</button><button class="small" type="button" data-cutcancel>Отказ</button></div>
+    <div class="msg"></div>
+    <p class="vhint">Пуснете или спрете видеото на мястото и натиснете „⌖ Сега“. Времето може и да се напише: 1:05.4.</p>
+  </form>`;
+}
 // comments or notes: the choice is remembered in this browser
 function setVtab(t, box){
   VTAB = t === 'notes' ? 'notes' : 'comments';
@@ -1791,9 +2019,11 @@ function go(v){ if (location.hash !== '#' + v) location.hash = v; else applyView
 let SCROLL_TO = null;
 function applyView(){
   const v = (location.hash || '#bg').slice(1);
-  const vid = v.startsWith('video-') ? Number(v.slice(6)) || 0 : 0;     // #video-12 opens the player at that clip
+  const vm = /^video-(\d+)(?:-c(\d+))?$/.exec(v);      // #video-12 opens the player at that clip; #video-12-c5 plays its cut 5
+  const vid = vm ? Number(vm[1]) : 0;
+  PENDING_CUT = vm && vm[2] ? Number(vm[2]) : 0;
   if (!vid && VPlayer.isOpen()) VPlayer.close(true);
-  if (vid && VPlayer.isOpen()) { const c = VPlayer.current(); if (c && c.id === vid) return; }
+  if (vid && VPlayer.isOpen()) { const c = VPlayer.current(); if (c && c.id === vid) { pendingCut(); return; } }
   PENDING_VID = vid;
   SCROLL_TO = v === 'table' ? 'standings' : null;
   if (v.startsWith('post-')) Forum.want(v.slice(5));                  // #post-12 opens that forum post
@@ -2238,12 +2468,12 @@ function renderVideos(){
   renderVideoFilters();
   renderCatAdmin();
   const vq = parseQuery($('#vq').value), text = vq.text;
-  const listKey = [VID_VER, $('#vq').value, USER && USER.id, isAdmin(), AUTH, VSEL.region, VSEL.status, VSEL.cat, Object.keys(SIGNED).length].join('|');
+  const listKey = [VID_VER, CUT_VER, $('#vq').value, USER && USER.id, isAdmin(), AUTH, VSEL.region, VSEL.status, VSEL.cat, Object.keys(SIGNED).length].join('|');
   if (listKey !== LIST_KEY || want) {
     LIST_KEY = listKey;
     VPlayer.stopPreview();
     const vids = VIDEOS.filter(v => vMatch(v, VSEL) && (!vq.keys.length || (cl => vq.keys.every(k => cl.has(k)))(clubsOfText([v.match, v.title].join(' \n '))))
-      && (!text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name, v.committee_note,
+      && (!text || norm([v.title, v.match, v.description, v.minutes, v.uploader_name, v.committee_note, ...(CUTS[v.id] || []).flatMap(c => [c.title, c.note]),
       ...[...vCats(v)].map(catName)].join(' ')).includes(text)));
     LAST_Q = vids.map(v => v.id);
     const first = vids.find(v => vItem(v).kind !== 'link');
@@ -2259,7 +2489,7 @@ function renderVideos(){
     fillThumbs($('#videoList'));
     VPlayer.watch($('#videoList'), id => { const v = VIDEOS.find(x => String(x.id) === String(id)); return v ? vItem(v) : null; });
   }
-  if (want) { PENDING_VID = 0; if (!VPlayer.isOpen() || !VPlayer.current() || VPlayer.current().id !== want.id) openVideo(want.id, LAST_Q.includes(want.id) ? LAST_Q : [want.id], true); }
+  if (want) { PENDING_VID = 0; if (!VPlayer.isOpen() || !VPlayer.current() || VPlayer.current().id !== want.id) openVideo(want.id, LAST_Q.includes(want.id) ? LAST_Q : [want.id], true); pendingCut(); }
   renderBulk();
 }
 function renderVideoFilters(){
@@ -2284,6 +2514,12 @@ const catChecks = (name, checked, prefix) => CATS_V.map(c => `<label class="ck">
 /* --- the gallery and the player (public/vplayer.js) --- */
 const PLAY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>';
 let LAST_Q = [], VP_Q = [], VP_PUSHED = false, PENDING_VID = 0, VP_SYNC = '', VSELECTING = false;
+// the cut a link named, once its video is on screen
+function pendingCut(){
+  if (!PENDING_CUT) return;
+  const c = cutOf(PENDING_CUT), cur = VPlayer.current();
+  if (c && cur && cur.id === c.video_id) { PENDING_CUT = 0; if (CUT_ON !== c.id) playCut(c.id); }
+}
 const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
 const bgDay = ts => new Date(ts).toLocaleDateString(LOC, { day: 'numeric', month: 'long', year: 'numeric' });
 // A clip as the player plays it. Uploaded files and Google Drive files play in the page's own <video>, so zoom, slow
@@ -2323,6 +2559,7 @@ function videoTile(v, q, pick){
       ${x.kind === 'link' ? `<span class="vext">↗ ${esc(x.host || 'линк')}</span>` : d ? `<span class="vdur">${esc(fmtDur(d))}</span>` : ''}
       ${ok ? '<span class="vok" title="Одобрено от Съдийската комисия">✓</span>' : ''}
       ${(NOTES[v.id] || []).length ? '<span class="vnote" title="Имате бележки към този клип">📝</span>' : ''}
+      ${(CUTS[v.id] || []).length ? `<span class="vcut" title="Откъси в този клип">✂ ${(CUTS[v.id] || []).length}</span>` : ''}
     </button>
     ${pick && isAdmin() ? `<label class="pick" title="Избери за преместване или копиране"><input type="checkbox" data-pick="${esc(v.id)}"${VPICK.has(v.id) ? ' checked' : ''}></label>` : ''}
     <h3 class="vtitle" title="${esc(v.title)}">${esc(v.title)}</h3>
@@ -2354,10 +2591,12 @@ function openVideo(id, ids, fromHash){
   VP_SYNC = [VID_VER, CATV_VER].join('|');
   if (!fromHash && location.hash !== '#video-' + id) { history.pushState({ vp: 1 }, '', '#video-' + id); VP_PUSHED = true; }
   else if (!fromHash) VP_PUSHED = false;
+  CUT_ON = 0; CUT_FORM = null;
   VPlayer.open({ items, index, details: videoInfo,
-    onChange: x => { if (location.hash !== '#video-' + x.id) history.replaceState(history.state, '', '#video-' + x.id); },
+    onChange: x => { CUT_ON = 0; CUT_FORM = null; if (location.hash !== '#video-' + x.id) history.replaceState(history.state, '', '#video-' + x.id); },
+    onRange: r => { if (!r) cutLeft(); },
     onClose: silent => {
-      VP_Q = [];
+      VP_Q = []; CUT_ON = 0; CUT_FORM = null;
       if (silent) return;
       if (VP_PUSHED) { VP_PUSHED = false; history.back(); }
       else history.replaceState(null, '', '#' + (VIEW === 'bg' ? 'bg' : VIEW));
@@ -2378,7 +2617,9 @@ const VREVIEW_BG = { approved: 'Одобрено от Съдийската ко�
 function videoInfo(x, box){
   const v = VIDEOS.find(y => y.id === x.id);
   if (!v) { box.innerHTML = ''; return; }
-  const key = [v.id, VID_VER, CATV_VER, [...vCats(v)].join(','), (COMMENTS[v.id] || []).length, (NOTES[v.id] || []).length, NOTE_EDIT, isAdmin(), USER && USER.id].join('|');
+  const cf = CUT_FORM && CUT_FORM.vid === v.id ? [CUT_FORM.id, CUT_FORM.parent, CUT_FORM.msg].join(':') : '';
+  const key = [v.id, VID_VER, CATV_VER, [...vCats(v)].join(','), (COMMENTS[v.id] || []).length, (NOTES[v.id] || []).length, NOTE_EDIT, isAdmin(), USER && USER.id,
+    CUT_VER, CUT_ON, cf, VPlayer.canCut()].join('|');
   if (box.dataset.key === key && box.firstChild) return;
   box.dataset.key = key;
   const open = !!box.querySelector('details.vadmin[open]');
@@ -2429,6 +2670,7 @@ function videoInfoHtml(v, adminOpen){
       ${src ? `<a class="btn small" href="${esc(src)}" target="_blank" rel="noopener noreferrer">${driveId(src) ? 'Отвори в Google Drive' : 'Отвори източника'}</a>` : ''}
       ${canDelete ? `<button class="small" data-del="${esc(v.id)}">Изтрий клипа</button>` : ''}</div>
     ${admin}
+    ${cutsHtml(v)}
     <div class="comments">
       <div class="seg vtabs" role="tablist" aria-label="Коментари или бележки">${tab('comments', '💬 Коментари', cs.length)}${tab('notes', '📝 Моите бележки', ns.length)}</div>
       <div class="vpane" data-pane="comments" role="tabpanel"${VTAB === 'comments' ? '' : ' hidden'}>
@@ -2444,6 +2686,7 @@ function bindPlayerActions(){
   root.addEventListener('click', e => {
     const d = e.target.closest('[data-del]'); if (d) { deleteVideo(d.dataset.del); return; }
     const cd = e.target.closest('[data-cdel]'); if (cd) { deleteComment(cd.dataset.cdel); return; }
+    if (cutClick(e)) return;
     const vt = e.target.closest('[data-vtab]'); if (vt) { setVtab(vt.dataset.vtab, vt.closest('.comments')); return; }
     const ne = e.target.closest('[data-nedit]');
     if (ne) { NOTE_EDIT = ne.dataset.nedit; VPlayer.refreshDetails();
@@ -2465,8 +2708,10 @@ function bindPlayerActions(){
     const vc = e.target.closest('[data-vc]');
     if (vc) { const [vid, cid] = vc.dataset.vc.split(':').map(Number); setVideoCat(vid, cid, vc.checked); }
   });
+  root.addEventListener('input', e => { const f = e.target.closest('.cutform'); if (f) cutInput(f); });
   root.addEventListener('submit', e => {
     const f = e.target;
+    if (f.classList.contains('cutform')) { e.preventDefault(); saveCut(f); return; }
     if (f.classList.contains('nform')) { e.preventDefault(); saveNote(f); }
     else if (f.classList.contains('cform')) { e.preventDefault(); postComment(f); }
     else if (f.classList.contains('vaform')) { e.preventDefault(); saveVideoAdmin(f); }

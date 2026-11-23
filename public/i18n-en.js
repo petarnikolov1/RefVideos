@@ -37,6 +37,28 @@ window.BGRW_EN = {
       'Articles come from Google News and Bing News, searched every 30 minutes, and link to the original publishers. Articles about the same incident are grouped into one topic automatically.',
     // the story cards: the toggle, the opened card, the match groups
     'Още': 'More', 'ново': 'new', 'Минути в статиите:': 'Minutes in the articles:',
+    // cuts of a video (откъси): the player's details, the form, the messages
+    '✂ Откъси': '✂ Cuts', 'Откъс': 'Cut', 'Цялото видео': 'Whole video', '✂ Нов откъс': '✂ New cut', 'Нов откъс': 'New cut',
+    'Редактиране на откъса': 'Editing the cut', '· вътре в': '· inside', 'Начало': 'Start', 'Край': 'End', '⌖ Сега': '⌖ Now',
+    'Моментът, в който е видеото сега': 'Where the video is now', 'Бележка (по желание)': 'Note (optional)',
+    'Напр. Дузпа 67′ — контакт в наказателното поле': 'E.g. Penalty 67′ — contact in the box',
+    'Решението, правилото, какво да се гледа': 'The decision, the law, what to watch',
+    'Запази промените': 'Save the changes', 'Запази откъса': 'Save the cut', '▶ Пробвай': '▶ Try it', 'Проба': 'Trial',
+    'Пуснете или спрете видеото на мястото и натиснете „⌖ Сега“. Времето може и да се напише: 1:05.4.':
+      'Play or pause the video at the spot and press "⌖ Now". You can also type the time: 1:05.4.',
+    'Откъсите се пускат в плейъра на сайта: качени файлове, Google Drive и YouTube.': "Cuts play in the site's player: uploaded files, Google Drive and YouTube.",
+    'Още няма откъси. Пуснете видеото, отбележете начало и край и дайте име, например „Дузпа 67′“. Всеки откъс може да има свои откъси вътре.':
+      'No cuts yet. Play the video, mark a start and an end, and give it a name, such as "Penalty 67′". Every cut can hold cuts of its own.',
+    '🔗 линк': '🔗 link', 'Копирай линк към откъса': 'Copy a link to the cut', '+ откъс вътре': '+ cut inside', 'Нов откъс вътре в този': 'A new cut inside this one',
+    'Откъси в този клип': 'Cuts in this clip', 'Този плейър не може да пуска откъси.': "This player can't play cuts.",
+    'Изберете начало.': 'Choose a start.', 'Изберете край.': 'Choose an end.', 'Дайте име на откъса.': 'Give the cut a name.',
+    'Краят трябва да е поне 0,2 секунди след началото.': 'The end must be at least 0.2 seconds after the start.',
+    'Откъсът трябва да е вътре в откъса, към който принадлежи.': 'The cut must lie inside the cut it belongs to.',
+    'Краят е след края на видеото.': 'The end is after the end of the video.',
+    'Откъсите вътре в този трябва да остават в него.': 'The cuts inside this one must still fit in it.',
+    'Откъсът е запазен.': 'The cut is saved.', 'Да изтрия ли този откъс?': 'Delete this cut?',
+    'Да изтрия ли този откъс и откъсите в него?': 'Delete this cut and the cuts inside it?',
+    'Линкът към откъса е копиран.': 'The link to the cut is copied.', 'Линк към откъса:': 'Link to the cut:',
     'Видеоархив на ebfu.net': 'ebfu.net video archive', 'Ситуации:': 'Situations:', 'Ситуации в': 'Situations at', 'Отвори в ebfu.net': 'Open in ebfu.net',
     'Отваря се с вашия вход в ebfu.net. Скок направо до мача и минутата предстои.': 'Opens with your own ebfu.net login. Jumping straight to the match and minute comes next.',
     'Търсенето на видео в статиите работи на публикувания сайт.': 'Finding videos inside articles works on the published site.',
@@ -177,6 +199,8 @@ window.BGRW_EN = {
     'Одобрените членове качват клипове и ги коментират. Администраторите могат да изтрият всеки клип или коментар от страницата „Видео“ (коментарите не се редактират от никого). Всеки член може да пази и лични бележки към клип — никой друг не ги вижда, включително администраторите; членът ги редактира или изтрива.': 'Approved members upload clips and comment on them. Admins can delete any clip or comment from the Video page (comments can’t be edited by anyone). Each member can also keep private notes on a clip — no one else sees them, admins included; the member edits or deletes them.',
   },
   rx: [
+    ['Откъсът не е запазен: (.+)', 'The cut was not saved: $1'], ['Откъсът не е изтрит: (.+)', 'The cut was not deleted: $1'],
+    ['(\\d+),(\\d) с', '$1.$2 s'], ['(\\d+) с', '$1 s'],
     // counts
     ['(\\d+) теми · (\\d+) статии', '$1 topics · $2 articles'], ['(\\d+) тема · (\\d+) статии', '$1 topic · $2 articles'], ['(\\d+) теми · (\\d+) статия', '$1 topics · $2 article'], ['(\\d+) тема · (\\d+) статия', '$1 topic · $2 article'],
     ['(\\d+) статия', '$1 article'], ['(\\d+) статии', '$1 articles'], ['(\\d+) видео', '$1 videos'], ['(\\d+) наказан', '$1 suspended'], ['(\\d+) наказани', '$1 suspended'],
