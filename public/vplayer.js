@@ -14,6 +14,7 @@
 //                                     and a badge names it with ✕ for the whole video. range(null): the whole video.
 //                                     A new video on screen drops the range. opt.onRange(null) says the viewer left it.
 //   VPlayer.getRange()               the stretch being played, or null
+//                                     (update() with another file for the video on screen — another thumbKey — plays it)
 //   VPlayer.marks({ a, b })          the start and end being chosen for a new cut, shown on the bar; marks(null) clears
 //   VPlayer.time(), seek(t)          the position in the video on screen, in seconds (time() is null when the player
 //                                     can't tell: another site's player); canCut() says whether it can
@@ -969,6 +970,8 @@
     if (j < 0) { items = fresh; if (!items.length) return close(); show(clamp(idx, 0, items.length - 1)); return; }
     const was = it();
     items = fresh; idx = j;
+    // another file for the same video (a cut made into the video itself): play the new one
+    if (was && was.thumbKey && fresh[j].thumbKey && was.thumbKey !== fresh[j].thumbKey) { show(j); return; }
     // a new signed link for the same file: the <video> keeps the one it has
     if (was && was.kind === 'file' && items[j].kind === 'file' && was.src !== items[j].src) {
       V.forEach(v => { if (v.dataset.src === was.src) v.dataset.src = items[j].src; });

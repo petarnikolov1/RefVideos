@@ -281,6 +281,11 @@
   .cutform .bar{display:flex;flex-wrap:wrap;gap:6px}
   .cutform .msg:empty{display:none}
   .cutform .vhint{margin:0}
+  .vcuts .cutjob{margin:6px 0 2px 19px;font-size:13px;color:var(--muted)}
+  .vcuts .cutjob.ok{color:var(--accent)}
+  .vcuts .cutjob.err{color:#f87171}
+  .vcuts .vch+.cutjob,.vcuts .vhint+.cutjob{margin-left:0}
+  .vcuts .cutjobbar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin:4px 0 4px 19px}
   .vnote{position:absolute;right:6px;top:6px;z-index:2;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.62);display:grid;place-items:center;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
   button.link{border:none;background:none;padding:0 4px;color:var(--muted);text-decoration:underline;font-size:12px}
 
@@ -1925,9 +1930,101 @@ async function deleteCut(id){
   if (on) { if (parent) playCut(parent.id); else wholeVideo(); }
   renderAll(); VPlayer.refreshDetails();
 }
+/* --- a cut made into a file: a new clip of its own, or the video itself --- */
+// The browser cuts the stretch out of the video's file and re-encodes it (WebCodecs, via Mediabunny: H.264 or VP9 MP4
+// in about the original's quality, read straight from the file: an upload's signed link, or Google Drive through the
+// site), uploads it to the person's own folder, then either
+//   ⤓ нов клип       adds it as a new clip (the original's match, region, categories; the cuts inside go with it), or
+//   ⇤ замени видеото makes it the video itself (video_apply_cut: the rest of the original is gone, the cuts inside stay,
+//                    shifted to the new start; the old file is removed).
+// For the video's uploader and the admins, where the file can be read: uploads and Google Drive (not YouTube).
+let CUT_JOB = null;     // { id (the cut), vid, kind: 'new' | 'replace', text, cls, done, newId }
+const cutSrc = v => { if (!v) return null; const it = vItem(v); return it.kind === 'file' && (v.storage_path || driveId(v.video_url)) ? new URL(it.src, location.href).href : null; };
+const canCutFile = v => canCut(v) && !!cutSrc(v) && typeof VideoEncoder !== 'undefined';
+async function cutToFile(v, start, end, onProgress){
+  if (typeof VideoEncoder === 'undefined') throw new Error('Този браузър не може да реже видео. Използвайте Chrome, Edge или Safari.');
+  const src = cutSrc(v);
+  if (!src) throw new Error('Във файл се режат само качени видеа и видеа от Google Drive.');
+  const M = await (MB_LIB || (MB_LIB = import(MEDIABUNNY).catch(e => { MB_LIB = null; throw new Error('Програмата за видео не се зареди: ' + e.message); })));
+  const open = () => new M.Input({ formats: M.ALL_FORMATS, source: new M.UrlSource(src) });
+  const vt = await open().getPrimaryVideoTrack();
+  if (!vt) throw new Error('Във файла няма видео.');
+  let rate = 0, fps = 0;
+  try { const st = await vt.computePacketStats(150); rate = st.averageBitrate || 0; fps = st.averagePacketRate || 0; } catch (e) {}
+  const len = end - start, room = (MAX_UPLOAD_MB - 3) * 1048576 * 8 / len - 128e3;
+  const run = async factor => {
+    // about the original's bitrate (a re-encode needs a little more to look the same), never more than fits the limit
+    const vb = Math.round(Math.min(room, Math.min(5e6, Math.max(800e3, (rate || 2e6) * 1.15)) * factor));
+    if (vb < 300e3) throw new Error(`Откъсът е твърде дълъг, за да се побере в ${MAX_UPLOAD_MB} MB. Направете го по-кратък.`);
+    const width = Math.min(vt.displayWidth, 1920) & ~1, height = Math.round(width * vt.displayHeight / vt.displayWidth / 2) * 2;
+    const codec = (await M.canEncodeVideo('avc', { width, height, bitrate: vb })) ? 'avc' : (await M.canEncodeVideo('vp9', { width, height, bitrate: vb })) ? 'vp9' : null;
+    if (!codec) throw new Error('Този браузър не може да реже видео. Използвайте Chrome, Edge или Safari.');
+    const acodec = (await M.canEncodeAudio('aac')) ? 'aac' : 'opus';
+    const output = new M.Output({ format: new M.Mp4OutputFormat({ fastStart: 'in-memory' }), target: new M.BufferTarget() });
+    const conv = await M.Conversion.init({ input: open(), output, showWarnings: false, trim: { start, end },
+      video: { width, codec, quality: new M.Quality({ bitrate: vb }), forceTranscode: true, ...(fps > 61 ? { frameRate: 60 } : {}) },
+      audio: { codec: acodec, quality: new M.Quality({ bitrate: 128e3 }), forceTranscode: true } });
+    if (!conv.isValid) throw new Error('Браузърът не може да прочете това видео (' + conv.discardedTracks.map(t => String(t.reason).replace(/_/g, ' ')).join(', ') + ').');
+    const lost = conv.discardedTracks.find(t => t.track && t.track.type === 'audio');
+    if (lost && factor === 1 && !confirmT('Този браузър не може да запази звука на откъса. Да продължа ли без звук?')) throw new Error('Спряно: звукът не можа да се запази.');
+    conv.onProgress = p => onProgress(Math.min(1, p));
+    await conv.execute();
+    return new Blob([output.target.buffer], { type: 'video/mp4' });
+  };
+  let blob = await run(1);
+  if (blob.size > MAX_UPLOAD_MB * 1048576) blob = await run(0.6);     // the encoder overshot: once more, smaller
+  if (blob.size > MAX_UPLOAD_MB * 1048576) throw new Error(`Откъсът стана ${(blob.size / 1048576).toFixed(0)} MB, над ${MAX_UPLOAD_MB} MB. Направете го по-кратък.`);
+  return blob;
+}
+function jobSay(text, cls){
+  if (!CUT_JOB) return;
+  CUT_JOB.text = text; CUT_JOB.cls = cls || '';
+  const el = VPlayer.root.querySelector('.cutjob');
+  if (el) { el.textContent = I18N.tr(text); el.className = 'cutjob ' + CUT_JOB.cls; }
+}
+async function cutFile(id, kind){
+  const c = cutOf(id), v = c && VIDEOS.find(x => x.id === c.video_id);
+  if (!c || !v || !canCutFile(v) || (CUT_JOB && !CUT_JOB.done)) return;
+  if (kind === 'replace' && !confirmT('Да заменя ли видеото с този откъс?\n\nВсичко извън откъса се изтрива завинаги. Откъсите вътре в него остават; тези извън него се изтриват.')) return;
+  CUT_JOB = { id: c.id, vid: v.id, kind, text: 'Режем откъса… 0%', cls: '', done: false };
+  VPlayer.refreshDetails();
+  let path = null;
+  try {
+    const blob = await cutToFile(v, c.start_s, c.end_s, p => jobSay(`Режем откъса… ${Math.round(p * 100)}%`));
+    path = `${USER.id}/${Date.now()}-cut-${c.id}.mp4`;
+    await putFile(path, blob, p => jobSay(`Качване… ${Math.round(p * 100)}%`));
+    jobSay('Записваме…');
+    if (kind === 'replace') {
+      const { data: old, error } = await SB.rpc('video_apply_cut', { p_cut: c.id, p_path: path });
+      if (error) throw error;
+      path = null;                                     // the video's file now
+      if (old) { const { error: e2 } = await SB.storage.from('videos').remove([old]); if (e2) log('The old file was not removed: ' + e2.message); }
+      CUT_ON = 0; CUT_FORM = null; cutMarks();
+      CUT_JOB = { ...CUT_JOB, done: true, cls: 'ok', text: 'Готово: видеото вече е само откъсът.' };
+    } else {
+      const t = c.title.length < 3 ? 'Откъс ' + c.title : c.title;
+      const row = { title: t.slice(0, 200), region: v.region, division: v.division, match: v.match, match_date: v.match_date,
+        description: c.note || v.description || null, article_key: v.article_key || null, article_url: v.article_url || null, storage_path: path, video_url: null };
+      const { data, error } = await SB.from('videos').insert(row).select('id').single();
+      if (error) throw error;
+      path = null;
+      const cats = [...vCats(v)];
+      if (cats.length) { const { error: e2 } = await SB.from('video_category_items').insert(cats.map(k => ({ video_id: data.id, category_id: k }))); if (e2) log('Categories not copied: ' + e2.message); }
+      if (cutCount(v.id, c.id)) { const { error: e3 } = await SB.rpc('video_copy_cuts', { p_cut: c.id, p_video: data.id }); if (e3) log('Cuts not copied: ' + e3.message); }
+      CUT_JOB = { ...CUT_JOB, done: true, cls: 'ok', text: 'Готово: новият клип е в списъка.', newId: data.id };
+    }
+    await loadVideos();                                // the new file and the cuts; the player plays the new file
+  } catch (e) {
+    if (path) { try { await SB.storage.from('videos').remove([path]); } catch (er) {} }
+    CUT_JOB = { ...CUT_JOB, done: true, cls: 'err', text: 'Не стана: ' + I18N.tr(String(e.message || e)) };
+  }
+  VPlayer.refreshDetails();
+}
+const jobHtml = () => `<div class="cutjob ${esc(CUT_JOB.cls || '')}" role="status">${esc(CUT_JOB.text)}</div>` +
+  (CUT_JOB.done ? `<div class="cutjobbar">${CUT_JOB.newId ? `<button class="small" data-cutopen="${esc(CUT_JOB.newId)}">▶ Отвори новия клип</button>` : ''}<button class="small link" data-cutjobx>Скрий</button></div>` : '');
 // the buttons of the cuts section (inside the player); true when the click was one of them
 function cutClick(e){
-  const k = e.target.closest('[data-cutplay],[data-cutall],[data-cutnew],[data-cutin],[data-cutedit],[data-cutdel],[data-cutcopy],[data-cutnow],[data-cuttry],[data-cutcancel]');
+  const k = e.target.closest('[data-cutplay],[data-cutall],[data-cutnew],[data-cutin],[data-cutedit],[data-cutdel],[data-cutcopy],[data-cutnow],[data-cuttry],[data-cutcancel],[data-cutsave],[data-cutreplace],[data-cutopen],[data-cutjobx]');
   if (!k) return false;
   const ds = k.dataset, form = k.closest('.cutform');
   if (ds.cutplay) playCut(ds.cutplay);
@@ -1936,6 +2033,10 @@ function cutClick(e){
   else if (ds.cutin) { const c = cutOf(ds.cutin); if (c) startCut(c.video_id, c.id); }
   else if (ds.cutedit) { const c = cutOf(ds.cutedit); if (c) startCut(c.video_id, 0, c.id); }
   else if (ds.cutdel) deleteCut(ds.cutdel);
+  else if (ds.cutsave) cutFile(ds.cutsave, 'new');
+  else if (ds.cutreplace) cutFile(ds.cutreplace, 'replace');
+  else if (ds.cutopen) { const n = Number(ds.cutopen); CUT_JOB = null; openVideo(n, [n]); }
+  else if ('cutjobx' in ds) { CUT_JOB = null; VPlayer.refreshDetails(); }
   else if (ds.cutnow && form) cutNow(form, ds.cutnow);
   else if ('cuttry' in ds && form) {
     // play the stretch chosen, before saving it (the badge's ✕ goes back)
@@ -1958,6 +2059,7 @@ function cutClick(e){
 // admins' buttons; the form in the place the cut will stand
 function cutsHtml(v){
   const list = CUTS[v.id] || [], can = canCut(v), f = CUT_FORM && CUT_FORM.vid === v.id ? CUT_FORM : null, play = VPlayer.canCut();
+  const file = canCutFile(v), busy = !!(CUT_JOB && !CUT_JOB.done);
   if (!list.length && !can) return '';
   const row = c => {
     const kids = cutKids(v.id, c.id), on = CUT_ON === c.id;
@@ -1967,7 +2069,9 @@ function cutsHtml(v){
         <span class="cr" data-noi18n>${esc(fmtT(c.start_s))}–${esc(fmtT(c.end_s))}</span><span class="cr cl">${esc(fmtLen(c.end_s - c.start_s))}</span>
       </div>
       ${c.note ? `<div class="cn" data-noi18n>${esc(c.note)}</div>` : ''}
-      <div class="cuta"><button class="small link" data-cutcopy="${esc(c.id)}" title="Копирай линк към откъса">🔗 линк</button>${can ? `<button class="small link" data-cutin="${esc(c.id)}" title="Нов откъс вътре в този">+ откъс вътре</button><button class="small link" data-cutedit="${esc(c.id)}">редактирай</button><button class="small link" data-cutdel="${esc(c.id)}">изтрий</button>` : ''}</div>
+      <div class="cuta"><button class="small link" data-cutcopy="${esc(c.id)}" title="Копирай линк към откъса">🔗 линк</button>${can ? `<button class="small link" data-cutin="${esc(c.id)}" title="Нов откъс вътре в този">+ откъс вътре</button><button class="small link" data-cutedit="${esc(c.id)}">редактирай</button><button class="small link" data-cutdel="${esc(c.id)}">изтрий</button>` : ''}${
+        file ? `<button class="small link" data-cutsave="${esc(c.id)}"${busy ? ' disabled' : ''} title="Изрязва откъса в отделен файл и го добавя като нов клип">⤓ нов клип</button><button class="small link" data-cutreplace="${esc(c.id)}"${busy ? ' disabled' : ''} title="Видеото става само този откъс; останалото се изтрива">⇤ замени видеото</button>` : ''}</div>
+      ${CUT_JOB && CUT_JOB.id === c.id ? jobHtml() : ''}
       ${f && (f.id === c.id || (!f.id && f.parent === c.id)) ? cutFormHtml(v, f) : ''}
       ${kids.length ? `<ul>${kids.map(row).join('')}</ul>` : ''}
     </li>`;
@@ -1975,6 +2079,7 @@ function cutsHtml(v){
   return `<section class="vcuts">
     <div class="vch"><h3>✂ Откъси${list.length ? ` <span class="n">${list.length}</span>` : ''}</h3>${CUT_ON ? '<button class="small" data-cutall>Цялото видео</button>' : ''}</div>
     ${play ? '' : '<p class="vhint">Откъсите се пускат в плейъра на сайта: качени файлове, Google Drive и YouTube.</p>'}
+    ${CUT_JOB && CUT_JOB.vid === v.id && !cutOf(CUT_JOB.id) ? jobHtml() : ''}
     ${list.length ? `<ul class="cuts">${cutKids(v.id, 0).map(row).join('')}</ul>`
       : '<p class="vhint">Още няма откъси. Пуснете видеото, отбележете начало и край и дайте име, например „Дузпа 67′“. Всеки откъс може да има свои откъси вътре.</p>'}
     ${can && play ? (f && !f.id && !f.parent ? cutFormHtml(v, f) : f ? '' : `<button class="small primary cutnew" data-cutnew="${esc(v.id)}">✂ Нов откъс</button>`) : ''}
@@ -2593,7 +2698,7 @@ function openVideo(id, ids, fromHash){
   else if (!fromHash) VP_PUSHED = false;
   CUT_ON = 0; CUT_FORM = null;
   VPlayer.open({ items, index, details: videoInfo,
-    onChange: x => { CUT_ON = 0; CUT_FORM = null; if (location.hash !== '#video-' + x.id) history.replaceState(history.state, '', '#video-' + x.id); },
+    onChange: x => { CUT_ON = 0; CUT_FORM = null; if (CUT_JOB && CUT_JOB.done && CUT_JOB.vid !== x.id) CUT_JOB = null; if (location.hash !== '#video-' + x.id) history.replaceState(history.state, '', '#video-' + x.id); },
     onRange: r => { if (!r) cutLeft(); },
     onClose: silent => {
       VP_Q = []; CUT_ON = 0; CUT_FORM = null;
@@ -2619,7 +2724,7 @@ function videoInfo(x, box){
   if (!v) { box.innerHTML = ''; return; }
   const cf = CUT_FORM && CUT_FORM.vid === v.id ? [CUT_FORM.id, CUT_FORM.parent, CUT_FORM.msg].join(':') : '';
   const key = [v.id, VID_VER, CATV_VER, [...vCats(v)].join(','), (COMMENTS[v.id] || []).length, (NOTES[v.id] || []).length, NOTE_EDIT, isAdmin(), USER && USER.id,
-    CUT_VER, CUT_ON, cf, VPlayer.canCut()].join('|');
+    CUT_VER, CUT_ON, cf, VPlayer.canCut(), CUT_JOB ? [CUT_JOB.id, CUT_JOB.done, CUT_JOB.cls].join(':') : ''].join('|');
   if (box.dataset.key === key && box.firstChild) return;
   box.dataset.key = key;
   const open = !!box.querySelector('details.vadmin[open]');

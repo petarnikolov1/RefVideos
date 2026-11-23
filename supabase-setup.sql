@@ -320,6 +320,8 @@ grant execute on function private.can_cut(bigint) to authenticated;
 
 -- who made a cut is set by the database; a cut stays on its video; a cut inside another lies within it, and a change
 -- may not leave the cuts inside it sticking out, nor put a cut inside itself
+-- the guard lets video_apply_cut move a video's cuts all at once (each row alone would break "inside its parent"
+-- halfway through); no request from a page can set this flag
 create or replace function public.video_cuts_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare p record; a bigint; n int := 0;
@@ -331,6 +333,7 @@ begin
   else
     new.created_by := old.created_by; new.creator_name := old.creator_name;
     new.video_id := old.video_id; new.created_at := old.created_at;
+    if current_setting('refvideos.cut_shift', true) = 'on' then new.updated_at := now(); return new; end if;
   end if;
   new.title := btrim(new.title);
   new.note := nullif(btrim(coalesce(new.note, '')), '');
@@ -356,6 +359,7 @@ begin
   end if;
   return new;
 end; $$;
+
 drop trigger if exists video_cuts_guard on public.video_cuts;
 create trigger video_cuts_guard before insert or update on public.video_cuts for each row execute function public.video_cuts_guard();
 revoke execute on function public.video_cuts_guard() from public, anon, authenticated;
@@ -369,6 +373,79 @@ create policy "cuts: owner or admin change" on public.video_cuts for update to a
   using (private.can_cut(video_id)) with check (private.can_cut(video_id));
 drop policy if exists "cuts: owner or admin delete" on public.video_cuts;
 create policy "cuts: owner or admin delete" on public.video_cuts for delete to authenticated using (private.can_cut(video_id));
+
+-- ───────────────────────── a cut made into a video file ─────────────────────────
+-- The browser cuts the stretch out of the file (WebCodecs) and uploads it to the person's own folder; then
+--   video_apply_cut(cut, path)  makes that file the video itself (the rest of the original is gone): the video's file
+--                               becomes the new one (a Google Drive link becomes an uploaded file); its cuts move with
+--                               it — those inside the stretch shift to its new start, those across its edges are
+--                               trimmed, those outside it (or left shorter than 0.2 s) are deleted, and those that now
+--                               span the whole video (the cut itself and the cuts around it) give way to the cuts
+--                               inside them. Returns the old file's path, for the page to remove from Storage.
+--   video_copy_cuts(cut, video) copies the cuts inside a cut to a new video made from it, shifted to its start.
+-- Both for the video's uploader and the admins only (private.can_cut).
+
+create or replace function public.video_apply_cut(p_cut bigint, p_path text) returns text
+language plpgsql security definer set search_path = public as $$
+declare c record; v record; s numeric; e numeric;
+begin
+  select * into c from public.video_cuts where id = p_cut;
+  if not found then raise exception 'Откъсът не е намерен.'; end if;
+  if not private.can_cut(c.video_id) then
+    raise exception 'Само качилият видеото или администратор може да го замени.' using errcode = '42501';
+  end if;
+  -- the new file: uploaded by the person asking, to their own folder, and no other video's file
+  if p_path is null or (storage.foldername(p_path))[1] is distinct from auth.uid()::text
+     or not exists (select 1 from storage.objects o where o.bucket_id = 'videos' and o.name = p_path)
+     or exists (select 1 from public.videos x where x.storage_path = p_path) then
+    raise exception 'Новият файл не е намерен.';
+  end if;
+  select * into v from public.videos where id = c.video_id for update;
+  s := c.start_s; e := c.end_s;
+  update public.videos set storage_path = p_path, video_url = null where id = v.id;
+  perform set_config('refvideos.cut_shift', 'on', true);
+  -- outside the stretch, or less than 0.2 s of it left: gone (the cuts inside them go with them)
+  delete from public.video_cuts where video_id = v.id and least(end_s, e) - greatest(start_s, s) < 0.2;
+  -- the cuts that now span the whole video give way to the cuts inside them
+  update public.video_cuts k set parent_id = null
+    where k.video_id = v.id and not (k.start_s <= s and k.end_s >= e)
+      and k.parent_id in (select w.id from public.video_cuts w where w.video_id = v.id and w.start_s <= s and w.end_s >= e);
+  delete from public.video_cuts where video_id = v.id and start_s <= s and end_s >= e;
+  -- the rest: trimmed to the stretch, which now starts at 0
+  update public.video_cuts set start_s = greatest(start_s, s) - s, end_s = least(end_s, e) - s where video_id = v.id;
+  perform set_config('refvideos.cut_shift', 'off', true);
+  return v.storage_path;
+end; $$;
+
+create or replace function public.video_copy_cuts(p_cut bigint, p_video bigint) returns integer
+language plpgsql security definer set search_path = public as $$
+declare c record; r record; ids jsonb := '{}'; n int := 0; nid bigint;
+begin
+  select * into c from public.video_cuts where id = p_cut;
+  if not found or not private.is_approved() then raise exception 'Откъсът не е намерен.'; end if;
+  if not private.can_cut(p_video) then
+    raise exception 'Само качилият видеото или администратор може да добавя откъси.' using errcode = '42501';
+  end if;
+  for r in
+    with recursive t as (
+      select k.id, k.parent_id, k.title, k.start_s, k.end_s, k.note, 1 as depth from public.video_cuts k where k.parent_id = p_cut
+      union all
+      select k.id, k.parent_id, k.title, k.start_s, k.end_s, k.note, t.depth + 1 from public.video_cuts k join t on k.parent_id = t.id
+    ) select * from t order by depth, start_s
+  loop
+    insert into public.video_cuts (video_id, parent_id, title, start_s, end_s, note)
+      values (p_video, case when r.parent_id = p_cut then null else (ids ->> r.parent_id::text)::bigint end,
+              r.title, r.start_s - c.start_s, r.end_s - c.start_s, r.note)
+      returning id into nid;
+    ids := ids || jsonb_build_object(r.id::text, nid); n := n + 1;
+  end loop;
+  return n;
+end; $$;
+
+revoke execute on function public.video_apply_cut(bigint, text) from public, anon;
+grant execute on function public.video_apply_cut(bigint, text) to authenticated;
+revoke execute on function public.video_copy_cuts(bigint, bigint) from public, anon;
+grant execute on function public.video_copy_cuts(bigint, bigint) to authenticated;
 
 -- ───────────────────────── ebfu.net archive reports ─────────────────────────
 -- structure reports of the ebfu.net video archive, sent by approved members; only admins can read them

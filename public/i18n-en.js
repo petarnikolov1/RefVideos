@@ -59,6 +59,19 @@ window.BGRW_EN = {
     'Откъсът е запазен.': 'The cut is saved.', 'Да изтрия ли този откъс?': 'Delete this cut?',
     'Да изтрия ли този откъс и откъсите в него?': 'Delete this cut and the cuts inside it?',
     'Линкът към откъса е копиран.': 'The link to the cut is copied.', 'Линк към откъса:': 'Link to the cut:',
+    // a cut made into a file: a new clip, or the video itself
+    '⤓ нов клип': '⤓ new clip', '⇤ замени видеото': '⇤ replace the video',
+    'Изрязва откъса в отделен файл и го добавя като нов клип': 'Cuts the stretch into a file of its own and adds it as a new clip',
+    'Видеото става само този откъс; останалото се изтрива': 'The video becomes just this cut; the rest is deleted',
+    'Да заменя ли видеото с този откъс? Всичко извън откъса се изтрива завинаги. Откъсите вътре в него остават; тези извън него се изтриват.':
+      'Replace the video with this cut?\n\nEverything outside the cut is deleted for good. The cuts inside it stay; those outside it are deleted.',
+    'Този браузър не може да запази звука на откъса. Да продължа ли без звук?': "This browser can't keep the cut's sound. Go on without sound?",
+    'Спряно: звукът не можа да се запази.': 'Stopped: the sound could not be kept.',
+    'Записваме…': 'Saving…', 'Готово: видеото вече е само откъсът.': 'Done: the video is now just the cut.',
+    'Готово: новият клип е в списъка.': 'Done: the new clip is in the list.', '▶ Отвори новия клип': '▶ Open the new clip', 'Скрий': 'Hide',
+    'Този браузър не може да реже видео. Използвайте Chrome, Edge или Safari.': "This browser can't cut video. Use Chrome, Edge or Safari.",
+    'Във файл се режат само качени видеа и видеа от Google Drive.': 'Only uploaded videos and Google Drive videos can be cut into a file.',
+    'Във файла няма видео.': 'The file has no video.',
     'Видеоархив на ebfu.net': 'ebfu.net video archive', 'Ситуации:': 'Situations:', 'Ситуации в': 'Situations at', 'Отвори в ebfu.net': 'Open in ebfu.net',
     'Отваря се с вашия вход в ebfu.net. Скок направо до мача и минутата предстои.': 'Opens with your own ebfu.net login. Jumping straight to the match and minute comes next.',
     'Търсенето на видео в статиите работи на публикувания сайт.': 'Finding videos inside articles works on the published site.',
@@ -199,6 +212,11 @@ window.BGRW_EN = {
     'Одобрените членове качват клипове и ги коментират. Администраторите могат да изтрият всеки клип или коментар от страницата „Видео“ (коментарите не се редактират от никого). Всеки член може да пази и лични бележки към клип — никой друг не ги вижда, включително администраторите; членът ги редактира или изтрива.': 'Approved members upload clips and comment on them. Admins can delete any clip or comment from the Video page (comments can’t be edited by anyone). Each member can also keep private notes on a clip — no one else sees them, admins included; the member edits or deletes them.',
   },
   rx: [
+    ['Режем откъса… (\\d+)%', 'Cutting the stretch… $1%'], ['Не стана: (.+)', 'Did not work: $1'],
+    ['Програмата за видео не се зареди: (.+)', 'The video program did not load: $1'],
+    ['Браузърът не може да прочете това видео \\((.+)\\)\\.', "The browser can't read this video ($1)."],
+    ['Откъсът е твърде дълъг, за да се побере в (\\d+) MB\\. Направете го по-кратък\\.', 'The cut is too long to fit in $1 MB. Make it shorter.'],
+    ['Откъсът стана (\\d+) MB, над (\\d+) MB\\. Направете го по-кратък\\.', 'The cut came out at $1 MB, over $2 MB. Make it shorter.'],
     ['Откъсът не е запазен: (.+)', 'The cut was not saved: $1'], ['Откъсът не е изтрит: (.+)', 'The cut was not deleted: $1'],
     ['(\\d+),(\\d) с', '$1.$2 s'], ['(\\d+) с', '$1 s'],
     // counts
