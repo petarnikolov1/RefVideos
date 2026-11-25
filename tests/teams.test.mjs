@@ -7,10 +7,12 @@ import { join } from 'node:path';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const cut = (a, b) => { const i = html.indexOf(a), j = html.indexOf(b, i); if (i < 0 || j < 0) throw new Error('not found: ' + a); return html.slice(i, j); };
-let mn = cut('function matchNewsIndex(){', '  const byMatch = new Map(), byStory = new Map();')
-  .replace('function matchNewsIndex(){', 'function makeIndex(MATCHES){')
-  .replace(/const ckey = [^\n]*\n\s*if \(MN_CACHE\.key === ckey\) return MN_CACHE;\n/, '')
-  .replace(/const vis = new Set\(\[[^\n]*\n/, "const vis = new Set(Object.keys(LEAGUES));\n").replace('MIDX.matches', 'MATCHES');
+// (the links' context: mnContext, made from a given match list)
+const mn = cut('function mnContext(){', "// one headline's matches, worked out once per match list")
+  .replace('function mnContext(){', 'function makeIndex(MATCHES){')
+  .replace(/const key = [^\n]*\n\s*if \(MN_CTX\.key === key\) return MN_CTX;\n/, '')
+  .replace(/const vis = new Set\(\[[^\n]*\n/, "const vis = new Set(Object.keys(LEAGUES));\n").replace(/MIDX\.matches/g, 'MATCHES')
+  .replace('return (MN_CTX = { key, ', 'return ({ ');
 const src = [
   cut('const REFEREES =', 'const SITES ='),
   cut('const CS = list =>', '// which tab an article belongs to'),
@@ -19,7 +21,7 @@ const src = [
   cut('// a youth headline is about the clubs', '// the international media are shown in English only'),
   cut('const CLUB_RX_I =', 'function filteredStories(){'),
   cut('const TEAM_KEY = {', 'let MN_CACHE').replace(/\nconst EURO_LG = [^\n]*/, ''),
-  mn + '  return { hitsOf };\n}',
+  mn,
   'export { makeIndex, parseQuery, clubsOfText, youthArt, clubLabel };',
 ].join('\n');
 const dir = mkdtempSync(join(tmpdir(), 'teams-'));

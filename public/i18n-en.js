@@ -60,6 +60,7 @@ window.BGRW_EN = {
     'Да изтрия ли този откъс и откъсите в него?': 'Delete this cut and the cuts inside it?',
     'Линкът към откъса е копиран.': 'The link to the cut is copied.', 'Линк към откъса:': 'Link to the cut:',
     // a cut made into a file: a new clip, or the video itself
+    'Зареждаме новините…': 'Loading the news…', 'Зареждаме мача…': 'Loading the match…', 'Зареждаме статиите…': 'Loading the articles…',
     '⤓ нов клип': '⤓ new clip', '⇤ замени видеото': '⇤ replace the video',
     'Изрязва откъса в отделен файл и го добавя като нов клип': 'Cuts the stretch into a file of its own and adds it as a new clip',
     'Видеото става само този откъс; останалото се изтрива': 'The video becomes just this cut; the rest is deleted',

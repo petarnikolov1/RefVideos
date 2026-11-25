@@ -888,10 +888,43 @@
   @keyframes floodup{from{opacity:0}}
   @keyframes ringdraw{from{stroke-dashoffset:358}}
   ::view-transition-old(root),::view-transition-new(root){animation-duration:.18s}
+
+  /* the loading mark: the logo's chalk line and centre circle draw themselves again and again over a faint copy. The whole screen while
+     the page first loads (#splash, gone once the section on screen has something to show), and inside a section that
+     waits for its data (.loadmark, which fades in only after a moment, so a quick load never flashes it). With reduced
+     motion the mark stands still. (If the page's script never ran, the splash still steps aside after 20 s.) */
+  #splash{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    background:var(--bg);color:var(--rule);transition:opacity .25s ease;animation:splashoff .3s ease 20s forwards}
+  #splash.gone{opacity:0;pointer-events:none}
+  #splash .lmk{width:84px;height:84px;margin-bottom:6px}
+  #splash .lname{font:800 24px/1 var(--f-head);color:var(--text);letter-spacing:-.01em}
+  #splash .ltxt{font-size:14px;color:var(--muted)}
+  @keyframes splashoff{to{opacity:0;visibility:hidden}}
+  .lmk{display:block;overflow:visible}
+  .lmk line,.lmk .ring{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+  .lmk line{stroke-dasharray:30}
+  .lmk .ring{stroke-dasharray:76;transform:rotate(-90deg);transform-origin:16px 16px}
+  .lmk .spot{fill:currentColor;transform-origin:16px 16px}
+  .lmk .trk{opacity:.2}.lmk .trk line,.lmk .trk circle{fill:none;stroke:currentColor;stroke-width:2;stroke-dasharray:none;animation:none}   /* the whole mark, faint, under the drawing: never an empty moment */
+  .loadmark{display:flex;flex-direction:column;align-items:center;gap:12px;padding:64px 16px;color:var(--rule);animation:lmshow .25s ease .35s both}
+  .loadmark .lmk{width:48px;height:48px}
+  .loadmark.sub{padding:24px 16px;gap:8px}.loadmark.sub .lmk{width:32px;height:32px}
+  .loadmark span{font-size:14px;color:var(--muted)}
+  @keyframes lmshow{from{opacity:0}}
+  @media (prefers-reduced-motion:no-preference){
+    .lmk line{animation:lmline 1.8s cubic-bezier(.3,.7,.2,1) infinite}
+    .lmk .ring{animation:lmring 1.8s cubic-bezier(.3,.7,.2,1) infinite}
+    .lmk .spot{animation:lmspot 1.8s ease infinite}
+  }
+  @keyframes lmline{0%{stroke-dashoffset:30}28%,80%{stroke-dashoffset:0}100%{stroke-dashoffset:-30}}
+  @keyframes lmring{0%,14%{stroke-dashoffset:76}58%,80%{stroke-dashoffset:0}100%{stroke-dashoffset:-76}}
+  @keyframes lmspot{0%,48%{transform:scale(0)}60%,86%{transform:scale(1)}100%{transform:scale(0)}}
 </style>
 </head>
 <body>
 
+<div id="splash" role="status"><svg class="lmk" viewBox="0 0 32 32" aria-hidden="true"><g class="trk"><line x1="16" y1="1" x2="16" y2="31"/><circle cx="16" cy="16" r="12"/></g><line x1="16" y1="1" x2="16" y2="31"/><circle class="ring" cx="16" cy="16" r="12"/><circle class="spot" cx="16" cy="16" r="2.4"/></svg><span class="lname" data-noi18n>eRefBG</span><span class="ltxt">Зареждане…</span></div>
+<script>if (document.documentElement.lang === 'en') document.querySelector('#splash .ltxt').textContent = 'Loading…';</script>
 <header class="top">
   <div class="wrap toprow">
     <a class="brand" href="#bg" aria-label="eRefBG">
@@ -1185,6 +1218,31 @@ const PREV_SEEN = Number(loadJSON(SEEN_KEY)) || (Date.now() - 24 * 3600e3);
 const isNewArt = a => (a.found || 0) > PREV_SEEN;
 const X = loadJSON(XKEY) || {};          // video/minute extraction cache per article
 let VER = 1;                             // bumps whenever articles change (re-group stories)
+// Work that would freeze a phone (grouping a season's articles into stories, reading every article's clubs) runs in
+// slices of about 12 ms between frames: a generator yields where it may pause, and this runs it until it returns.
+// alive(): false drops the work (newer articles came, and a newer job runs).
+function sliced(gen, alive = () => true){
+  return new Promise((resolve, reject) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => {
+      if (!alive()) { ch.port1.close(); resolve(undefined); return; }
+      const end = performance.now() + 12;
+      try {
+        for (;;) { const r = gen.next(); if (r.done) { ch.port1.close(); resolve(r.value); return; } if (performance.now() > end) break; }
+      } catch (e) { ch.port1.close(); reject(e); return; }
+      ch.port2.postMessage(0);
+    };
+    ch.port2.postMessage(0);
+  });
+}
+// the same, only while the page is idle
+function idleSliced(gen){
+  const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 12 }), 30));
+  const step = dl => { try { while (dl.timeRemaining() > 3) if (gen.next().done) return; } catch (e) { return; } idle(step); };
+  idle(step);
+}
+const whenIdle = f => window.requestIdleCallback ? requestIdleCallback(() => f(), { timeout: 4000 }) : setTimeout(f, 1500);
+const runNow = gen => { for (;;) { const r = gen.next(); if (r.done) return r.value; } };
 
 function save(){
   if (!saveJSON(STORE_KEY, Object.assign({}, S, { articles: {} }))) log('Could not save to browser storage');
@@ -1208,10 +1266,11 @@ const fmtDay = ts => { const d = new Date(ts); return `${d.getDate()} ${MON_SHOR
 const fmtDate = ts => { const d = new Date(ts); return `${fmtDay(ts)}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 const seasonStartTs = () => { const t = Date.parse(S.settings.seasonStart + 'T00:00:00'); return isFinite(t) ? t : Date.parse(SEASON_START_DEFAULT); };
 
-const LOG = [];
+const LOG = [], LOG_TIME = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+let LOG_T = 0;
 function log(msg){
-  LOG.push(new Date().toLocaleTimeString('en-GB') + '  ' + msg); if (LOG.length > 300) LOG.shift();
-  const el = $('#log'); if (el) el.textContent = LOG.slice().reverse().join('\n');
+  LOG.push(LOG_TIME.format(new Date()) + '  ' + msg); if (LOG.length > 300) LOG.shift();
+  if (!LOG_T) LOG_T = setTimeout(() => { LOG_T = 0; const el = $('#log'); if (el) el.textContent = LOG.slice().reverse().join('\n'); }, 250);
 }
 function htmlToText(html){
   if (!html) return '';
@@ -1253,32 +1312,72 @@ const youthArt = a => {
 };
 // the international media are shown in English only (articles saved earlier in Spanish, Italian, German or French are left out)
 const HIDDEN_LANGS = ['es', 'it', 'de', 'fr'];
-function useArticles(list){
-  list = list.filter(a => !HIDDEN_LANGS.includes(a.lang) && !notRefereeing(a)).map(youthArt);
+const YA = new Map();                              // aid → [what it was read from, what youthArt changed (or null)]
+const youthArtKept = a => {
+  const sig = [a.title, a.desc || a.descr || '', (a.clubs || []).join(','), (a.divs || []).join(','), a.scope].join('\u0001'), got = YA.get(a.aid);
+  let d = got && got[0] === sig ? got[1] : undefined;
+  if (d === undefined) {
+    const out = youthArt(a);
+    d = out === a ? null : { clubs: out.clubs, ...(out.youth ? { youth: true, divs: out.divs } : {}) };
+    YA.set(a.aid, [sig, d]);
+  }
+  return d ? { ...a, ...d } : a;
+};
+function* articlesGen(list){
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (!HIDDEN_LANGS.includes(a.lang) && !notRefereeing(a)) out.push(youthArtKept(a));
+    if ((i & 7) === 7) yield;
+  }
+  return out;
+}
+function setArticles(list){
   S.articles = Object.fromEntries(list.map(a => [a.aid, a]));
   NEWS.count = list.length;
   NEWS.newest = list.reduce((m, a) => Math.max(m, a.found || 0), 0);
   VER++;
 }
-// a fast start from the copy kept in this browser, then the real list from the database
-(function fromCache(){ const c = loadJSON(NEWS_CACHE); if (c && Array.isArray(c.list)) { useArticles(c.list); NEWS.at = 0; } })();
+const useArticles = list => setArticles(runNow(articlesGen(list)));
+let ART_JOB = 0;
+async function useArticlesSoon(list){
+  const job = ++ART_JOB, out = await sliced(articlesGen(list), () => job === ART_JOB);
+  if (out && job === ART_JOB) setArticles(out);
+  return !!out;
+}
+// a fast start from the copy kept in this browser (read in slices while the logo shows), then the real list from the database
+const CACHE_START = (function fromCache(){
+  const c = loadJSON(NEWS_CACHE);
+  if (!c || !Array.isArray(c.list) || !c.list.length) return Promise.resolve(false);
+  NEWS.at = 0;
+  return useArticlesSoon(c.list).then(ok => { if (ok) scheduleRender(); return ok; });
+})();
 async function loadNews(force){
   if (!SB || NEWS.loading) return;
   if (!force && Date.now() - NEWS.at < 10 * 60e3) return;
   NEWS.loading = true; setBusy(true); hideWarn();
   try {
-    const rows = [];
-    for (let from = 0; ; from += 1000) {            // the database hands out at most 1000 rows per request
-      const { data, error } = await SB.from('news_articles').select(NEWS_COLS).gte('published_at', SEASON_START_ISO)
-        .order('published_at', { ascending: false }).range(from, from + 999);
-      if (error) throw error;
-      rows.push(...(data || []));
-      if (!data || data.length < 1000) break;
-    }
-    useArticles(rows.map(fromRow));
+    await CACHE_START;                              // the copy kept in this browser first, so the two never cross
+    // the database hands out at most 1000 rows per request: the newest thousand first (with how many there are), then
+    // the rest of the season all at once (they used to come one after another)
+    const page = (from, count) => SB.from('news_articles').select(NEWS_COLS, count ? { count: 'exact' } : undefined)
+      .gte('published_at', SEASON_START_ISO).order('published_at', { ascending: false }).range(from, from + 999);
+    const first = await page(0, true);
+    if (first.error) throw first.error;
+    const rows = [...(first.data || [])], total = first.count ?? rows.length;
+    const more = rows.length === 1000 && total > 1000
+      ? Promise.all(Array.from({ length: Math.ceil((total - 1000) / 1000) }, (_, i) => page(1000 * (i + 1)))) : Promise.resolve([]);
+    if (!NEWS.count && rows.length) { await useArticlesSoon(rows.map(fromRow)); scheduleRender(); }   // nothing kept here yet: show these now
+    for (const r of await more) { if (r.error) throw r.error; rows.push(...(r.data || [])); }
+    const seen = new Set(), uniq = rows.filter(r => !seen.has(r.aid) && seen.add(r.aid));   // (pages overlap when articles arrive meanwhile)
+    if (!(await useArticlesSoon(uniq.map(fromRow)))) { NEWS.loading = false; setBusy(false); return; }
     NEWS.at = Date.now(); NEWS.err = '';
-    const keep = Object.values(S.articles).sort((a, b) => b.date - a.date).slice(0, 2500);
-    if (!saveJSON(NEWS_CACHE, { at: NEWS.at, list: keep })) saveJSON(NEWS_CACHE, { at: NEWS.at, list: keep.slice(0, 800) });
+    const at = NEWS.at;
+    whenIdle(() => {                              // (a phone needs a moment to write it: not while the page is drawn)
+      if (NEWS.at !== at) return;
+      const keep = Object.values(S.articles).sort((a, b) => b.date - a.date).slice(0, 2500);
+      if (!saveJSON(NEWS_CACHE, { at, list: keep })) saveJSON(NEWS_CACHE, { at, list: keep.slice(0, 800) });
+    });
     saveJSON(SEEN_KEY, Date.now());               // next visit marks only what is found after now
     log(`Loaded ${rows.length} saved articles`);
   } catch (e) {
@@ -1327,38 +1426,62 @@ const inter = (a, b) => { let n = 0; for (const x of a) if (b.has(x)) n++; retur
 const apart = (a, b) => a.size > 0 && b.size > 0 && !inter(a, b);     // both say, and they say different things
 const jacc = (a, b) => { const i = inter(a, b); return i ? i / (a.size + b.size - i) : 0; };
 // arts sorted oldest → newest; returns groups of indexes
-function clusterArticles(arts){
-  const n = arts.length, F = arts.map(feat), span = STORY_DAYS * 864e5, df = new Map();
+function clusterArticles(arts){ return runNow(clusterGen(arts)); }
+function* clusterGen(arts){
+  const n = arts.length, F = [], span = STORY_DAYS * 864e5, df = new Map();
+  for (let i = 0; i < n; i++) { F.push(feat(arts[i])); if ((i & 63) === 63) yield; }
   for (const f of F) for (const t of f.tok) df.set(t, (df.get(t) || 0) + 1);
   const idf = new Map([...df].map(([t, c]) => [t, Math.log((n + 1) / (c + 1)) ** 2]));
   const len = F.map(f => Math.sqrt([...f.tok].reduce((x, t) => x + idf.get(t), 0)) || 1);
   // similarity of every pair of articles of the same tab within a few days (cosine of the weighted words);
   // a "both" article (Левски in the Europa League) can join either tab's articles
   const nb = arts.map(() => new Map());
-  for (let i = 0; i < n; i++) for (let j = i + 1; j < n && arts[j].date - arts[i].date <= span; j++) {
-    if (F[i].side !== F[j].side && F[i].side !== 'both' && F[j].side !== 'both') continue;
-    let s = 0, shared = 0;
-    for (const t of F[i].tok) if (F[j].tok.has(t)) { s += idf.get(t); shared++; }
-    if (shared < 2) continue;                      // one word in common (a name, "наряд", "глоба") is not enough
-    s /= len[i] * len[j];
-    // a different kind of incident (a fine vs. a referee appointment for the same club) is less likely the same story
-    if (F[i].cats.length && F[j].cats.length && !F[i].cats.some(c => F[j].cats.includes(c))) s *= 0.6;
-    // different clubs, divisions, competitions or rounds: a different story (Дунав's fine is not Марек's fine)
-    if (apart(F[i].clubs, F[j].clubs)) s *= 0.3;
-    if (apart(F[i].comps, F[j].comps)) s *= 0.4;
-    if (apart(F[i].rnd, F[j].rnd)) s *= 0.3;
-    if (apart(F[i].divs, F[j].divs)) s *= 0.6;
-    if (s > 0.08) { nb[i].set(j, s); nb[j].set(i, s); }
+  for (let i = 0; i < n; i++) {
+    if ((i & 15) === 15) yield;
+    for (let j = i + 1; j < n && arts[j].date - arts[i].date <= span; j++) {
+      if (F[i].side !== F[j].side && F[i].side !== 'both' && F[j].side !== 'both') continue;
+      let s = 0, shared = 0;
+      for (const t of F[i].tok) if (F[j].tok.has(t)) { s += idf.get(t); shared++; }
+      if (shared < 2) continue;                      // one word in common (a name, "наряд", "глоба") is not enough
+      s /= len[i] * len[j];
+      // a different kind of incident (a fine vs. a referee appointment for the same club) is less likely the same story
+      if (F[i].cats.length && F[j].cats.length && !F[i].cats.some(c => F[j].cats.includes(c))) s *= 0.6;
+      // different clubs, divisions, competitions or rounds: a different story (Дунав's fine is not Марек's fine)
+      if (apart(F[i].clubs, F[j].clubs)) s *= 0.3;
+      if (apart(F[i].comps, F[j].comps)) s *= 0.4;
+      if (apart(F[i].rnd, F[j].rnd)) s *= 0.3;
+      if (apart(F[i].divs, F[j].divs)) s *= 0.6;
+      if (s > 0.08) { nb[i].set(j, s); nb[j].set(i, s); }
+    }
   }
-  // average linkage: keep joining the two closest groups while they are close enough
-  const size = arts.map(() => 1), members = arts.map((_, i) => [i]), alive = arts.map(() => true);
-  for (;;) {
-    let bi = -1, bj = -1, bv = STORY_SIM;
-    for (let i = 0; i < n; i++) if (alive[i]) for (const [j, sum] of nb[i]) if (j > i) { const v = sum / (size[i] * size[j]); if (v > bv) { bv = v; bi = i; bj = j; } }
-    if (bi < 0) break;
+  // average linkage: keep joining the two closest groups while they are close enough. The pairs wait in a heap, closest
+  // first; a pair queued before one of its groups grew is stale and skipped (the group's pairs are queued again with
+  // their new closeness). The same joins as looking at every pair for every join, which took 8 s on a phone once a
+  // season's articles were in, and takes a few dozen milliseconds this way.
+  const size = arts.map(() => 1), members = arts.map((_, i) => [i]), alive = arts.map(() => true), ver = arts.map(() => 0);
+  const heap = [];                                 // [closeness, i, j, i's version, j's version], i < j
+  const before = (a, b) => a[0] > b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] < b[2])));
+  const swap = (x, y) => { const t = heap[x]; heap[x] = heap[y]; heap[y] = t; };
+  const push = e => { heap.push(e); for (let k = heap.length - 1; k;) { const p = (k - 1) >> 1; if (!before(heap[k], heap[p])) break; swap(k, p); k = p; } };
+  const pop = () => {
+    const top = heap[0], last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      for (let k = 0; ;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < heap.length && before(heap[l], heap[m])) m = l; if (r < heap.length && before(heap[r], heap[m])) m = r; if (m === k) break; swap(k, m); k = m; }
+    }
+    return top;
+  };
+  const queue = (i, j) => { if (i > j) { const t = i; i = j; j = t; } const v = nb[i].get(j) / (size[i] * size[j]); if (v > STORY_SIM) push([v, i, j, ver[i], ver[j]]); };
+  for (let i = 0; i < n; i++) for (const j of nb[i].keys()) if (j > i) queue(i, j);
+  let pops = 0;
+  while (heap.length) {
+    if ((++pops & 255) === 0) yield;
+    const [, bi, bj, vi, vj] = pop();
+    if (!alive[bi] || !alive[bj] || ver[bi] !== vi || ver[bj] !== vj) continue;
     for (const [k, v] of nb[bj]) { if (k === bi) continue; nb[bi].set(k, (nb[bi].get(k) || 0) + v); nb[k].set(bi, (nb[k].get(bi) || 0) + v); nb[k].delete(bj); }
     nb[bi].delete(bj); nb[bj].clear();
-    size[bi] += size[bj]; members[bi].push(...members[bj]); alive[bj] = false;
+    size[bi] += size[bj]; members[bi].push(...members[bj]); alive[bj] = false; ver[bi]++;
+    for (const k of nb[bi].keys()) queue(bi, k);
   }
   return members.filter((_, i) => alive[i]).map(g => g.sort((x, y) => x - y));
 }
@@ -1377,24 +1500,44 @@ const mediaTier = src => { for (const [t, re] of MEDIA) if (re.test(src || '')) 
 const LEADING = 3;                   // a story one of the leading outlets wrote about
 const cutTitle = t => /(\.\.\.|…)\s*$/.test(t) || /\s(?:на|в|от|по|за|и|с|между)\s*$/i.test(t);   // a headline cut off by the feed
 
-let STORY_CACHE = { ver: -1, season: '', list: [] };
-const DUP = new Map();   // aid -> aid of the earlier identical article
+let STORY_CACHE = { ver: -1, season: '', list: [] }, STORY_N = 0, STORY_JOB = '';
+let DUP = new Map();     // aid -> aid of the earlier identical article
+// The stories of the articles there are. While newer articles are being grouped (in slices, storiesGen), the stories
+// as they were stay on screen; the new ones replace them in one go (STORY_N counts the swaps). [] the very first time.
 function buildStories(){
   if (STORY_CACHE.ver === VER && STORY_CACHE.season === S.settings.seasonStart) return STORY_CACHE.list;
-  const min = seasonStartTs();
+  if (!STORY_JOB) {
+    // one job at a time, never dropped: the first articles show as soon as they are grouped, even if more came
+    // meanwhile; those are grouped next (the render after this one asks again)
+    STORY_JOB = VER + '|' + S.settings.seasonStart;
+    sliced(storiesGen()).then(res => { STORY_JOB = ''; installStories(res); scheduleRender(); },
+      e => { STORY_JOB = ''; log('Grouping the stories failed: ' + (e.message || e)); });
+  }
+  return STORY_CACHE.list;
+}
+const storiesBusy = () => !!STORY_JOB;
+function installStories(res){ DUP = res.dup; STORY_CACHE = { ver: res.ver, season: res.season, list: res.list }; STORY_N++; }
+// all at once (tests, the console)
+function buildStoriesNow(){
+  if (STORY_CACHE.ver !== VER || STORY_CACHE.season !== S.settings.seasonStart) { STORY_JOB = ''; installStories(runNow(storiesGen())); }
+  return STORY_CACHE.list;
+}
+function* storiesGen(){
+  const ver = VER, season = S.settings.seasonStart, min = seasonStartTs();
   const arts = Object.values(S.articles).filter(a => a.date >= min).sort((x, y) => x.date - y.date);
-  DUP.clear();
-  const list = [];
-  for (const idx of clusterArticles(arts)) {
+  const dup = new Map(), list = [];
+  let k = 0;
+  for (const idx of yield* clusterGen(arts)) {
+    if ((++k & 31) === 0) yield;
     const g = idx.map(i => arts[i]);            // oldest → newest
     const originals = [];
     for (const a of g) {
       const f = feat(a);
       const d = originals.find(o => o.f.base === f.base || jacc(o.f.full, f.full) >= 0.85);
-      if (d) DUP.set(a.aid, d.a.aid); else originals.push({ a, f });
+      if (d) dup.set(a.aid, d.a.aid); else originals.push({ a, f });
     }
     const central = a => g.length < 2 ? 0 : g.reduce((x, b) => x + (b === a ? 0 : jacc(feat(a).tok, feat(b).tok)), 0) / (g.length - 1);
-    const rank = a => mediaTier(a.src) * 10 + central(a) * 8 + (a.desc ? 1 : 0) - (cutTitle(a.title) ? 6 : 0) - (DUP.has(a.aid) ? 2 : 0);
+    const rank = a => mediaTier(a.src) * 10 + central(a) * 8 + (a.desc ? 1 : 0) - (cutTitle(a.title) ? 6 : 0) - (dup.has(a.aid) ? 2 : 0);
     const rep = g.map(a => [a, rank(a)]).sort((x, y) => (y[1] - x[1]) || (x[0].date - y[0].date))[0][0];
     const union = (key, filler) => { const s = new Set(g.flatMap(a => a[key] || [])); if (filler && s.size > 1) s.delete(filler); return [...s]; };
     const sources = new Set(g.map(a => a.src)).size;
@@ -1408,8 +1551,7 @@ function buildStories(){
       hot: score >= 12 || sources >= 4, hasNew: g.some(isNewArt), vh: g.some(a => a.vh),
     });
   }
-  STORY_CACHE = { ver: VER, season: S.settings.seasonStart, list };
-  return list;
+  return { ver, season, list, dup };
 }
 function storyMatch(s){
   const count = {};
@@ -1628,7 +1770,7 @@ async function loadMatchVids(ids){
 }
 function storyMatchMedia(s){
   if (VIEW === 'results') return { items: [], need: [] };
-  const ms = (matchNewsIndex().byStory.get(s.key) || []).filter(m => m.status === 'finished' || m.status === 'live').slice(-2);
+  const ms = cardLinks(s).filter(m => m.status === 'finished' || m.status === 'live').slice(-2);
   const items = [], need = [], seen = new Set();
   for (const m of ms) {
     const id = String(m.id), v = matchVids(id);
@@ -2174,15 +2316,33 @@ function renderNav(){
   if (ac._html !== a) ac.innerHTML = ac._html = a;
   $('#diag').hidden = !isAdmin();   // the diagnostics log: for admins
 }
+// the mark inside a section that waits for its data
+// (sub: a part of a page that has the rest to show — the loading screen doesn't wait for it)
+const LOADING = (t = 'Зареждане…', sub) => `<div class="loadmark${sub ? ' sub' : ''}" role="status"><svg class="lmk" viewBox="0 0 32 32" aria-hidden="true"><g class="trk"><line x1="16" y1="1" x2="16" y2="31"/><circle cx="16" cy="16" r="12"/></g><line x1="16" y1="1" x2="16" y2="31"/><circle class="ring" cx="16" cy="16" r="12"/><circle class="spot" cx="16" cy="16" r="2.4"/></svg><span>${esc(I18N.tr(t))}</span></div>`;
+// the loading screen goes once the section on screen has something to show: no loading mark in it (and at most after 15 s)
+const SPLASH = document.getElementById('splash');
+function splashCheck(force){
+  if (!SPLASH || SPLASH.classList.contains('gone')) return;
+  const v = document.querySelector('main > section:not([hidden])');
+  if (!force && (!v || v.querySelector('.loadmark:not(.sub)'))) return;
+  SPLASH.classList.add('gone');
+  setTimeout(() => SPLASH.remove(), 400);
+}
+setTimeout(() => splashCheck(true), 15000);
+// (also between redraws, from the first one on: a section can fill itself when its data comes)
+let SPLASH_T = 0;
+const splashWatch = () => { if (SPLASH_T || !SPLASH) return;
+  SPLASH_T = setInterval(() => { splashCheck(); if (SPLASH.classList.contains('gone')) clearInterval(SPLASH_T); }, 250); };
 function renderAll(){
   renderNav();
   syncPlayer();
-  if (VIEW === 'bg' || VIEW === 'world') render();
+  if (VIEW === 'bg' || VIEW === 'world') { LINK_UNTIL = performance.now() + 40; try { render(); } finally { LINK_UNTIL = Infinity; } lateLinks(); }
   else if (VIEW === 'results') { renderResults(); refreshMatchNews(); }
   else if (VIEW === 'videos') renderVideos();
   else if (VIEW === 'forum') Forum.render();
   else if (VIEW === 'account') renderAccount();
   else if (VIEW === 'admin') renderAdmin();
+  splashCheck(); splashWatch();
 }
 
 /* ======================= UI: NEWS ======================= */
@@ -2249,8 +2409,15 @@ function updateLastRun(){
 // stories, not ЦСКА 1948's, ЦСКА II's or the youth teams'; "ЦСКА 1948", "ЦСКА II" and "ЦСКА U17" find just those.
 // The rest of the words are looked for as text.
 const CLUB_RX_I = CLUBS.map(c => ({ k: c.k, re: new RegExp(c.re.source, 'iu') }));   // people type "цска"
+let PQ = { raw: null, q: null };
 function parseQuery(raw){
+  if (PQ.raw === raw) return PQ.q;
+  const q = parseQueryNow(raw); PQ = { raw, q };
+  return q;
+}
+function parseQueryNow(raw){
   let rest = String(raw || '');
+  if (!rest.trim()) return { keys: [], text: '' };   // (an empty box needs none of the clubs' patterns)
   const youth = RX_YOUTH.test(rest), keys = [];
   for (const c of CLUB_RX_I) {
     const m = rest.match(c.re);
@@ -2381,7 +2548,9 @@ function matchHead(m, n){
 // A match with many stories shows its first two (the leading outlets first) and "+ още 3 теми за мача" for the rest.
 const MG_SHOWN = 2, MG_OPEN = new Set();
 function withDays(page){
-  const idx = VIEW === 'results' ? null : matchNewsIndex().byStory, first = s => idx && (idx.get(s.key) || [])[0];
+  if (LINK_UNTIL !== Infinity) LINK_UNTIL = performance.now() + 40;   // (the share of this redraw starts with the cards)
+  let n = 0;
+  const first = s => (VIEW === 'results' ? null : cardLinks(s, n++ < 6)[0]);   // (the first screen always with its matches)
   let out = '';
   for (let i = 0; i < page.length;) {
     const k = dayNo(page[i].date); let j = i;
@@ -2410,10 +2579,13 @@ function withDays(page){
 // its rounds. Rounds that have started (or start within four days: the referee appointments come first), each with how
 // many of the stories on screen are about it; a competition none of whose rounds has a story isn't offered.
 const roundLg = id => String(id).slice(0, String(id).lastIndexOf('|'));
-function roundChoices(world, sel, stories){
+function roundLgs(world, sel){
   const comps = !world ? [] : sel.sect === 'top5' || sel.sect === 'euro' ? WSECT[sel.sect][1] : !sel.sect ? [...WSECT.top5[1], ...WSECT.euro[1]] : [];
-  const lgs = world ? comps.filter(c => !sel.group.size || sel.group.has(c)).map(c => COMP_LG[c]).filter(Boolean)
+  return world ? comps.filter(c => !sel.group.size || sel.group.has(c)).map(c => COMP_LG[c]).filter(Boolean)
     : Object.keys(LEAGUES).filter(lg => !sel.group.size || sel.group.has(LG_DIV[lg]));
+}
+function roundChoices(world, sel, stories){
+  const lgs = roundLgs(world, sel);
   const R = roundIndex(), count = new Map(), inLg = new Map(), soon = Date.now() + 4 * DAY;
   for (const s of stories) {
     const ids = storyRounds(s);
@@ -2482,7 +2654,8 @@ function render(){
   renderChips($('#catChips'), CATS, sel.cats, byGroup, 'cats');
   const all = byCat.filter(s => byGroup.includes(s));
   // one round of a competition ("efbet Лига · Кръг 14"): the stories about its matches
-  const rc = roundChoices(world, sel, all);
+  const rc = !$('#fpanel').hidden || sel.round ? roundChoices(world, sel, all) : { lgs: roundLgs(world, sel), list: [] };
+  if (STORY_N && !linksReady()) prebuildLinks();
   if (sel.round && !rc.lgs.includes(roundLg(sel.round))) sel.round = '';
   if (sel.round) sel.rcomp = roundLg(sel.round);
   else if (sel.rcomp && !rc.lgs.includes(sel.rcomp)) sel.rcomp = '';
@@ -2500,9 +2673,12 @@ function render(){
   $('#fstat').hidden = !narrowed;
   const feed = $('#feed');
   // updated in place: a video being watched under a story keeps playing
-  if (!list.length) {
+  // (nothing to show yet, and the news or their stories are still on the way)
+  const waiting = !list.length && (NEWS.loading || storiesBusy() || !NEWS.at || STORY_CACHE.ver !== VER) && !NEWS.err && AUTH !== 'off' && AUTH !== 'error';
+  if (waiting) patchHtml(feed, LOADING('Зареждаме новините…'));
+  else if (!list.length) {
     const any = Object.keys(S.articles).length;
-    patchHtml(feed, `<div class="empty">${NEWS.loading && !any ? 'Зареждаме запазените новини…' : any ? 'Няма теми за тези филтри.' : NEWS.err ? 'Новините не се заредиха — натиснете ↻, за да опитате пак.' : 'Още няма теми.'}</div>`);
+    patchHtml(feed, `<div class="empty">${any ? 'Няма теми за тези филтри.' : NEWS.err ? 'Новините не се заредиха — натиснете ↻, за да опитате пак.' : 'Още няма теми.'}</div>`);
   } else patchHtml(feed, byDay ? withDays(list.slice(0, shown), list) : list.slice(0, shown).map(storyCard).join(''));
   $('#more').hidden = list.length <= shown;
   updateLastRun();
@@ -2557,7 +2733,7 @@ function renderVideos(){
   if (upKey !== UP_KEY) {
     UP_KEY = upKey;
     if (AUTH === 'off' || AUTH === 'error') box.innerHTML = `<div class="warn">Видеата изискват връзка с базата данни, която на този сайт още не е настроена.</div>`;
-    else if (AUTH === 'loading') box.innerHTML = '<p class="muted">Зареждане…</p>';
+    else if (AUTH === 'loading') box.innerHTML = LOADING();
     else if (!USER) box.innerHTML = `<div class="card"><b>Само за членове</b><p class="muted">Клиповете и коментарите на членовете се виждат от членове, одобрени от администратор. <a href="#account">Вход или регистрация</a>.</p></div>`;
     else if (!member) box.innerHTML = `<div class="card"><b>Чака одобрение</b><p class="muted">Профилът ви е регистриран. Щом администраторът го одобри, ще можете да гледате, качвате и коментирате клиповете на членовете.</p></div>`;
     else preserveForm(box, () => { box.innerHTML = uploadForm(); if (DRIVE_PICK) drawDrivePick(); });
@@ -3387,7 +3563,7 @@ const Forum = (() => {
     const member = approved();
     let html;
     if (AUTH === 'off' || AUTH === 'error') html = '<div class="warn">Форумът има нужда от връзката с базата данни, която не е настроена на този сайт.</div>';
-    else if (AUTH === 'loading') html = '<p class="muted">Зареждане…</p>';
+    else if (AUTH === 'loading') html = LOADING();
     else if (!USER) html = `<div class="card"><b>Само за членове</b><p class="muted">Форумът — документи, филми и тренировки за подготовка на съдиите — е за членовете, одобрени от администратора. <a href="#account">Влезте или се регистрирайте</a>.</p></div>`;
     else if (!member) html = `<div class="card"><b>Очаква одобрение</b><p class="muted">Профилът ви е регистриран. След като администраторът го одобри, ще виждате форума и ще можете да публикувате.</p></div>`;
     if (html) { KEY = ''; if (box._html !== html) box.innerHTML = box._html = html; return; }
@@ -3413,7 +3589,7 @@ const Forum = (() => {
           <button class="primary${formOpen ? ' on' : ''}" data-fnew aria-expanded="${formOpen}">${formOpen ? '✕ Затвори' : '＋ Нова публикация'}</button></div>
         ${formOpen ? `<div class="card fnewbox" data-key="fnewbox">${form(null)}</div>` : ''}
         ${S.err ? `<div class="warn">Форумът не се зареди: ${esc(S.err)}</div>` : ''}
-        <div id="fList" data-key="fList">${!S.loaded && !S.err ? '<p class="muted">Зареждане…</p>'
+        <div id="fList" data-key="fList">${!S.loaded && !S.err ? LOADING()
           : list.length ? list.map(card).join('')
           : `<div class="empty">${q ? 'Нищо не е намерено в този раздел.' : `Още няма публикации в „${esc(c.label)}“.`}</div>`}</div>`}`);
       if (!tests) fillThumbs(box);
@@ -3698,7 +3874,7 @@ const Quiz = (() => {
   function render(b){
     if (b) box = b;
     if (!box || !box.isConnected) return;
-    if (!D.loaded) { ensure(); if (box._wait !== 1) { box.innerHTML = '<p class="muted">Зареждане…</p>'; box._wait = 1; } return; }
+    if (!D.loaded) { ensure(); if (box._wait !== 1) { box.innerHTML = LOADING(); box._wait = 1; } return; }
     box._wait = 0;
     let html = D.err ? `<div class="warn">Тестовете не се заредиха: ${esc(D.err)}</div>` : '';
     if (view === 'active' && sess) html += activeHtml();
@@ -4208,7 +4384,7 @@ function renderAccount(force){
 function drawAccount(box){
   if (AUTH === 'off') { box.innerHTML = `<div class="card"><h2>Профили</h2><p class="muted">Входът още не е настроен на този сайт. Новините са отворени за всички — профил трябва само за клиповете.</p></div>`; return; }
   if (AUTH === 'error') { box.innerHTML = `<div class="warn">Услугата за вход не се зареди. Опитайте по-късно.</div>`; return; }
-  if (AUTH === 'loading') { box.innerHTML = '<p class="muted">Зареждане…</p>'; return; }
+  if (AUTH === 'loading') { box.innerHTML = LOADING(); return; }
   if (RECOVERY) {
     box.innerHTML = `<div class="card"><h2>Нова парола</h2><form class="form" id="pwForm"><label>Нова парола<input type="password" name="password" minlength="8" required autocomplete="new-password"></label><button class="primary" type="submit">Запази паролата</button><div id="accMsg" class="msg"></div></form></div>`;
     return;
@@ -4850,9 +5026,9 @@ let MP_FROM_LIST = false, MP_SEEN = '';
 function renderMatchPage(box, force){
   const { lg, id } = FB.match;
   const back = `<div class="mpage"><div class="mpbar"><a class="mback" href="#results" data-mback>${ICO.back}Мачове</a></div>`;
-  if (isWorld(lg) && !FB.comps) { box.innerHTML = back + '<p class="muted">Зареждане…</p></div>'; return; }
+  if (isWorld(lg) && !FB.comps) { box.innerHTML = back + LOADING('Зареждаме мача…') + '</div>'; return; }
   const d = FB.data[lg];
-  if (!d) { box.innerHTML = back + `<p class="muted">${FB.err ? esc('Не можа да се зареди: ' + FB.err) : 'Зареждане…'}</p></div>`; loadFootball(lg); return; }
+  if (!d) { box.innerHTML = back + (FB.err ? `<p class="muted">${esc('Не можа да се зареди: ' + FB.err)}</p>` : LOADING('Зареждаме мача…')) + '</div>'; loadFootball(lg); return; }
   loadFootball(lg);   // refreshed quietly when older than 5 minutes
   const m = (d.matches || []).find(x => String(x.id) === String(id));
   if (!m) { box.innerHTML = back + '<p class="mempty">Мачът не е намерен. Може да е от друг сезон.</p></div>'; RES_KEY = ''; return; }
@@ -4860,9 +5036,10 @@ function renderMatchPage(box, force){
   if (LEAGUES[lg]) FB.round[lg] = m.round;
   else if (d.rounds) { const gi = d.rounds.findIndex(r => r.matches.some(x => String(x.id) === String(id))); if (gi >= 0) FB.round[lg] = gi; }
   if (LEAGUES[lg]) { loadMatchCoverage(lg, [m]); loadSheets(lg, [m]); }
-  if (MP_SEEN !== lg + '|' + id) {
+  const idx = MP_SEEN !== lg + '|' + id && matchNewsSoon();
+  if (idx) {
     MP_SEEN = lg + '|' + id;
-    const idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(String(id))) || [];
+    const ss = idx.byMatch.get(String(id)) || [];
     queueExtract(ss.slice(0, 10).flatMap(st => extractTargets(st).slice(0, 2)));
   }
   const key = ['match', lg, id, d.ver, SHEETS.ver, [...FB.open].join(',')].join('|');
@@ -5093,9 +5270,9 @@ function renderResults(force){
   // the World news links here: open the section the reader was looking at
   if (FB.want && FB.comps) { const c = visibleComps().find(x => x.grp === FB.want); if (c) FB.league = FB.last[FB.want] || c.key; FB.want = ''; }
   if (isWorld(FB.league) && FB.comps && !visibleComps().some(c => c.key === FB.league)) FB.league = 'efbet';
-  if (isWorld(FB.league) && !FB.comps) { box.innerHTML = '<p class="muted">Зареждаме мачовете…</p>'; return; }
+  if (isWorld(FB.league) && !FB.comps) { box.innerHTML = LOADING('Зареждаме мачовете…'); return; }
   const lg = FB.league, d = FB.data[lg];
-  if (!d) { box.innerHTML = leagueBar() + `<p class="muted">${FB.err ? esc('Не се зареди: ' + FB.err) : 'Зареждаме мачовете…'}</p>`; loadFootball(lg); return; }
+  if (!d) { box.innerHTML = leagueBar() + (FB.err ? `<p class="muted">${esc('Не се зареди: ' + FB.err)}</p>` : LOADING('Зареждаме мачовете…')); loadFootball(lg); return; }
   if (d.world) return renderWorldResults(box, lg, d, force);
   loadFootball(lg);   // refresh quietly when older than 5 minutes
   const ms = d.matches;
@@ -5337,11 +5514,33 @@ async function loadMatchIndex(force){
       all.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
-    MIDX.matches = all; MIDX.at = Date.now();
     WORLD_NAMES = new Set(all.filter(m => !LEAGUES[m.league]).flatMap(m => [m.home_name, m.away_name]));
+    await sliced(warmMatchers(all, true));          // the Bulgarian clubs before the list is used, the rest after it
+    MIDX.matches = all; MIDX.at = Date.now();
+    idleSliced(warmMatchers(all, false));          // (when nothing else is waiting: the stories come first)
   } catch (e) { log('The match list for the news could not be loaded: ' + (e.message || e)); MIDX.at = Date.now() - 25 * 60e3; }
   MIDX.loading = false;
   scheduleRender();
+}
+// The teams' patterns are long (every town a club is not from): the browser prepares each one the first time it is used
+// and again, faster, the second time — a tenth of a second for the season's first headlines, four times that on a
+// phone, in the middle of drawing the page. They are made and run twice here, a few at a time: the Bulgarian clubs' (every
+// headline) before the list is used, the other teams' (only the world's headlines) after it
+const WARM_TXT = 'Аб в Ab c';
+function warmRx(r){ if (!r) return; for (let n = 0; n < 2; n++) { r.lastIndex = 0; r.test(WARM_TXT); } r.lastIndex = 0; }
+function* warmMatchers(all, bg){
+  if (bg && !CLUBS.warm) {
+    CLUBS.warm = true;
+    for (const c of CLUBS) { warmRx(clubWordG(c.k)); yield; warmRx(sticky(c)); yield; }
+  }
+  for (const m of all) for (const n of [m.home_name, m.away_name]) {
+    if (bg !== !!LEAGUES[m.league]) continue;
+    const t = teamMatcher(n);                      // (kept per name)
+    yield;
+    if (!t || t.warm || (bg && !t.bg)) continue;
+    t.warm = true;
+    for (const r of [t.re, t.endRe, t.startRe, t.loose, t.lEnd, t.lStart]) { warmRx(r); yield; }
+  }
 }
 const COMP_LG = { eng: 'eng.1', esp: 'esp.1', ita: 'ita.1', ger: 'ger.1', fra: 'fra.1', ucl: 'uefa.champions', uel: 'uefa.europa', uecl: 'uefa.europa.conf' };
 const EURO_LG = ['uefa.champions', 'uefa.europa', 'uefa.europa.conf'];
@@ -5373,8 +5572,9 @@ const RX_SHORT_CLUB = /^["„“«]?(?:Локо(?:мотив)?|Ботев|Спа
 // "„Янтра“ (Полски Тръмбеш)", "Левски (Лом)": a club's name with another town, and no club of the list is that one
 const RX_TOWN_AFTER = new RegExp(`^["“”»']?\\s*(?:\\(\\s*(?!\\p{Lu}{3,}\\s*\\))(?![Вв]идео|[Сс]нимки|[Гг]алерия)\\p{Lu}[^()]{0,23}\\)|(?:${TOWNS})(?![\\p{L}]))`, 'u');
 const STICKY = new Map(), sticky = c => STICKY.get(c.k) || (STICKY.set(c.k, new RegExp(c.re.source, 'uy')), STICKY.get(c.k));
+const CLUB_WORD_G = new Map(), clubWordG = k => CLUB_WORD_G.get(k) || (CLUB_WORD_G.set(k, new RegExp(clubWord(k).source, 'gu')), CLUB_WORD_G.get(k));
 function otherClub(t){
-  for (const c of CLUBS) for (const m of t.matchAll(new RegExp(clubWord(c.k).source, 'gu'))) {
+  for (const c of CLUBS) for (const m of t.matchAll(clubWordG(c.k))) {
     if (!RX_TOWN_AFTER.test(t.slice(m.index + m[0].length))) continue;
     if (!CLUBS.some(o => { const r = sticky(o); r.lastIndex = m.index; return r.test(t); })) return true;
   }
@@ -5391,7 +5591,14 @@ function looseWord(c){
   const w = c.label.split(' ')[0];
   return c.label.includes(' ') && !CLUBS.some(o => o.re.test(w)) ? CS([w === 'Локомотив' ? 'Локо(?:мотив)?' : w]) : null;
 }
+// (kept per name: a team's matcher is the same whatever the match list)
+const TEAM_M = new Map();
 function teamMatcher(name){
+  const ck = name + (isWorldName(name) ? '|w' : '');
+  if (!TEAM_M.has(ck)) TEAM_M.set(ck, teamMatcherNow(name));
+  return TEAM_M.get(ck);
+}
+function teamMatcherNow(name){
   const n = teamName(name), k = TEAM_KEY[name] || TEAM_KEY[n];
   let t = null;
   if (k) { const c = CLUBS.find(x => x.k === k);
@@ -5403,11 +5610,15 @@ function teamMatcher(name){
   return t;
 }
 const DAY = 864e5;
-let MN_CACHE = { key: '' };
-// every story → the matches it is about; every match → its stories
-function matchNewsIndex(){
-  const ckey = VER + '|' + MIDX.at + '|' + (FB.comps ? FB.comps.length : 0) + '|' + S.settings.seasonStart;
-  if (MN_CACHE.key === ckey) return MN_CACHE;
+let MN_CACHE = { key: '' }, MN_CTX = { key: '' };
+// The links between stories and matches. What one headline is about is worked out once per match list and kept
+// (mnContext().arts), so new articles only add their own work; a story's matches are kept until its articles change
+// (storyLinks). The cards on screen ask for their own stories only; the whole index (every match → its stories, the
+// rounds in the filters, the match pages) is put together from the same pieces, ahead of time when the page is idle
+// (prebuildLinks). It used to be worked out whole, for the season's 2,000 stories, before the first card was drawn.
+function mnContext(){
+  const key = MIDX.at + '|' + (FB.comps ? FB.comps.length : 0) + '|' + S.settings.seasonStart;
+  if (MN_CTX.key === key) return MN_CTX;
   const POST = ['red', 'penalty', 'offside', 'var', 'foul', 'discipline', 'fights', 'dispute'];   // about a match already played
   const vis = new Set([...Object.keys(LEAGUES), ...visibleComps().map(c => c.key)]);
   const teams = new Map(), byTeam = new Map(), natKeys = new Set();
@@ -5520,40 +5731,135 @@ function matchNewsIndex(){
     }
     return hits;
   }
-  const byMatch = new Map(), byStory = new Map();
   // the match the per-match search found an article for ("Николай Митов след равния в Самоков…" names no team)
   const mById = new Map(MIDX.matches.filter(m => m._t).map(m => [String(m.id), m]));
   const info = a => ({ bg: artSide(a) !== 'world', world: a.scope === 'world', eur: (a.divs || []).includes('eur'), comps: a.comps || [], cats: a.cats || [], t0: a.date });
+  return (MN_CTX = { key, hitsOf, mById, info, arts: new Map(), stories: new Map() });
+}
+// one headline's matches, worked out once per match list
+function artHits(C, a){
+  if (!C.arts.has(a.aid)) C.arts.set(a.aid, C.hitsOf(a.title, C.info(a)));
+  return C.arts.get(a.aid);
+}
+// a story's matches, oldest first: each headline on its own; a match counts for the story when at least a quarter of its
+// headlines that name a team point to it
+const storySig = s => s.arts.map(a => a.aid + (DUP.has(a.aid) ? '=' : '')).join(',');
+function storyLinks(s){
+  if (VIEW === 'results' && !MIDX.matches.length) return [];
+  const C = mnContext(), sig = storySig(s), got = C.stories.get(s.key);
+  if (got && got.sig === sig) return got.ms;
+  const count = new Map();
+  let named = 0;
+  for (const a of s.arts) {
+    if (DUP.has(a.aid)) continue;
+    const own = a.match && C.mById.get(a.match), h0 = artHits(C, a);
+    const h = h0 ? new Map(h0) : own ? new Map() : null;
+    if (!h) continue;
+    if (own) h.set(a.match, own);
+    named++;
+    h.forEach((m, id) => count.set(id, { m, n: (count.has(id) ? count.get(id).n : 0) + 1 }));
+  }
+  // no headline names a team: the descriptions, taken together (not when a headline is about a youth or reserve team:
+  // its description names the club without saying so again)
+  if (!named && !s.arts.some(a => RX_YOUTH.test(a.title) || RX_RESERVES.test(a.title))) {
+    const h = C.hitsOf(s.arts.map(a => a.desc || '').join(' \n '), Object.assign(C.info(s.rep), { bg: s.bg, world: s.world, comps: s.comps, cats: s.cats, t0: s.first }));
+    if (h) { named = 1; h.forEach((m, id) => count.set(id, { m, n: 1 })); }
+  }
+  const ms = [];
+  count.forEach(({ m, n }) => { if (n >= Math.max(1, Math.ceil(named / 4))) ms.push(m); });
+  ms.sort((a, b) => a._t - b._t);
+  C.stories.set(s.key, { sig, ms });
+  return ms;
+}
+// The cards being drawn: a story's matches are worked out while this redraw still has time for it (LINK_UNTIL); after
+// that its card is drawn without them for now, and they are worked out a headline at a time and drawn a moment later
+// (on a phone the first redraw used to stop for every card's matches: about one and a half seconds)
+const NO_LINKS = [];
+let LINK_UNTIL = Infinity, LINK_JOB = false;
+const LINK_LATE = new Set();
+function cardLinks(s, now){
+  const C = mnContext(), got = C.stories.get(s.key);
+  if (got && got.sig === storySig(s)) return got.ms;
+  for (const a of s.arts) {                        // (a headline at a time: one story can have fifty)
+    if (!now && performance.now() >= LINK_UNTIL) { LINK_LATE.add(s); return NO_LINKS; }
+    if (!DUP.has(a.aid)) artHits(C, a);
+  }
+  return storyLinks(s);
+}
+function lateLinks(){
+  if (LINK_JOB || !LINK_LATE.size) return;
+  LINK_JOB = true;
+  sliced((function* (){
+    while (LINK_LATE.size) {
+      const s = LINK_LATE.values().next().value;
+      LINK_LATE.delete(s);
+      for (const a of s.arts) if (!DUP.has(a.aid)) { artHits(mnContext(), a); yield; }
+      storyLinks(s); yield;
+    }
+  })()).then(() => { LINK_JOB = false; scheduleRender(); }, e => { LINK_JOB = false; LINK_LATE.clear(); log('The matches of the stories failed: ' + (e.message || e)); });
+}
+// every story → the matches it is about; every match → its stories
+function matchNewsIndex(){
+  const C = mnContext(), ckey = STORY_N + '|' + C.key;
+  if (MN_CACHE.key === ckey) return MN_CACHE;
+  const byMatch = new Map(), byStory = new Map();
   for (const s of buildStories()) {
-    // each headline on its own; a match counts for the story when at least a quarter of its headlines that name a team point to it
-    const count = new Map();
-    let named = 0;
-    for (const a of s.arts) {
-      if (DUP.has(a.aid)) continue;
-      const own = a.match && mById.get(a.match);
-      const h = hitsOf(a.title, info(a)) || (own ? new Map() : null);
-      if (!h) continue;
-      if (own) h.set(a.match, own);
-      named++;
-      h.forEach((m, id) => count.set(id, { m, n: (count.has(id) ? count.get(id).n : 0) + 1 }));
-    }
-    // no headline names a team: the descriptions, taken together (not when a headline is about a youth or reserve team:
-    // its description names the club without saying so again)
-    if (!named && !s.arts.some(a => RX_YOUTH.test(a.title) || RX_RESERVES.test(a.title))) {
-      const h = hitsOf(s.arts.map(a => a.desc || '').join(' \n '), Object.assign(info(s.rep), { bg: s.bg, world: s.world, comps: s.comps, cats: s.cats, t0: s.first }));
-      if (h) { named = 1; h.forEach((m, id) => count.set(id, { m, n: 1 })); }
-    }
-    count.forEach(({ m, n }, id) => {
-      if (n < Math.max(1, Math.ceil(named / 4))) return;
-      if (!byMatch.has(id)) byMatch.set(id, []);
-      byMatch.get(id).push(s);
-      if (!byStory.has(s.key)) byStory.set(s.key, []);
-      byStory.get(s.key).push(m);
-    });
+    const ms = storyLinks(s);
+    if (!ms.length) continue;
+    byStory.set(s.key, ms);
+    for (const m of ms) { const id = String(m.id); if (!byMatch.has(id)) byMatch.set(id, []); byMatch.get(id).push(s); }
   }
   byMatch.forEach(list => list.sort((a, b) => b.date - a.date));
-  byStory.forEach(list => list.sort((a, b) => a._t - b._t));
   return (MN_CACHE = { key: ckey, byMatch, byStory });
+}
+const linksReady = () => MN_CACHE.key === STORY_N + '|' + mnContext().key;
+// the news are still coming, or their stories are being put together
+const newsPending = () => (!NEWS.at || NEWS.loading || storiesBusy() || STORY_CACHE.ver !== VER) && !NEWS.err && AUTH !== 'off' && AUTH !== 'error';
+// the match pages: the index when it is ready; until then it is put together while the page is idle, and drawn after
+const matchNewsSoon = () => linksReady() ? matchNewsIndex() : (prebuildLinks(), null);
+// one match's stories before the whole index is ready (a link straight to a match page): only a story with a headline
+// from a week before the match to three weeks after it can be about it (hitsOf), or one the per-match search found for
+// it. Null while they are worked out, a headline at a time
+const MS_SOON = { key: '', list: null };
+function matchStoriesSoon(m){
+  const idx = matchNewsSoon(), id = String(m.id);
+  if (idx) return idx.byMatch.get(id) || [];
+  const C = mnContext(), key = STORY_N + '|' + C.key + '|' + id;
+  if (MS_SOON.key === key) return MS_SOON.list;
+  MS_SOON.key = key; MS_SOON.list = null;
+  const t = Date.parse(m.kickoff);
+  const near = buildStories().filter(s => s.arts.some(a => a.match === id || (a.date >= t - 8 * DAY && a.date <= t + 22 * DAY)));
+  sliced((function* (){
+    for (const s of near) { for (const a of s.arts) if (!DUP.has(a.aid)) { artHits(C, a); yield; } storyLinks(s); yield; }
+  })(), () => MS_SOON.key === key).then(() => {
+    if (MS_SOON.key !== key) return;
+    MS_SOON.list = near.filter(s => storyLinks(s).some(x => String(x.id) === id)).sort((a, b) => b.date - a.date);
+    scheduleRender();
+  }, e => log('The stories of the match failed: ' + (e.message || e)));
+  return null;
+}
+// the whole index, a little at a time while the page is idle (a phone never stops for it), then the round filters
+let PREBUILD = '';
+function prebuildLinks(){
+  const want = STORY_N + '|' + mnContext().key;
+  if (PREBUILD === want) return;                   // already on its way
+  PREBUILD = want;
+  const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 12 }), 30));
+  const stories = buildStories();
+  let i = 0, j = 0;
+  const step = dl => {
+    if (PREBUILD !== want || want !== STORY_N + '|' + mnContext().key) return;
+    const C = mnContext();
+    while (i < stories.length && dl.timeRemaining() > 3) {
+      const s = stories[i];
+      if (j < s.arts.length) { const a = s.arts[j++]; if (!DUP.has(a.aid)) artHits(C, a); continue; }
+      storyLinks(s); i++; j = 0;
+    }
+    if (i < stories.length) { idle(step); return; }
+    matchNewsIndex();
+    if (VIEW === 'results' || !$('#fpanel').hidden || (SEL[VIEW === 'world' ? 'world' : 'bg'] || {}).round) scheduleRender();
+  };
+  idle(step);
 }
 
 /* ── the competitions' rounds, for the news ── */
@@ -5676,11 +5982,13 @@ function coverageHtml(id, cov){
 // news feed, and the match's own coverage under them
 const MN_HTML = {};
 function matchNewsStrip(lg, m, page){
-  const id = String(m.id), idx = matchNewsIndex(lg), ss = (idx && idx.byMatch.get(id)) || [], cov = LEAGUES[lg] ? matchCoverage(m) : [];
+  const id = String(m.id), got = page ? matchStoriesSoon(m) : (matchNewsSoon() || { byMatch: new Map() }).byMatch.get(id), ss = got || [];
+  const cov = LEAGUES[lg] ? matchCoverage(m) : [];
   const played = m.status === 'finished' || m.status === 'live';
   const none = !played ? 'Още няма статии за този мач.' : LEAGUES[lg] ? 'Няма статии за този мач.' : 'Няма статии за съдийството в този мач.';
-  if (page) return !ss.length && !cov.length ? `<p class="mempty">${none}</p>`
-    : `<div class="mnewsbox">${ss.length && cov.length ? '<div class="mnhead">⚖ Съдийството</div>' : ''}${ss.map(storyCard).join('')}${cov.length ? coverageHtml(id, cov) : ''}</div>`;
+  const wait = page && !ss.length && (!got || newsPending()) ? LOADING('Зареждаме статиите…', true) : '';   // (not "no articles" while they come)
+  if (page) return !ss.length && !cov.length ? wait || `<p class="mempty">${none}</p>`
+    : `<div class="mnewsbox">${ss.length && cov.length ? '<div class="mnhead">⚖ Съдийството</div>' : ''}${ss.map(storyCard).join('')}${wait}${cov.length ? coverageHtml(id, cov) : ''}</div>`;
   if (!ss.length && !cov.length) return `<div class="mnews none">${none.slice(0, -1)}</div>`;
   const nRef = ss.reduce((a, s) => a + s.arts.length, 0), nCov = cov.reduce((a, g) => a + 1 + g.also.length, 0), n = nRef + nCov;
   const open = FB.mnOpen.has(id), fresh = ss.some(s => s.hasNew) || cov.some(g => isNewArt(g.a));
@@ -5734,7 +6042,7 @@ function toggleMatchNews(id){
   open ? FB.mnOpen.add(id) : FB.mnOpen.delete(id);
   refreshMatchNews();
   if (open) {
-    const idx = matchNewsIndex(FB.league), ss = (idx && idx.byMatch.get(id)) || [];
+    const idx = matchNewsSoon(), ss = (idx && idx.byMatch.get(id)) || [];
     queueExtract(ss.slice(0, 10).flatMap(s => extractTargets(s).slice(0, 2)));
     ss.filter(s => EXPANDED.has(s.key)).forEach(s => queueExtract(extractTargets(s), true));
   }
@@ -5743,7 +6051,7 @@ function toggleMatchNews(id){
 // (the closed card shows the first match, from = 0, to = 1, with "+ още N"; the opened card lists the next ones)
 function matchLinks(s, from = 0, to = 3){
   if (VIEW === 'results') return '';
-  const ms = (matchNewsIndex().byStory.get(s.key) || []).slice(from);
+  const ms = cardLinks(s).slice(from);
   if (!ms.length) return '';
   const k = to - from;
   return `<div class="mlinks">${ms.slice(0, k).map(m => {
@@ -5804,6 +6112,7 @@ function initUI(){
   const FOPEN = 'bgRefWatch.fopen';
   const setPanel = (open, focus) => {
     $('#fpanel').hidden = !open; $('#ftoggle').setAttribute('aria-expanded', open); saveJSON(FOPEN, open);
+    if (open) scheduleRender();                     // its rounds are worked out when it is open
     if (focus) (open ? $('#fpanel').querySelector('button,select,input') : $('#ftoggle')).focus();
   };
   setPanel(!!loadJSON(FOPEN));
@@ -5988,7 +6297,7 @@ window.addEventListener('pageshow', e => { if (e.persisted) { checkVersion(true)
 setTimeout(() => checkVersion(false), 1500);
 setInterval(() => checkVersion(document.hidden), 10 * 60e3);
 
-window.BGRW = { forum: Forum, checkVersion, loadNews, buildStories, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
+window.BGRW = { forum: Forum, checkVersion, loadNews, buildStories: buildStoriesNow, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
 })();
 </script>
 </body>

@@ -10,7 +10,7 @@ const cut = (a, b) => { const i = html.indexOf(a), j = html.indexOf(b, i); if (i
 const src = [
   "const DAY = 864e5; const DUP = new Map(); const esc = s => String(s); const EN = false, LOC = 'bg-BG';",
   "const storyCard = (s, dayed, grouped) => `<card ${s.key}${grouped === true ? ' grouped' : ''}>`; const CHEVRON = '';",
-  "let VIEW = 'bg'; const MATCHES_OF = new Map(); const matchNewsIndex = () => ({ byStory: MATCHES_OF }); const teamName = n => n; const compOf = () => null;",
+  "let VIEW = 'bg'; const MATCHES_OF = new Map(); const matchNewsIndex = () => ({ byStory: MATCHES_OF }); let LINK_UNTIL = Infinity; const cardLinks = s => MATCHES_OF.get(s.key) || []; const teamName = n => n; const compOf = () => null;",
   "const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига', sw3: 'Трета лига Югозапад' };",
   cut('const BG_DAYS =', 'const bgDate ='),
   cut('// World competitions on the Results page', '// a short fingerprint'),
