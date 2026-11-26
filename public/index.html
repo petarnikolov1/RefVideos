@@ -114,12 +114,8 @@
   @media (max-width:640px){
     .fbar{margin-top:10px}
     .ftoggle{padding:7px 10px}
-    #sectChips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-    #sectChips::-webkit-scrollbar{display:none}
-    #sectChips>button{white-space:nowrap;padding:7px 11px;font-size:13px}
   }
   @media (max-width:420px){ .xs-hide{display:none} }
-  @media (max-width:360px){ .ftoggle .ftxt{display:none} }
   input[type=search],input[type=date],input[type=text],input[type=email],input[type=password],input[type=url],input[type=number],select,textarea{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);max-width:100%}
   input[type=search]{width:100%}
   textarea{width:100%;min-height:70px}
@@ -810,6 +806,27 @@
   .seg>button,.seg>.chip{background:none;font-size:14px}
   .seg>.on{background:var(--accent);color:var(--accent-ink)}
   .chip{font-size:13.5px;padding:5px 11px}
+  /* the top of the news: the search box with a magnifier, Filters (outlined, with its icon and name: a control, not one more
+     chip) and Refresh; under them the main categories as one segmented row, equal parts, all in sight on a phone */
+  .fbar{gap:6px;margin-top:12px}
+  .qbox{position:relative;flex:1 1 auto;min-width:0;display:block}
+  .qbox .qi{position:absolute;left:12px;top:50%;width:19px;height:19px;margin-top:-9.5px;fill:none;stroke:var(--muted);stroke-width:2;stroke-linecap:round;pointer-events:none}
+  .fbar .qbox input[type=search]{width:100%;height:46px;padding:0 8px 0 38px;font-size:16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--text)}
+  .fbar .qbox input[type=search]::placeholder{color:var(--muted);opacity:1}
+  .fbar .qbox input[type=search]:focus{border-color:var(--accent);outline:2px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:1px}
+  .fbar .ficon{flex:0 0 42px;width:42px;height:46px;border-radius:12px}
+  .fbar .ftoggle{flex:0 0 auto;height:46px;padding:0 12px;border-radius:12px;border:1.5px solid var(--text);background:none;color:var(--text);font:700 14.5px/1 var(--f-body);gap:7px}
+  .fbar .ftoggle[aria-expanded="true"]{background:var(--text);color:var(--bg)}
+  .fbar .ftoggle[aria-expanded="true"] .fcount{background:var(--bg);color:var(--text)}
+  .cats{display:flex;margin-top:10px;border:1.5px solid var(--line);border-radius:12px;overflow:hidden}
+  .cats>button{flex:1 1 auto;min-width:0;min-height:40px;padding:4px 6px;border:0;border-radius:0;background:none;color:var(--text);font:650 14px/1.08 var(--f-body)}   /* (English names may take two lines) */
+  .cats>button+button{border-left:1.5px solid var(--line)}
+  .cats>button.on{background:var(--accent);color:var(--accent-ink)}
+  .cats>button.on+button,.cats>button+button.on{border-left-color:var(--accent)}
+  .cats>button:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+  @media (max-width:400px){ .fbar .ftoggle{padding:0 10px} .fbar .qbox input[type=search]{padding-left:35px;padding-right:4px} .qbox .qi{left:10px} }
+  @media (max-width:370px){ .cats>button{font-size:13px} }
+  @media (max-width:340px){ .fbar .ftoggle .ftxt{display:none} }
   .newsround{border-color:var(--line)}
   .newsround .rlinks a,.newsround .rlinks button.link{color:var(--text);text-decoration:underline}
 
@@ -942,13 +959,16 @@
 <main class="wrap">
   <!-- Bulgaria + World share this view -->
   <section id="view-news">
-    <!-- the filters take one row: search, a Filters button that opens the rest, Refresh; what is switched on shows as pills -->
+    <!-- the top of the news: a search box that looks like one (a magnifier), the Filters button outlined with its icon and
+         name, Refresh; under them the main categories, all four in sight (Новини: all, the three leagues; Свят: all, national
+         teams, European cups, the top 5 leagues). The Filters panel opens under them; what is switched on shows as pills -->
     <div id="newsFilters">
       <div class="fbar">
-        <input id="q" type="search" placeholder="Отбор, съдия, дума…" aria-label="Търси в новините">
+        <label class="qbox"><svg class="qi" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><input id="q" type="search" placeholder="Търси отбор, съдия" aria-label="Търси в новините" enterkeyhint="search"></label>
         <button id="ftoggle" class="ftoggle" aria-expanded="false" aria-controls="fpanel"><span class="fic" aria-hidden="true"><i></i><i></i><i></i></span><span class="ftxt">Филтри</span><span id="fcount" class="fcount" hidden></span></button>
         <button id="btnRefresh" class="ficon" title="Провери за нови статии" aria-label="Провери за нови статии"><span>↻</span></button>
       </div>
+      <div id="sectChips" class="cats" role="group" aria-label="Категории"></div>
       <div id="fpanel" class="fpanel" hidden>
         <p class="intro" id="intro"></p>
         <div class="flabel" id="groupLabel">Дивизия</div>
@@ -971,7 +991,6 @@
         </div>
         <div class="fpfoot"><span id="lastRun" class="muted"></span><button id="fdone" class="small">Готово</button></div>
       </div>
-      <div id="sectChips" class="chips seg" hidden></div>
       <div class="fstat" id="fstat" hidden><span id="pills"></span><span id="count" class="muted"></span></div>
       <div id="roundBar" class="roundnav newsround" hidden></div>
     </div>
@@ -1190,7 +1209,7 @@ function reserveOnly(c, text){       // the club named in the text only as its r
 }
 const clubLabel = k => { const [b, t] = k.split('~'); const l = CLUB_LABEL[b]; return !l ? '' : t === 'y' ? l + ' (юноши)' : t === 'r' ? l + ' II' : l; };
 
-const DIVS = { d1:'Първа лига (efbet)', d2:'Втора лига', d3:'Трета лига', cup:'Купа на България', youth:'Юноши', eur:'Европа и чужбина', unk:'Некласифицирани' };
+const DIVS = { d1:'Първа лига (efbet)', d2:'Втора лига', d3:'Трета лига', cup:'Купа на България', youth:'Юноши', eur:'В Европа', unk:'Некласифицирани' };
 // which tab an article belongs to: Bulgarian, World, or both (a Bulgarian club in a European cup, a Bulgarian referee abroad)
 const artSide = a => a.scope === 'bg' ? 'bg' : (a.divs || []).includes('eur') ? 'both' : 'world';
 const COMPS = { nat:'Национални отбори', ucl:'Шампионска лига', uel:'Лига Европа', uecl:'Лига на конференциите',
@@ -2433,10 +2452,72 @@ function parseQueryNow(raw){
 // the clubs a piece of text is about (videos have no tags): as the news analysis tags them, youth teams with "~y"
 const clubsOfText = t => { const y = RX_YOUTH.test(t); t = teamText(t); return new Set(CLUBS.filter(c => c.re.test(t)).map(c => y ? youthKey(c.k) : reserveOnly(c, t) ? c.k + '~r' : c.k)); };
 const storyClubs = s => s._clubs || (s._clubs = new Set(s.arts.flatMap(a => a.clubs || [])));
+// Новини or Свят: every story is in one of the two tabs, never both. Новини is Bulgarian football: a Bulgarian club (also
+// in the European cups: "Марсилия – Левски"), Bulgaria's national teams, the Bulgarian leagues, cups, БФС and its
+// committees. Свят is football abroad, also when a Bulgarian referee is on the pitch ("Кабаков ще свири Съндърланд –
+// Ягелония") or a Bulgarian club is only someone's rival ("съперници на Левски"). (A story used to be in Новини when any of
+// its articles was, and the articles tagged "Bulgarian angle abroad" in both tabs: Кабаков's appointments, Ман Юнайтед –
+// Спортинг with a Bulgarian-sounding headline, "Arda Güler" read as Арда Кърджали.) Each headline is read in turn:
+//   1. a Bulgarian club or the national team → Новини
+//   2. a foreign club, a foreign competition, or the search already put it in the World → Свят
+//   3. БФС, the Bulgarian leagues and cups, a derby, the regional football → Новини
+//   4. a foreign country, УЕФА or ФИФА → Свят;  nothing of the kind → Новини
+// and the story goes where most of its headlines go (its leading headline counts twice; a tie goes with it).
+let SIDE_RX = null;
+function sideRx(){
+  if (SIDE_RX) return SIDE_RX;
+  const wt = Object.entries(WORLD_TEAMS), nat = wt.findIndex(([k]) => k === 'Albania');
+  // (Милан Петров is a referee; Атлетик (Куклен) plays in the regional league)
+  const clubs = wt.slice(0, nat).flatMap(([, v]) => v).map(p => p === 'Милан' ? 'Милан(?!\\s+\\p{Lu}\\p{Ll})' : p.startsWith('Атлетик') ? 'Атлетик(?!\\s*\\(?\\s*Куклен)(?: Билбао)?' : p);
+  const nations = wt.slice(nat).filter(([k]) => k !== 'Bulgaria').flatMap(([, v]) => v);
+  const more = ['Порто', 'Бенфика', 'Брага', 'Спортинг', 'Аякс', 'ПСВ', 'Фейенорд', 'Селтик', 'Рейнджърс', 'Галатасарай', 'Фенербахче', 'Бешикташ', 'Трабзон(?:спор)?',
+    'Олимпиакос', 'Панатинайкос', 'ПАОК', 'АЕК', 'Хайдук', 'Динамо (?:Загреб|Киев|Букурещ|Москва|Тбилиси)', 'Ц[ъ]?рвена звезда', 'Партизан', 'ФКСБ', 'Стяуа', 'ЧФР Клуж',
+    'Шахтьор', 'Ред Бул', 'Залцбург', 'Рапид', 'Брюж', 'Андерлехт', 'Генк', 'Копенхаген', 'Малмьо', 'Молде', 'Буде[ /-]Глимт', 'Будьо[ /-]Глимт', 'Легия', 'Лех(?: Познан)?',
+    'Ракув', 'Ференцварош', 'Маккаби', 'Апоел', 'Омония', 'Ягелония', 'Пафос', 'Шериф', 'Карабах', 'Базел', 'Янг Бойс', 'Славия Прага', 'Спарта Прага', 'Виктория Пилзен',
+    'Зенит', 'Спартак Москва', 'ЦСКА Москва', 'Ал[ -]Насър', 'Ал[ -]Хилал', 'Интер Маями'].map(n => n + '\\p{L}{0,3}');
+  const latin = Object.values(BG_LATIN);
+  SIDE_RX = {
+    foreign: CS([...clubs, ...more]),
+    nations: CS(nations),
+    bgLatin: new RegExp('(?<![\\p{L}])(?:' + latin.join('|') + ')(?![\\p{L}])', 'u'),
+    abroad: /(?<![\p{L}])(?:[Шш]ампионск(?:а|ата)\s+лига|[Лл]ига(?:та)?\s+Европа|[Лл]ига(?:та)?\s+на\s+конференциите|[Кк]онферентн\p{L}*\s+лига|[Лл]ига(?:та)?\s+на\s+нациите|[Сс]ветовн(?:о|ото)(?:\s+(?:клубно\s+)?първенство)?(?![\p{L}])|[Мм]ондиал\p{L}*|Евро\s?20\d\d|[Ее]вропейско(?:то)?\s+първенство|Премиър\s+лийг\p{L}*|Ла\s+Лига|Серия\s+А(?![\p{L}])|Бундеслиг\p{L}*|Копа\s+Америка|в\s+чужбина|в\s+Европа|международн\p{L}*\s+(?:назначени|наряд)\p{L}*|(?:испанск|италианск|английск|германск|френск|португалск|турск|гръцк|румънск)\p{L}*\s+(?:(?:първ|втор|трет)\p{L}*\s+)?(?:дивизи|лига|първенств)\p{L}*)/u,
+    home: /(?<![\p{L}])(?:БФС|[Сс]ъдийск(?:ата)?\s+комисия|[Дд]исциплинарн(?:ата)?\s+комисия|СК\s+на\s+БФС|ДК\s+на\s+БФС|efbet|ЕФБЕТ|MrBit|[Пп]ърва(?:та)?\s+лига|[Вв]тора(?:та)?\s+лига|[Тт]рета(?:та)?\s+лига|(?:Супер)?[Кк]упа(?:та)?\s+на\s+България|[Оо]бластн\p{L}*|[АБ]\s+ОФГ|ОФГ|аматьорск\p{L}*|[Ее]литн\p{L}*\s+(?:юношеск\p{L}*\s+)?група|[Дд]ерби(?:то)?|Колежа|Герена|„?Васил Левски“?|[Чч]ужд\p{L}*\s+(?:съди|рефер|арбит)\p{L}*)/u,
+    // (a foreigner on the pitch: "Кабаков изгони израелец"; not a foreign referee, who is named with the match he refs)
+    weak: /(?<![\p{L}])(?:УЕФА|ФИФА|IFAB|UEFA|FIFA|[Ии]зраел(?:ец|ци|тянин)|[Аа]нгличан(?:ин|и)|[Ии]спан(?:ец|ци)|[Ии]талиан(?:ец|ци)|[Гг]ерман(?:ец|ци)|[Фф]ранцуз(?:ин|и)|[Пп]ортугал(?:ец|ци)|[Хх]оланд(?:ец|ци)|[Бб]разил(?:ец|ци)|[Аа]ржентин(?:ец|ци))(?![\p{L}])/u,
+    // Bulgaria's national teams: their nicknames; "България – Исландия", "мача на България"; with the national teams' tag,
+    // "България" except "в България" and "съдия номер едно на България"; and, last of all, "националния отбор"
+    nat: /(?<![\p{L}])(?:[Нн]ационалите|[Тт]рикольорите|„?[Лл]ъвовете“?|Bulgaria|[Нн]ационал\p{L}*\s+отбор\p{L}*\s+на\s+България|България\s+(?:U|до\s*)\d\d|(?:мач|срещ|двубо|победа|загуба|равен|домакинств|гостуван|квалификаци)\p{L}*\s+(?:на|за|с|срещу)\s+България)(?![\p{L}])/u,
+    natPair: new RegExp('(?<![\\p{L}])(?:България\\s*(?:[-–—:]|и|срещу|с)\\s*(?:' + nations.join('|') + ')|(?:' + nations.join('|') + ')\\s*(?:[-–—:]|и|срещу|с)\\s*България)(?![\\p{L}])', 'u'),
+    bgName: /(?<![\p{L}])България(?![\p{L}])/u,
+    notNat: /(?:(?<![\p{L}])[ВвУу]\s+България|(?:[Сс]ъди|[Рр]ефер|[Аа]рбит|[Фф]утбол|[Шш]ампионат|[Пп]ървенств)\p{L}*(?:\s+\S+){0,3}\s+на\s+България)(?![\p{L}])/u,
+    natAny: /(?<![\p{L}])[Нн]ационал\p{L}*\s+отбор\p{L}*(?![\p{L}])/u,
+    rival: /((?:[Сс]ъперни|[Пп]ротивни|[Оо]понент|[Кк]онкурент)\p{L}*(?:\s+\p{Ll}+){0,2}\s+на\s+)(["„“«]?\p{Lu}[\p{L}\-]*(?:\s+\p{Lu}[\p{L}\-]*)?["“”»]?)/gu,
+  };
+  return SIDE_RX;
+}
+// (the headline first; only when it says nothing either way, the article's description: "Революция във футбола: треньорите
+// вече могат да изискват VAR преразглеждане" is the U17 World Cup in Qatar)
+function textFeed(text, a){
+  const X = sideRx(), t = teamText(text).replace(X.rival, (m, x, b) => x + blank(b));
+  const natTag = a && (a.comps || []).includes('nat');
+  if (CLUBS.some(c => c.re.test(t)) || X.bgLatin.test(t) || X.nat.test(text) || X.natPair.test(text)
+    || (natTag && X.bgName.test(text) && !X.notNat.test(text))) return 'bg';
+  if ((a && (a.scope === 'world' || (a.comps || []).length)) || X.foreign.test(t) || X.abroad.test(text)) return 'world';
+  if (X.home.test(text) || X.natAny.test(text)) return 'bg';
+  if (X.nations.test(t) || X.weak.test(text)) return 'world';
+  return '';
+}
+const artFeed = a => a._feed || (a._feed = textFeed(String(a.title || ''), a) || textFeed(String(a.desc || a.descr || '')) || 'bg');
+function storySide(s){
+  if (s.side) return s.side;
+  let bg = 0, world = 0;
+  for (const a of s.arts) { const w = a === s.rep ? 2 : 1; if (artFeed(a) === 'bg') bg += w; else world += w; }
+  return (s.side = bg > world ? 'bg' : world > bg ? 'world' : artFeed(s.rep));
+}
 function filteredStories(){
   const scope = VIEW === 'world' ? 'world' : 'bg';
   const q = parseQuery($('#q').value);
-  return buildStories().filter(s => s[scope] &&
+  return buildStories().filter(s => storySide(s) === scope &&
     (!$('#onlyNew').checked || s.hasNew) && (!$('#onlyHot').checked || s.hot) && (!$('#hideRead').checked || !storyRead(s)) &&
     (!$('#onlyMajor').checked || s.lead) && q.keys.every(k => storyClubs(s).has(k)) &&
     (!q.text || s.arts.some(a => norm(a.title + ' ' + a.desc + ' ' + a.src).includes(q.text))));
@@ -2629,19 +2710,25 @@ function renderRoundBar(sel, list, stories){
     step(next, '›', 'Следващ кръг');
 }
 
+const MAIN_DIVS = [['d1', 'Първа лига'], ['d2', 'Втора лига'], ['d3', 'Трета лига']];   // (the youth and the cup: in Filters)
 function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
   $('#intro').innerHTML = world
-    ? 'Съдийството в националните отбори, евротурнирите (Шампионска лига, Лига Европа, Лига на конференциите) и петте водещи първенства: Англия, Испания, Италия, Германия и Франция. <a href="#results" data-world-results>Мачове и класирания</a>'
-    : 'Съдийството в efbet Лига, Втора и Трета лига и Купата на България, и българските клубове и съдии в Европа и чужбина. Статиите за един и същ случай са събрани в една тема. <a href="#results" data-bg-results>Мачове и класиране</a>';
+    ? 'Съдийството в националните отбори, евротурнирите (Шампионска лига, Лига Европа, Лига на конференциите) и петте водещи първенства: Англия, Испания, Италия, Германия и Франция, и мачовете на българските съдии в чужбина. <a href="#results" data-world-results>Мачове и класирания</a>'
+    : 'Съдийството в българския футбол: efbet Лига, Втора и Трета лига, Купата на България, юношите, и българските клубове и националите в Европа. Мачовете на българските съдии в чужбина са в Свят. Статиите за един и същ случай са събрани в една тема. <a href="#results" data-bg-results>Мачове и класиране</a>';
   let base = filteredStories();
-  // World: a section first (national teams / European cups / top 5 leagues), then the competitions inside it
-  const sectEl = $('#sectChips');
-  sectEl.hidden = !world;
+  // the main categories, always in sight. World: a section first (national teams / European cups / top 5 leagues), then
+  // the competitions inside it (in Filters). Bulgaria: the leagues — a tap picks one (the Division chips in Filters can
+  // still pick several, or the cup), a tap on the one picked shows them all again
+  // (the number of stories is in the button's title: four buttons with numbers don't fit a phone's width)
+  const sectEl = $('#sectChips'), cat = (on, attr, label, n) => `<button class="${on ? 'on' : ''}" ${attr} aria-pressed="${on}" title="${esc(I18N.tr(label))}: ${n}">${esc(label)}</button>`;
   if (world) {
-    sectEl.innerHTML = `<button class="chip${!sel.sect ? ' on' : ''}" data-sect="">Всички<span class="n">${base.length}</span></button>` +
-      Object.entries(WSECT).map(([k, [label]]) => `<button class="chip${sel.sect === k ? ' on' : ''}" data-sect="${k}">${esc(label)}<span class="n">${base.filter(s => inSect(s, k)).length}</span></button>`).join('');
+    sectEl.innerHTML = cat(!sel.sect, 'data-sect=""', 'Всички', base.length) +
+      Object.entries(WSECT).map(([k, [label]]) => cat(sel.sect === k, `data-sect="${k}"`, k === 'nat' ? 'Национални' : label, base.filter(s => inSect(s, k)).length)).join('');
     if (sel.sect) base = base.filter(s => inSect(s, sel.sect));
+  } else {
+    sectEl.innerHTML = cat(!sel.group.size, 'data-div=""', 'Всички', base.length) +
+      MAIN_DIVS.map(([k, label]) => cat(sel.group.size === 1 && sel.group.has(k), `data-div="${k}"`, label, base.filter(s => s.divs.includes(k)).length)).join('');
   }
   const groupKey = world ? 'comps' : 'divs';
   const groupLabels = world ? Object.fromEntries(Object.entries(COMPS).filter(([k]) => !sel.sect || WSECT[sel.sect][1].includes(k))) : DIVS;
@@ -6131,6 +6218,12 @@ function initUI(){
     shown = PAGE_SIZE; render();
   });
   $('#sectChips').addEventListener('click', e => {
+    const d = e.target.closest('[data-div]');
+    if (d) {                                       // Новини: one league, or all of them
+      const g = SEL.bg.group, k = d.dataset.div, only = g.size === 1 && g.has(k);
+      g.clear(); if (k && !only) g.add(k);
+      SEL.bg.round = SEL.bg.rcomp = ''; shown = PAGE_SIZE; render(); return;
+    }
     const b = e.target.closest('[data-sect]'); if (!b) return;
     const w = SEL.world;
     w.sect = w.sect === b.dataset.sect ? '' : b.dataset.sect;
@@ -6297,7 +6390,7 @@ window.addEventListener('pageshow', e => { if (e.persisted) { checkVersion(true)
 setTimeout(() => checkVersion(false), 1500);
 setInterval(() => checkVersion(document.hidden), 10 * 60e3);
 
-window.BGRW = { forum: Forum, checkVersion, loadNews, buildStories: buildStoriesNow, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
+window.BGRW = { storySide, forum: Forum, checkVersion, loadNews, buildStories: buildStoriesNow, toEmbed, renderAll, compressVideo, matchNewsIndex, matches: MIDX, state: S, extractCache: X, session: () => ({ USER, PROFILE, AUTH, VIDEOS, USERS, COMMENTS }) };
 })();
 </script>
 </body>

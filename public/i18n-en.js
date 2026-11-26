@@ -9,10 +9,10 @@ window.BGRW_EN = {
     'Превключи на български': 'Switch to Bulgarian', 'Има нова версия на сайта.': 'There is a new version of the site.', 'Обнови': 'Refresh',
     'Ако смените езика сега, въведеното ще се загуби. Да продължа ли?': 'If you change the language now, what you typed will be lost. Continue?',
     // the news
-    'Отбор, съдия, дума…': 'Team, referee, word…', 'Търси в новините': 'Search the news', 'Филтри': 'Filters',
+    'Отбор, съдия, дума…': 'Team, referee, word…', 'Търси отбор, съдия': 'Team, referee, word', 'Национални': 'National teams', 'Категории': 'Categories', 'Първа лига': 'First League', 'Търси в новините': 'Search the news', 'Филтри': 'Filters',
     'Провери за нови статии': 'Check for new articles', 'Дивизия': 'Division', 'Тема': 'Topic', 'Турнир': 'Competition', 'Кръг': 'Round',
     'Първа лига (efbet)': 'First League (efbet)', 'Втора лига': 'Second League', 'Трета лига': 'Third League', 'Купа на България': 'Bulgarian Cup',
-    'Юноши': 'Youth', 'Европа и чужбина': 'Europe and abroad', 'Некласифицирани': 'Unclassified',
+    'Юноши': 'Youth', 'Европа и чужбина': 'Europe and abroad', 'В Европа': 'In Europe', 'Некласифицирани': 'Unclassified',
     'Картони': 'Cards', 'Дузпи': 'Penalties', 'Засади и отменени голове': 'Offsides and disallowed goals', 'ВАР': 'VAR',
     'Нарушения и игра с ръка': 'Fouls and handballs', 'Съдийска комисия и наряди': 'Referee committee and appointments',
     'Дисциплина и наказания': 'Discipline and sanctions', 'Сбивания и инциденти': 'Fights and incidents', 'Спорове и скандали': 'Disputes and scandals', 'Други': 'Other',
@@ -29,10 +29,10 @@ window.BGRW_EN = {
     'Зареждане…': 'Loading…', 'Показваме копието, запазено в този браузър…': 'Showing the copy saved in this browser…',
     'Зареждаме запазените новини…': 'Loading the saved news…', 'Няма теми за тези филтри.': 'No topics match these filters.',
     'Новините не се заредиха — натиснете ↻, за да опитате пак.': 'The news did not load — press ↻ to try again.', 'Още няма теми.': 'No topics yet.',
-    'Съдийството в efbet Лига, Втора и Трета лига и Купата на България, и българските клубове и съдии в Европа и чужбина. Статиите за един и същ случай са събрани в една тема.':
-      'Refereeing in the efbet League, the Second and Third Leagues and the Bulgarian Cup, and Bulgarian clubs and referees in Europe and abroad. Articles about the same incident are grouped into one topic.',
-    'Съдийството в националните отбори, евротурнирите (Шампионска лига, Лига Европа, Лига на конференциите) и петте водещи първенства: Англия, Испания, Италия, Германия и Франция.':
-      'Refereeing in the national teams, the European cups (Champions League, Europa League, Conference League) and the top five leagues: England, Spain, Italy, Germany and France.',
+    'Съдийството в българския футбол: efbet Лига, Втора и Трета лига, Купата на България, юношите, и българските клубове и националите в Европа. Мачовете на българските съдии в чужбина са в Свят. Статиите за един и същ случай са събрани в една тема.':
+      'Refereeing in Bulgarian football: the efbet League, the Second and Third Leagues, the Bulgarian Cup, youth football, and Bulgarian clubs and national teams in Europe. Bulgarian referees\' matches abroad are in World. Articles about the same incident are grouped into one topic.',
+    'Съдийството в националните отбори, евротурнирите (Шампионска лига, Лига Европа, Лига на конференциите) и петте водещи първенства: Англия, Испания, Италия, Германия и Франция, и мачовете на българските съдии в чужбина.':
+      'Refereeing in the national teams, the European cups (Champions League, Europa League, Conference League) and the top five leagues: England, Spain, Italy, Germany and France, and Bulgarian referees\' matches abroad.',
     'Статиите идват от Google News и Bing News, търсени на всеки 30 минути, и водят към оригиналните издания. Статиите за един и същ случай се събират в една тема автоматично.':
       'Articles come from Google News and Bing News, searched every 30 minutes, and link to the original publishers. Articles about the same incident are grouped into one topic automatically.',
     // the story cards: the toggle, the opened card, the match groups
