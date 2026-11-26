@@ -1,7 +1,7 @@
-// Referee appointments, the Third League (South-West) results and table, and its disciplinary decisions.
-// Plain JS so it runs in the Edge Function and can be tested with Node.
-//   appointments: bfunion.bg (Съдийска комисия) for efbet Лига and Втора лига, bfu-tournaments.com for the Third League
-//   Third League results and table: bulgarian-football.com
+// Referee appointments, the results and tables of the Third League's four groups and the elite youth groups, and the
+// South-West's disciplinary decisions. Plain JS so it runs in the Edge Function and can be tested with Node.
+//   appointments: bfunion.bg (Съдийска комисия) for efbet Лига and Втора лига, bfu-tournaments.com for the Third League South-West
+//   results and tables (Third League groups, youth U18–U15): bulgarian-football.com
 //   Third League punishments: the PDF attached to bfu-tournaments.com's "Наказания" posts
 
 export const SEASON = '2026/27';
@@ -10,6 +10,14 @@ export const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 export const BFU_LIST = 'https://bfunion.bg/%D0%A1%D1%8A%D0%B4%D0%B8%D0%B9%D1%81%D0%BA%D0%B0-%D0%BA%D0%BE%D0%BC%D0%B8%D1%81%D0%B8%D1%8F';
 export const BFUT_LIST = 'https://bfu-tournaments.com/leagues/third-sw/news';
 export const SW3_PAGE = 'https://bulgarian-football.com/yugozapadna-treta-liga.html';
+// every league bulgarian-football.com lists the same way (results by round, the table): the Third League's four groups and
+// the elite youth groups, U18 down to U15 (the clubs' championships) — the league's key and its page
+export const BFC_PAGES = [
+  ['sw3', SW3_PAGE], ['nw3', 'https://bulgarian-football.com/severozapadna-treta-liga.html'],
+  ['ne3', 'https://bulgarian-football.com/severoiztochna-treta-liga.html'], ['se3', 'https://bulgarian-football.com/yugoiztochna-treta-liga.html'],
+  ['u18', 'https://bulgarian-football.com/elitna-grupa-u18.html'], ['u17', 'https://bulgarian-football.com/elitna-grupa-u17.html'],
+  ['u16', 'https://bulgarian-football.com/elitna-grupa-u16.html'], ['u15', 'https://bulgarian-football.com/elitna-grupa-u15.html'],
+];
 
 const MONTHS = ['януари', 'февруари', 'март', 'април', 'май', 'юни', 'юли', 'август', 'септември', 'октомври', 'ноември', 'декември'];
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', bdquo: '„', ldquo: '“', rdquo: '”', ndash: '–', mdash: '—' };
@@ -276,7 +284,7 @@ export function assign(items, matches, round) {
   return { assigned: out, unmatched: items.filter((_, i) => !usedI.has(i)).map(x => x.fixture) };
 }
 
-/* ───────── Third League South-West: results and table (bulgarian-football.com) ───────── */
+/* ───────── results and tables: the Third League's groups and the youth groups (bulgarian-football.com) ───────── */
 const TR = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't',
   у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sht', ъ: 'a', ь: 'y', ю: 'yu', я: 'ya' };
 const slug = s => tokens(String(s).replace(/\([^)]*\)/g, ' ')).join('-').replace(/[а-я]/g, c => TR[c] ?? c);
@@ -289,12 +297,16 @@ export const BGCLUBS_LOGO = { 'Minyor(Pernik)': 10121, 'Oborishte(Panagyurishte)
   'Natsional(Sofia)': 11344, 'CSKA(Sofia)': 10104, 'Kyustendil(Kyustendil)': 10922, 'Levski(Sofia)': 10103, 'Botev1937(Ihtiman)': 10257 };
 // a team whose row links to its own site (“Левски II” → levskisofia.info) takes its club's crest by name
 const BGCLUBS_BY_NAME = { 'левски': 10103, 'цска': 10104, 'славия': 10113 };
+// (any other club: the link's "#10153-111" is its crest's number)
 export const bgclubsLogo = (attrs, team = '') => {
-  const slug = (String(attrs || '').match(/bgclubs\.eu\/teams\/([^"?#\s]+)/) || [])[1];
-  const id = slug ? BGCLUBS_LOGO[decodeURIComponent(slug)] : BGCLUBS_BY_NAME[tokens(String(team).replace(/\([^)]*\)/g, ' ')).filter(w => !RESERVE(w)).join(' ')];
+  const link = String(attrs || '').match(/bgclubs\.eu\/teams\/([^"?#\s]+)[^"#\s]*(?:#(\d{4,})-\d+)?/) || [], slug = link[1];
+  const id = slug ? BGCLUBS_LOGO[decodeURIComponent(slug)] ?? (link[2] ? +link[2] : undefined) : BGCLUBS_BY_NAME[tokens(String(team).replace(/\([^)]*\)/g, ' ')).filter(w => !RESERVE(w)).join(' ')];
   return id ? `https://media.bgclubs.eu/images/logos/${id}.png` : null;
 };
-export function parseSw3(html) {
+export const parseSw3 = html => parseBfc(html, 'sw3', SW3_PAGE);
+// (the round anchors are "k<league's number>r<round>": k8 the South-West, k7 the North-West…; the results grid that follows
+// the rounds is "grid-v" for the Third League, "grid-df" for the youth groups)
+export function parseBfc(html, league, url) {
   const h = String(html).replace(/\s+/g, ' ');
   // the table: "1. <a class="bgclubs" href="https://bgclubs.eu/teams/Minyor(Pernik)?season=227">Миньор (Перник)</a> 16 12 3 1 35:7 39"
   const tStart = h.indexOf('class="standings-'), tEnd = tStart >= 0 ? h.indexOf('</div>', tStart) : -1;
@@ -303,43 +315,68 @@ export function parseSw3(html) {
     table.push({ rank: +m[1], team_name: clean(m[3]), logo: bgclubsLogo(m[2], m[3]), played: +m[4], won: +m[5], drawn: +m[6], lost: +m[7], goals_for: +m[8], goals_against: +m[9], points: +m[10] });
   const canon = new Map(table.map(t => [keyOf(t.team_name), t.team_name]));
   const logoOf = new Map(table.map(t => [t.team_name, t.logo]));
-  const name = s => canon.get(keyOf(s)) || clean(s);
+  // a name written another way than in the table ("Локомотив Сф 1929 (София)" for "Локомотив София 1929 (София)"): the
+  // table's team that shares most of its words, when it is clearly the best one
+  const words = new Map(table.map(t => [t.team_name, tokens(t.team_name)]));
+  const near = s => {
+    const a = tokens(s); let best = null, top = 0, next = 0;
+    for (const [n, b] of words) {
+      const sc = a.filter(w => b.some(x => same(w, x))).length / Math.max(a.length, b.length);
+      if (sc > top) { next = top; top = sc; best = n; } else if (sc > next) next = sc;
+    }
+    return top >= 0.6 && top - next >= 0.2 ? best : null;
+  };
+  const name = s => canon.get(keyOf(s)) || near(s) || clean(s);
   // the rounds: <a id="k8r1"></a><strong>I кръг</strong> <u>1 август 2026 г., събота, 18:00 ч:</u> <strong>Home - Away 1:3 (0:3) </strong>
-  const lStart = h.indexOf('id="k8r1"'), lEnd = h.indexOf('id="grid-v"');
+  const lStart = h.search(/id="k\d+r1"/), lEnd = lStart >= 0 ? h.indexOf('id="grid-', lStart) : -1;
   const body = lStart >= 0 ? h.slice(lStart - 6, lEnd > lStart ? lEnd : undefined) : '';
   const byPair = new Map();
   let round = 0, over = 0, date = null, venue = '';
-  const tokensRx = /<a id="k8r(\d+)"><\/a>|<u>([^<]*)<\/u>|<em>([^<]*)<\/em>|<strong>([\s\S]*?)<\/strong>/g;
-  for (const m of body.matchAll(tokensRx)) {
+  // the matches are in bold (the Third League) or plain text (some youth groups): the teams' links are taken out first,
+  // so a plain line reads "Славия 1913 (София) - Национал (София) 2:1"; any other link (a video) ends the line
+  const flat = body.replace(/<a class="bgclubs"[^>]*>([^<]*)<\/a>/g, '$1').replace(/<a (?!id=)[^>]*>[\s\S]*?<\/a>/g, ' ¦ ');
+  const tokensRx = /<a id="k\d+r(\d+)"><\/a>|<u>([^<]*)<\/u>|<em>([^<]*)<\/em>|<strong>([\s\S]*?)<\/strong>|([^<]+)/g;
+  const lines = [];
+  for (const m of flat.matchAll(tokensRx)) {
     if (m[1]) { round = +m[1]; over = 0; date = null; venue = ''; continue; }
     if (m[2] != null) { date = parseDate(m[2]); venue = ''; continue; }
     if (m[3] != null) { venue = clean(m[3]).replace(/:$/, ''); continue; }
-    const s = clean(m[4]);
-    const ov = s.match(/^([IVXL]+)\s+кръг\s*-\s*отложен/i);
-    if (ov) { over = roman(ov[1]); date = null; continue; }
-    if (/^[IVXL]+\s+кръг$/i.test(s)) continue;
-    // "Home (Town) - Away (Town) 2:1 (2:0)" · "… отложен" · "… - " (not played yet)
-    const mm = s.match(/^(.+?\))\s+-\s+(.+?\))\s*(.*)$/) || s.match(/^(.+?)\s+-\s+(.+?)\s+(\d+:\d+.*|отложен.*|-|)$/);
-    if (!mm) continue;
-    const home = name(mm[1]), away = name(mm[2]), rest = mm[3].trim();
-    const sc = rest.match(/^(\d+):(\d+)(?:\s*\((\d+):(\d+)\))?/);
-    const e = { round: over || round, home, away, date, venue, score: sc ? [+sc[1], +sc[2]] : null, ht: sc && sc[3] != null ? [+sc[3], +sc[4]] : null,
-      postponed: /отложен/i.test(rest), note: /сл\.|служебн/i.test(rest) ? 'служебен резултат' : '' };
-    const k = home + '|' + away, old = byPair.get(k);
-    // a postponed match is listed again under its new date (and again in a later round's "отложени мачове"):
-    // the entry with a score, else the one with the latest date, else the postponement; the round stays the first one
-    if (!old) { byPair.set(k, e); continue; }
-    const better = (e.score && !old.score) || (!old.score && e.date && (!old.date || old.postponed || e.date.iso > old.date.iso) && !e.postponed);
-    if (better) byPair.set(k, { ...e, round: old.round });
+    if (m[5] != null) {                            // plain text: every "Home (Town) - Away (Town) score" in it
+      for (const f of clean(m[5]).matchAll(/([^()¦]+?\([^()]*\))\s+-\s+([^()¦]+?\([^()]*\))\s*(\d+:\d+(?:\s*\(\d+:\d+\))?(?:\s*сл\.)?|отложен\p{L}*|-(?=\s|$)|$)/gu))
+        lines.push([f[1].trim(), f[2].trim(), f[3] || '']);
+      if (!lines.length) continue;
+    } else {
+      const s = clean(m[4]);
+      const ov = s.match(/^([IVXL]+)\s+кръг\s*-\s*отложен/i);
+      if (ov) { over = roman(ov[1]); date = null; continue; }
+      if (/^[IVXL]+\s+кръг$/i.test(s)) continue;
+      // "Home (Town) - Away (Town) 2:1 (2:0)" · "… отложен" · "… - " (not played yet)
+      const mm = s.match(/^(.+?\))\s+-\s+(.+?\))\s*(.*)$/) || s.match(/^(.+?)\s+-\s+(.+?)\s+(\d+:\d+.*|отложен.*|-|)$/);
+      if (!mm) continue;
+      lines.push([mm[1], mm[2], mm[3]]);
+    }
+    for (const [h1, a1, r1] of lines.splice(0)) {
+      const home = name(h1), away = name(a1), rest = r1.trim();
+      const sc = rest.match(/^(\d+):(\d+)(?:\s*\((\d+):(\d+)\))?/);
+      const e = { round: over || round, home, away, date, venue, score: sc ? [+sc[1], +sc[2]] : null, ht: sc && sc[3] != null ? [+sc[3], +sc[4]] : null,
+        postponed: /отложен/i.test(rest), note: /сл\.|служебн/i.test(rest) ? 'служебен резултат' : '' };
+      const k = home + '|' + away, old = byPair.get(k);
+      // a postponed match is listed again under its new date (and again in a later round's "отложени мачове"):
+      // the entry with a score, else the one with the latest date, else the postponement; the round stays the first one
+      if (!old) { byPair.set(k, e); continue; }
+      const better = (e.score && !old.score) || (!old.score && e.date && (!old.date || old.postponed || e.date.iso > old.date.iso) && !e.postponed);
+      if (better) byPair.set(k, { ...e, round: old.round });
+    }
   }
-  const now = Date.now();
-  const matches = [...byPair.values()].map(e => {
+  const now = Date.now(), inTable = new Set(table.map(t => t.team_name));
+  const kept = [...byPair.values()].filter(e => table.length < 8 || (inTable.has(e.home) && inTable.has(e.away)));   // (a team taken out of the league: its results are annulled)
+  const matches = kept.map(e => {
     const status = e.score ? 'finished' : e.postponed && (!e.date || Date.parse(e.date.iso) < now) ? 'postponed' : 'scheduled';
-    return { id: `sw3:${SEASON.replace('/', '-')}:${slug(e.home)}:${slug(e.away)}`, league: 'sw3', season: SEASON, round: e.round,
+    return { id: `${league}:${SEASON.replace('/', '-')}:${slug(e.home)}:${slug(e.away)}`, league, season: SEASON, round: e.round,
       kickoff: e.date ? (e.date.time ? e.date.iso : sofiaUtc(e.date.y, e.date.mo, e.date.d, 12, 0).toISOString()) : null, status,
       home_name: e.home, away_name: e.away, home_logo: logoOf.get(e.home) ?? null, away_logo: logoOf.get(e.away) ?? null,
       home_score: e.score ? e.score[0] : null, away_score: e.score ? e.score[1] : null,
-      ht_home: e.ht ? e.ht[0] : null, ht_away: e.ht ? e.ht[1] : null, source_url: SW3_PAGE,
+      ht_home: e.ht ? e.ht[0] : null, ht_away: e.ht ? e.ht[1] : null, source_url: url,
       note: [e.date && !e.date.time ? 'час — неуточнен' : '', e.venue ? e.venue : '', e.note].filter(Boolean).join(' · ') || null };
   });
   return { table, matches };

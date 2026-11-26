@@ -288,6 +288,17 @@
   /* results & table (card style after the BFU e-championship) */
   [hidden]{display:none !important}      /* hidden wins over display:flex of .chips / .seg */
   .lgbar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+  /* the Bulgarian leagues: the professional ones, then the Third League's groups and the youth groups under a small label,
+     each a segmented row of equal parts (all four in sight on a phone) */
+  .lgbar.bg{display:block;margin-top:12px}
+  .lgl{margin:12px 0 5px;font-size:13px;font-weight:650;color:var(--muted)}
+  .lgseg{display:flex;border:1.5px solid var(--line);border-radius:12px;overflow:hidden}
+  .lgseg>button{flex:1 1 auto;min-width:0;min-height:38px;padding:4px 5px;border:0;border-radius:0;background:none;color:var(--text);font:650 14px/1.1 var(--f-body)}
+  .lgseg>button+button{border-left:1.5px solid var(--line)}
+  .lgseg>button.on{background:var(--accent);color:var(--accent-ink)}
+  .lgseg>button:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+  @media (max-width:400px){ .lgseg>button{font-size:13.5px} }
+  @media (max-width:370px){ .lgseg>button{font-size:12.5px;padding:4px 3px} }
   /* segmented control: the World news sections and the Results sections */
   .seg{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:10px}
   .seg>button,.seg>.chip{flex:1 1 auto;border:0;border-radius:0;background:var(--card);color:var(--text);padding:8px 12px;font-size:13.5px;font-weight:600;text-align:center}
@@ -824,8 +835,12 @@
   .cats>button.on{background:var(--accent);color:var(--accent-ink)}
   .cats>button.on+button,.cats>button+button.on{border-left-color:var(--accent)}
   .cats>button:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+  .cats.sub{margin-top:6px;border-width:1px}
+  .cats.sub>button{min-height:34px;font-size:13.5px;font-weight:600}
+  .cats.sub>button+button{border-left-width:1px}
   @media (max-width:400px){ .fbar .ftoggle{padding:0 10px} .fbar .qbox input[type=search]{padding-left:35px;padding-right:4px} .qbox .qi{left:10px} }
-  @media (max-width:370px){ .cats>button{font-size:13px} }
+  @media (max-width:420px){ .cats:not(.sub)>button{font-size:13px;padding:4px 3px} }
+  @media (max-width:370px){ .cats>button{font-size:12.5px} }
   @media (max-width:340px){ .fbar .ftoggle .ftxt{display:none} }
   .newsround{border-color:var(--line)}
   .newsround .rlinks a,.newsround .rlinks button.link{color:var(--text);text-decoration:underline}
@@ -969,6 +984,7 @@
         <button id="btnRefresh" class="ficon" title="Провери за нови статии" aria-label="Провери за нови статии"><span>↻</span></button>
       </div>
       <div id="sectChips" class="cats" role="group" aria-label="Категории"></div>
+      <div id="subChips" class="cats sub" role="group" aria-label="Група" hidden></div>
       <div id="fpanel" class="fpanel" hidden>
         <p class="intro" id="intro"></p>
         <div class="flabel" id="groupLabel">Дивизия</div>
@@ -2365,7 +2381,7 @@ function renderAll(){
 }
 
 /* ======================= UI: NEWS ======================= */
-const SEL = { bg: { group: new Set(), cats: new Set(), rcomp: '', round: '' }, world: { group: new Set(), cats: new Set(), sect: '', rcomp: '', round: '' } };
+const SEL = { bg: { group: new Set(), cats: new Set(), rcomp: '', round: '', sub: '' }, world: { group: new Set(), cats: new Set(), sect: '', rcomp: '', round: '' } };
 const EXPANDED = new Set();
 let shown = PAGE_SIZE, renderTimer = null;
 function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(renderAll, 350); }
@@ -2592,6 +2608,7 @@ function renderPills(world, sel){
   const p = [], q = $('#q').value.trim();
   if (q) p.push(['q', `“${q.length > 24 ? q.slice(0, 23) + '…' : q}”`]);
   sel.group.forEach(k => p.push(['group:' + k, (world ? COMPS : DIVS)[k] || k]));
+  if (!world && sel.sub) p.push(['sub', LEAGUES[sel.sub] || sel.sub]);
   sel.cats.forEach(k => p.push(['cats:' + k, CATS[k] || k]));
   if (sel.round) p.push(['round', roundName(sel.round)]);
   [['onlyNew', 'Само новите'], ['onlyMajor', 'Само водещите сайтове'], ['onlyHot', 'Само горещите'], ['hideRead', 'Скрий прочетените']].forEach(([id, l]) => { if ($('#' + id).checked) p.push([id, l]); });
@@ -2710,7 +2727,45 @@ function renderRoundBar(sel, list, stories){
     step(next, '›', 'Следващ кръг');
 }
 
-const MAIN_DIVS = [['d1', 'Първа лига'], ['d2', 'Втора лига'], ['d3', 'Трета лига']];   // (the youth and the cup: in Filters)
+const MAIN_DIVS = [['d1', 'Първа лига'], ['d2', 'Втора лига'], ['d3', 'Трета лига'], ['youth', 'Юноши']];   // (the cup: in Filters)
+// Трета лига and Юноши open a second row: the Third League's four groups, the youth groups U18–U15 (storySubs)
+const SUB_ROWS = { d3: ['sw3', 'nw3', 'ne3', 'se3'], youth: ['u18', 'u17', 'u16', 'u15'] };
+const GRP_WORD = { 'югозапад': 'sw3', 'северозапад': 'nw3', 'североизток': 'ne3', 'югоизток': 'se3' };
+const RX_GRP = /(?<![\p{L}])(юго|северо)[\s-]?(запад|изток)/giu;
+const RX_AGE = /(?<![\p{L}\p{N}])(?:[UУ]\s?-?(1[5-8])(?!\p{N})|до\s?(1[5-8])\s?(?:г\.|год\p{L}*))/gu;
+// The Third League's clubs, from this season's matches: a club's name ("Бдин", "Ком", "Черно море II") counts for its
+// group when only that group has it, and not a name a club of the first two leagues starts with ("Ботев", "Спартак")
+let GRP_RX = { key: -1, list: [] };
+function groupRx(){
+  if (GRP_RX.key === MIDX.at) return GRP_RX.list;
+  const by = new Map(), top = new Set(CLUBS.filter(c => c.div !== 'd3').map(c => c.label.split(' ')[0]));
+  for (const m of MIDX.matches) if (SUB_ROWS.d3.includes(m.league)) for (const n of [m.home_name, m.away_name]) {
+    const b = teamName(n).replace(/\s+\d{4}(?=\s|$)/, '').trim();
+    if (b.length < 3) continue;
+    if (!by.has(b)) by.set(b, new Set());
+    by.get(b).add(m.league);
+  }
+  const reEsc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  GRP_RX = { key: MIDX.at, list: SUB_ROWS.d3.map(lg => {
+    const names = [...by].filter(([b, set]) => set.size === 1 && set.has(lg) && (/\sII+$/.test(b) || !top.has(b.split(' ')[0]))).map(([b]) => reEsc(b));
+    return [lg, names.length ? CS(names) : null];
+  }) };
+  return GRP_RX.list;
+}
+// which of them a story is about: the group named ("Северозападна трета лига") or one of its clubs, for a Third League
+// story; the age ("U17", "до 17 г.") for a youth story
+function storySubs(s){
+  if (s._subs && s._subsK === MIDX.at) return s._subs;
+  const out = new Set(), text = s.arts.map(a => a.title).join(' \n ');
+  if (s.divs.includes('d3') || /(?<![\p{L}])трет\p{L}*\s+лига/iu.test(text)) {
+    for (const m of text.matchAll(RX_GRP)) { const k = GRP_WORD[(m[1] + m[2]).toLowerCase()]; if (k) out.add(k); }
+    const t = teamText(text);
+    for (const [lg, re] of groupRx()) if (re && re.test(t)) out.add(lg);
+  }
+  if (s.divs.includes('youth') || RX_YOUTH.test(text)) for (const m of text.matchAll(RX_AGE)) out.add('u' + (m[1] || m[2]));
+  s._subs = out; s._subsK = MIDX.at;
+  return out;
+}
 function render(){
   const world = VIEW === 'world', sel = SEL[world ? 'world' : 'bg'];
   $('#intro').innerHTML = world
@@ -2730,6 +2785,18 @@ function render(){
     sectEl.innerHTML = cat(!sel.group.size, 'data-div=""', 'Всички', base.length) +
       MAIN_DIVS.map(([k, label]) => cat(sel.group.size === 1 && sel.group.has(k), `data-div="${k}"`, label, base.filter(s => s.divs.includes(k)).length)).join('');
   }
+  // the second row (Трета лига: its groups; Юноши: the age groups)
+  const subEl = $('#subChips'), parent = !world && sel.group.size === 1 ? [...sel.group][0] : '', subs = SUB_ROWS[parent];
+  if (!subs) sel.sub = '';
+  else if (sel.sub && !subs.includes(sel.sub)) sel.sub = '';
+  subEl.hidden = !subs;
+  if (subs) {
+    const inPar = base.filter(s => s.divs.includes(parent));
+    subEl.setAttribute('aria-label', parent === 'd3' ? 'Група на Трета лига' : 'Възраст');
+    // (no "all" here: nothing picked is the whole league; a tap on the one picked goes back to it)
+    subEl.innerHTML = subs.map(k => cat(sel.sub === k, `data-sub="${k}"`, LG_SHORT[k], inPar.filter(s => storySubs(s).has(k)).length)).join('');
+  }
+  if (sel.sub) base = base.filter(s => storySubs(s).has(sel.sub));
   const groupKey = world ? 'comps' : 'divs';
   const groupLabels = world ? Object.fromEntries(Object.entries(COMPS).filter(([k]) => !sel.sect || WSECT[sel.sect][1].includes(k))) : DIVS;
   const byCat = base.filter(s => !sel.cats.size || s.cats.some(c => sel.cats.has(c)));
@@ -4642,7 +4709,18 @@ async function setApproved(id, val){
 const FB_SEASON = '2026/27';
 // "ПФК Локомотив София 1929" → "Локомотив София 1929"; the Third League's "Беласица (Петрич)" → "Беласица"
 const teamName = n => String(n || '').replace(/^(?:ПФК|ФК)\s+/, '').replace(/\s+\([^)]*\)$/, '');
-const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига', sw3: 'Трета лига Югозапад' };
+// the Bulgarian leagues: the two professional ones, the Third League's four groups and the elite youth groups (the clubs'
+// championships U18–U15); the Third League and the youth groups are read from bulgarian-football.com by refs-sync
+const LEAGUES = { efbet: 'efbet Лига', mrbit: 'Mr Bit Втора лига', sw3: 'Трета лига Югозапад', nw3: 'Трета лига Северозапад',
+  ne3: 'Трета лига Североизток', se3: 'Трета лига Югоизток', u18: 'Юноши U18', u17: 'Юноши U17', u16: 'Юноши U16', u15: 'Юноши U15' };
+const BFC_URL = { sw3: 'yugozapadna-treta-liga', nw3: 'severozapadna-treta-liga', ne3: 'severoiztochna-treta-liga', se3: 'yugoiztochna-treta-liga',
+  u18: 'elitna-grupa-u18', u17: 'elitna-grupa-u17', u16: 'elitna-grupa-u16', u15: 'elitna-grupa-u15' };
+const bfcUrl = lg => `https://bulgarian-football.com/${BFC_URL[lg]}.html`;
+// how Results lists them: a row each for the professional leagues, the Third League's groups and the youth groups
+const LG_ROWS = [['', ['efbet', 'mrbit']], ['Трета лига', ['sw3', 'nw3', 'ne3', 'se3']], ['Юноши', ['u18', 'u17', 'u16', 'u15']]];
+const LG_SHORT = { sw3: 'Югозапад', nw3: 'Северозапад', ne3: 'Североизток', se3: 'Югоизток', u18: 'U18', u17: 'U17', u16: 'U16', u15: 'U15' };
+const YOUTH_LG = new Set(['u18', 'u17', 'u16', 'u15']);
+const OFFICIAL_LG = new Set(['efbet', 'mrbit', 'sw3']);   // the leagues whose referee appointments are read (the others: results only)
 const VIDEO_LEAGUES = ['efbet', 'mrbit'];   // the leagues whose match reports are looked for on YouTube
 const FB = { league: (loadJSON('bgRefWatch.fbLeague') || 'efbet'), round: {}, data: {}, table: {}, loading: {}, err: '', open: new Set(), oth: {},
   comps: null, compsLoading: false, last: {}, want: '', mnOpen: new Set(), goMatch: '', refSel: {}, covAll: new Set() };
@@ -4846,7 +4924,9 @@ function leagueBar(){
   const sects = RSECT.filter(([k]) => k === 'bg' || vis.some(c => c.grp === k));
   const list = sect === 'bg' ? Object.entries(LEAGUES) : vis.filter(c => c.grp === sect).map(c => [c.key, c.name]);
   return `<div class="seg" role="tablist">${sects.map(([k, l]) => `<button class="${sect === k ? 'on' : ''}" data-rsect="${k}" role="tab" aria-selected="${sect === k}">${esc(l)}</button>`).join('')}</div>
-    <div class="lgbar">${list.map(([k, l]) => `<button class="chip${FB.league === k ? ' on' : ''}" data-lg="${k}">${esc(l)}</button>`).join('')}</div>`;
+    ${sect === 'bg' ? `<div class="lgbar bg">${LG_ROWS.map(([label, ks]) => `${label ? `<div class="lgl">${esc(label)}</div>` : ''}<div class="lgseg">${ks.map(k =>
+        `<button class="${FB.league === k ? 'on' : ''}" data-lg="${k}" aria-pressed="${FB.league === k}"${LG_SHORT[k] ? ` title="${esc(LEAGUES[k])}"` : ''}>${esc(LG_SHORT[k] || LEAGUES[k])}</button>`).join('')}</div>`).join('')}</div>`
+      : `<div class="lgbar">${list.map(([k, l]) => `<button class="chip${FB.league === k ? ' on' : ''}" data-lg="${k}">${esc(l)}</button>`).join('')}</div>`}`;
 }
 function defaultRound(ms){
   const played = ms.filter(m => m.status === 'finished' || m.status === 'live');
@@ -4904,7 +4984,7 @@ function officialsHtml(m){
   if (!c) {
     // the committee names the referees a day or two before the match: until then a quiet note on the coming ones
     const t = m.kickoff ? Date.parse(m.kickoff) : 0, d = FB.data[m.league];
-    return d && d.officials && m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? `<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>` : '';
+    return d && d.officials && OFFICIAL_LG.has(m.league) && m.status === 'scheduled' && t > Date.now() && t - Date.now() < 4 * 864e5 ? `<div class="mref none">${WHISTLE}Съдиите за мача още не са обявени</div>` : '';
   }
   const ref = c.crew.find(x => x.r === 'ГС'), vr = c.crew.find(x => x.r === 'ВАР');
   if (!ref && !vr) return '';
@@ -5094,7 +5174,7 @@ function matchPageHtml(m){
   const c = crewOf(m), d = FB.data[lg];
   const crew = c ? sec('Съдийски екип', `<ul class="crewlist">${c.crew.map(x => `<li><span class="r">${esc(ROLE_BG[x.r] || x.r)}</span><b>${esc(offName(x))}${x.t ? `<span class="t">${esc(x.t)}</span>` : ''}</b></li>`).join('')}</ul>
       ${c.src && c.src.url ? `<a class="msrc" href="${esc(c.src.url)}" target="_blank" rel="noopener">${esc(offSrc(c.src.url))}, ${esc(c.src.title || 'назначения')}</a>` : ''}`)
-    : d && d.officials && m.status === 'scheduled' && t > now && t - now < 4 * 864e5 ? sec('Съдийски екип', '<p class="mempty">Съдиите за мача още не са обявени.</p>') : '';
+    : d && d.officials && OFFICIAL_LG.has(lg) && m.status === 'scheduled' && t > now && t - now < 4 * 864e5 ? sec('Съдийски екип', '<p class="mempty">Съдиите за мача още не са обявени.</p>') : '';
   const b = d && d.banned && d.banned[m.id];
   const bans = b && b.length ? sec('Не играят', `<ul class="crewlist">${b.map(p => `<li><span>${cardIc(p.reason)} ${esc(p.name)}</span><b>${esc(teamName(p.team))}</b></li>`).join('')}</ul>`) : '';
   const s = SHEETS.byMatch.get(String(m.id));
@@ -5340,7 +5420,7 @@ function standingsHtml(lg, inner){
     for (const r of rows) { const g = r.grp || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
     const form = d ? formFrom(d.matches) : null;
     body = `<div class="standgrid">${[...groups].map(([g, rs]) => `<div><h3 class="grphead">${esc(g)}</h3>${standTable(rs, form, zones, lg)}</div>`).join('')}</div>`;
-  } else body = standTable(rows, (world || lg === 'sw3') && d ? formFrom(d.matches) : null, zones, lg);
+  } else body = standTable(rows, (world || BFC_URL[lg]) && d ? formFrom(d.matches) : null, zones, lg);
   body += zoneLegend(lg, zones);
   const when = upd ? `обновено ${bgDate(upd)}${lt.caught ? ' · с мачовете, изиграни след това' : ''}` : '';
   return `<div class="standhead" id="standings"><h2>Класиране — ${esc(title)}${lt.live ? '<span class="livetag">на живо</span>' : ''}</h2>${when ? `<span class="muted">${esc(when)}</span>` : ''}</div>
@@ -5391,6 +5471,7 @@ function renderResults(force){
     ${standingsHtml(lg)}
     <p class="muted">${lg === 'sw3'
       ? 'Резултати и класиране: <a href="https://bulgarian-football.com/yugozapadna-treta-liga.html" target="_blank" rel="noopener">bulgarian-football.com</a> · Наряди и наказания: <a href="https://bfu-tournaments.com/leagues/third-sw/news" target="_blank" rel="noopener">bfu-tournaments.com</a>'
+      : BFC_URL[lg] ? `Резултати и класиране: <a href="${bfcUrl(lg)}" target="_blank" rel="noopener">bulgarian-football.com</a>`
       : `Резултати и класиране: ${lg === 'efbet' ? '<a href="https://efbetleague.com/matches" target="_blank" rel="noopener">efbetleague.com</a>' : '<a href="https://mr-bit.bg/vtora-liga/" target="_blank" rel="noopener">mr-bit.bg</a>'} · Наряди: <a href="https://bfunion.bg/%D0%A1%D1%8A%D0%B4%D0%B8%D0%B9%D1%81%D0%BA%D0%B0-%D0%BA%D0%BE%D0%BC%D0%B8%D1%81%D0%B8%D1%8F" target="_blank" rel="noopener">bfunion.bg</a> · Видео: YouTube (Gong.bg и други)`} · обновява се на всеки 30 минути</p>`;
   afterMatchNews(box);
   // an old #table link opens Results at the table
@@ -5595,8 +5676,9 @@ async function loadMatchIndex(force){
   const from = new Date(seasonStartTs() - 10 * DAY).toISOString(), to = new Date(Date.now() + 14 * DAY).toISOString(), all = [];
   try {
     for (let p = 0; p < 5; p++) {
+      // (not the youth groups: "ЦСКА (София)" there is the club's U17, and a story about the first team is never about it)
       const { data, error } = await SB.from('football_matches').select('id,league,round,round_name,note,kickoff,status,home_name,away_name,home_score,away_score')
-        .gte('kickoff', from).lte('kickoff', to).order('kickoff', { ascending: true }).order('id', { ascending: true }).range(p * 1000, p * 1000 + 999);
+        .not('league', 'in', `(${[...YOUTH_LG].join(',')})`).gte('kickoff', from).lte('kickoff', to).order('kickoff', { ascending: true }).order('id', { ascending: true }).range(p * 1000, p * 1000 + 999);
       if (error) throw error;
       all.push(...(data || []));
       if (!data || data.length < 1000) break;
@@ -5953,7 +6035,7 @@ function prebuildLinks(){
 // The Bulgarian leagues number their rounds themselves; the five big leagues' and the European cups' rounds are worked
 // out from the fixture list, as on the Results page. A round's days are those of most of its matches: a match postponed
 // by weeks doesn't stretch them (efbet Лига's 10th round: 18–21 Sep, one match on 3 Dec).
-const LG_DIV = { efbet: 'd1', mrbit: 'd2', sw3: 'd3' };
+const LG_DIV = { efbet: 'd1', mrbit: 'd2', sw3: 'd3', nw3: 'd3', ne3: 'd3', se3: 'd3', u18: 'youth', u17: 'youth', u16: 'youth', u15: 'youth' };
 const spanLabel = (a, b) => { const x = sofiaParts(new Date(a).toISOString()), y = sofiaParts(new Date(b).toISOString());
   return x.m !== y.m ? `${x.d} ${x.m} – ${y.d} ${y.m}` : x.d === y.d ? `${x.d} ${x.m}` : `${x.d}–${y.d} ${x.m}`; };
 function buildRounds(matches, comps){
@@ -6210,19 +6292,24 @@ function initUI(){
     const b = e.target.closest('[data-pill]'); if (!b) return;
     const k = b.dataset.pill, sel = SEL[VIEW === 'world' ? 'world' : 'bg'];
     const off = id => { if (id === 'q') $('#q').value = ''; else if (id === 'sort') $('#sort').value = 'date'; else if ($('#' + id)) $('#' + id).checked = false; };
-    if (k === '*') { sel.group.clear(); sel.cats.clear(); sel.round = sel.rcomp = ''; ['q', 'sort', 'onlyNew', 'onlyMajor', 'onlyHot', 'hideRead'].forEach(off); }
+    if (k === '*') { sel.group.clear(); sel.cats.clear(); sel.round = sel.rcomp = ''; sel.sub = ''; ['q', 'sort', 'onlyNew', 'onlyMajor', 'onlyHot', 'hideRead'].forEach(off); }
     else if (k === 'round') sel.round = '';
+    else if (k === 'sub') sel.sub = '';
     else if (k.startsWith('group:')) sel.group.delete(k.slice(6));
     else if (k.startsWith('cats:')) sel.cats.delete(k.slice(5));
     else off(k);
     shown = PAGE_SIZE; render();
+  });
+  $('#subChips').addEventListener('click', e => {
+    const b = e.target.closest('[data-sub]'); if (!b) return;
+    SEL.bg.sub = SEL.bg.sub === b.dataset.sub ? '' : b.dataset.sub; shown = PAGE_SIZE; render();
   });
   $('#sectChips').addEventListener('click', e => {
     const d = e.target.closest('[data-div]');
     if (d) {                                       // Новини: one league, or all of them
       const g = SEL.bg.group, k = d.dataset.div, only = g.size === 1 && g.has(k);
       g.clear(); if (k && !only) g.add(k);
-      SEL.bg.round = SEL.bg.rcomp = ''; shown = PAGE_SIZE; render(); return;
+      SEL.bg.round = SEL.bg.rcomp = SEL.bg.sub = ''; shown = PAGE_SIZE; render(); return;
     }
     const b = e.target.closest('[data-sect]'); if (!b) return;
     const w = SEL.world;

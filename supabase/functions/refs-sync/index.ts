@@ -1,9 +1,11 @@
-// refs-sync: referee appointments for every match of efbet Лига, Втора лига and the Third League South-West, the Third
-// League's results and table, and its disciplinary decisions (suspended players, fines, staff bans).
+// refs-sync: referee appointments for every match of efbet Лига, Втора лига and the Third League South-West; the results and
+// tables of the Third League's four groups and the elite youth groups U18–U15; and the South-West's disciplinary decisions
+// (suspended players, fines, staff bans).
 //   appointments: bfunion.bg → Съдийска комисия (1st and 2nd League), bfu-tournaments.com → third-sw news (Third League)
 //   Third League results and table: bulgarian-football.com · punishments: the PDF attached to bfu-tournaments.com's posts
 // Called by pg_cron every 30 minutes with the key stored in the vault as football_sync_key.
-// Body (JSON, all optional): { results, officials, discipline (each default true), pages: 1 (listing pages to read),
+// Body (JSON, all optional): { results, officials, discipline (each default true), leagues: ['sw3', …] (only these
+//   bulgarian-football.com leagues), pages: 1 (listing pages to read),
 //   days: 10 (posts newer than this are read again, for late changes), all: false (read every post again), dry, probe: url }
 import * as R from './refs.js';
 import { getDocumentProxy } from 'npm:unpdf@0.12.1';
@@ -76,18 +78,32 @@ Deno.serve(async (req) => {
     return Response.json({ ...out, pdf, bytes: buf.length, text: text.slice(Number(body.from ?? 0), Number(body.from ?? 0) + Number(body.len ?? 6000)) });
   }
 
-  // 1. the Third League South-West: results, fixtures and table
+  // 1. bulgarian-football.com: results, fixtures and table of the Third League's four groups (South-West, North-West,
+  //    North-East, South-East) and of the elite youth groups U18–U15; each league on its own, so one page failing keeps the rest
+  //    (a page that reads as far fewer matches or teams than a league has is not saved: the site was half-loaded or changed)
   let sw3: any = null;
   if (body.results !== false) {
-    try {
-      sw3 = R.parseSw3(await page(R.SW3_PAGE));
-      const by: Record<string, number> = {};
-      for (const m of sw3.matches) by[m.status] = (by[m.status] ?? 0) + 1;
-      out.sw3 = { matches: sw3.matches.length, byStatus: by, table: sw3.table.length };
-      if (dry) out.sw3.sample = sw3.matches.filter((m: any) => m.status === 'finished').slice(-2).concat(sw3.matches.filter((m: any) => m.status !== 'finished').slice(0, 2));
-      if (!dry && sw3.matches.length >= 100) await upsert('football_matches', 'id', sw3.matches.map((m: any) => ({ ...m, updated_at: new Date().toISOString() })));
-      if (!dry && sw3.table.length >= 10) out.sw3.tableSaved = await rpc('football_replace_standings', { p_league: 'sw3', p_season: R.SEASON, p_rows: sw3.table });
-    } catch (e) { out.sw3Error = String((e as Error).message ?? e); }
+    const only = Array.isArray(body.leagues) ? new Set(body.leagues) : null;
+    out.leagues = {};
+    for (const [lg, url] of R.BFC_PAGES) {
+      if (only && !only.has(lg)) continue;
+      try {
+        const r = R.parseBfc(await page(url), lg, url), o: Record<string, any> = { matches: r.matches.length, table: r.table.length };
+        if (lg === 'sw3') sw3 = r;
+        const by: Record<string, number> = {};
+        for (const m of r.matches) by[m.status] = (by[m.status] ?? 0) + 1;
+        o.byStatus = by;
+        const full = r.table.length >= 8 && r.matches.length >= 0.8 * r.table.length * (r.table.length - 1) / 2;
+        if (dry) o.sample = r.matches.filter((m: any) => m.status === 'finished').slice(-1).concat(r.matches.filter((m: any) => m.status !== 'finished').slice(0, 1));
+        else if (full) {
+          await upsert('football_matches', 'id', r.matches.map((m: any) => ({ ...m, updated_at: new Date().toISOString() })));
+          o.tableSaved = await rpc('football_replace_standings', { p_league: lg, p_season: R.SEASON, p_rows: r.table });
+        } else o.skipped = 'too few matches or teams';
+        out.leagues[lg] = o;
+      } catch (e) { out.leagues[lg] = { error: String((e as Error).message ?? e) }; }
+      await sleep(400);
+    }
+    if (out.leagues.sw3) out.sw3 = out.leagues.sw3;
   }
 
   // 2. the posts: appointments (all three leagues) and the Third League's punishments

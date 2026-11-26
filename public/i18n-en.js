@@ -9,7 +9,7 @@ window.BGRW_EN = {
     'Превключи на български': 'Switch to Bulgarian', 'Има нова версия на сайта.': 'There is a new version of the site.', 'Обнови': 'Refresh',
     'Ако смените езика сега, въведеното ще се загуби. Да продължа ли?': 'If you change the language now, what you typed will be lost. Continue?',
     // the news
-    'Отбор, съдия, дума…': 'Team, referee, word…', 'Търси отбор, съдия': 'Team, referee, word', 'Национални': 'National teams', 'Категории': 'Categories', 'Първа лига': 'First League', 'Търси в новините': 'Search the news', 'Филтри': 'Filters',
+    'Отбор, съдия, дума…': 'Team, referee, word…', 'Търси отбор, съдия': 'Team, referee, word', 'Национални': 'National teams', 'Категории': 'Categories', 'Група на Трета лига': 'Third League group', 'Възраст': 'Age group', 'Група': 'Group', 'Първа лига': 'First League', 'Търси в новините': 'Search the news', 'Филтри': 'Filters',
     'Провери за нови статии': 'Check for new articles', 'Дивизия': 'Division', 'Тема': 'Topic', 'Турнир': 'Competition', 'Кръг': 'Round',
     'Първа лига (efbet)': 'First League (efbet)', 'Втора лига': 'Second League', 'Трета лига': 'Third League', 'Купа на България': 'Bulgarian Cup',
     'Юноши': 'Youth', 'Европа и чужбина': 'Europe and abroad', 'В Европа': 'In Europe', 'Некласифицирани': 'Unclassified',
@@ -84,6 +84,9 @@ window.BGRW_EN = {
     'Резултатите от кръга': 'The round’s results', 'Предишен кръг': 'Previous round', 'Следващ кръг': 'Next round',
     // matches
     'България': 'Bulgaria', 'efbet Лига': 'efbet League', 'Mr Bit Втора лига': 'Mr Bit Second League', 'Трета лига Югозапад': 'Third League South-West',
+    'Трета лига Северозапад': 'Third League North-West', 'Трета лига Североизток': 'Third League North-East', 'Трета лига Югоизток': 'Third League South-East',
+    'Юноши U18': 'Youth U18', 'Юноши U17': 'Youth U17', 'Юноши U16': 'Youth U16', 'Юноши U15': 'Youth U15',
+    'Югозапад': 'South-West', 'Северозапад': 'North-West', 'Североизток': 'North-East', 'Югоизток': 'South-East',
     'Съдия': 'Referee', 'Състави': 'Squads', 'на живо': 'live', 'На живо': 'Live', 'отложен': 'postponed', 'дата неизвестна': 'date unknown',
     'Съдиите за мача още не са обявени': 'The referees for this match are not announced yet', 'Съдиите за мача още не са обявени.': 'The referees for this match are not announced yet.',
     'Резултати и класиране:': 'Results and table:', 'Резултати и класирания:': 'Results and tables:', '· Наряди:': '· Appointments:', '· Наряди и наказания:': '· Appointments and punishments:',
@@ -238,6 +241,8 @@ window.BGRW_EN = {
     ['Кръг (\\d+) от (\\d+)', 'Round $1 of $2'], ['Кръг (\\d+)', 'Round $1'],
     ['(.+) · видео за (\\d+) от (\\d+) мача', '$1 · video for $2 of $3 matches'],
     ['efbet Лига, (\\d+) кръг', 'efbet League, round $1'], ['Mr Bit Втора лига, (\\d+) кръг', 'Mr Bit Second League, round $1'], ['Трета лига Югозапад, (\\d+) кръг', 'Third League South-West, round $1'],
+    ['Трета лига Северозапад, (\\d+) кръг', 'Third League North-West, round $1'], ['Трета лига Североизток, (\\d+) кръг', 'Third League North-East, round $1'],
+    ['Трета лига Югоизток, (\\d+) кръг', 'Third League South-East, round $1'], ['Юноши (U1[5-8]), (\\d+) кръг', 'Youth $1, round $2'],
     ['(.+) - Кръг (\\d+)', '$1 - Round $2'], ['(.+), Кръг (\\d+)', '$1, round $2'],
     ['Полувреме (\\d+):(\\d+)', 'Half time $1:$2'], ['Стадион (.+)', 'Stadium $1'], ['(.*) · Източник:', '$1 · Source:'], ['· проверено (.+)', '· checked $1'],
     ['Съдийска комисия на БФС, (.+)', 'BFU Referee Committee, $1'], ['БФС Електронно първенство, протокол на мача', 'BFU electronic championship, match sheet'], ['БФС, Трета лига, (.+)', 'BFU, Third League, $1'],

@@ -241,4 +241,24 @@ ok(p15.players.map(p => p.team).join('|') === 'Пирин 1941 (Разлог)|С
   'every club abbreviation found in the table: ' + p15.players.map(p => p.team).join('|'));
 ok(R.docLink('<a href="/news_docs/yBsPoqeuQJe2hjdhxSDvwHlXNuHf2bW6KcMtN7F2.pdf" class="rounded">') === 'https://bfu-tournaments.com/news_docs/yBsPoqeuQJe2hjdhxSDvwHlXNuHf2bW6KcMtN7F2.pdf', 'the attached PDF');
 ok(R.sofiaUtc(2026, 2, 29, 12).toISOString() === '2026-03-29T09:00:00.000Z' && R.sofiaUtc(2026, 2, 28, 12).toISOString() === '2026-03-28T10:00:00.000Z' && R.sofiaUtc(2026, 9, 25, 12).toISOString() === '2026-10-25T10:00:00.000Z', 'summer time changes on the right days');
+// the other leagues on bulgarian-football.com: their own round anchors (k13…), plain lines (no bold), several matches under
+// one time, a video link between two matches, a name written shorter than in the table, a team taken out of the league
+{
+  const T = ['Славия 1913 (София)', 'Национал (София)', 'Локомотив София 1929 (София)', 'Локомотив (Горна Оряховица)', 'Миньор (Перник)', 'Берое (Стара Загора)', 'Янтра 2019 (Габрово)', 'Арда 1924 (Кърджали)'];
+  const L = n => `<a class="bgclubs" href="https://bgclubs.eu/teams/X${T.indexOf(n)}(Y)?season=227#1015${T.indexOf(n)}-371" target="_blank">${n}</a>`;
+  const vid = `<a href="#" target="popup" onclick="window.open('https://www.youtube.com/watch?v=x','popup');return false;"><img src="v.png" alt="Video"></a>`;
+  const html = `<div class="standings-227-7000052-100"> ` + T.map((t, i) => `${i + 1}. ${L(t)} 3 1 1 1 4:4 4`).join(' ') + ` </div> ` +
+    `<a id="k13r1"></a><strong>I кръг</strong> <u>15 август 2026 г., събота, 09:30 ч:</u> ${L(T[0])} - ${L(T[1])} 2:1 ${L(T[4])} - ${L(T[5])} 1:0 (0:0) ${vid} ${L(T[2])} - ${L(T[3])} 3:2 ` +
+    `<u>16 август 2026 г., неделя, 11:00 ч:</u> <em>в Черноочене:</em> ${L(T[7])} - ${L(T[6])} отложен ` +
+    `<a id="k13r2"></a><strong>II кръг</strong> ${L(T[1])} - Локомотив Сф 1929 (София) - ${L(T[3])} - ${L(T[0])} - Ювентус 95 (Малчика) - ${L(T[5])} 0:3 <div id="grid-df"></div>`;
+  const r = R.parseBfc(html, 'u18', 'https://bulgarian-football.com/elitna-grupa-u18.html');
+  const m = id => r.matches.find(x => x.id === id);
+  ok(r.table.length === 8 && r.matches.length === 6, 'every plain line read, the removed team left out: ' + r.matches.map(x => x.id).join(' '));
+  ok(m('u18:2026-27:slaviya-1913:natsional')?.home_score === 2 && m('u18:2026-27:minyor:beroe')?.ht_home === 0 && m('u18:2026-27:lokomotiv-sofiya-1929:lokomotiv')?.away_score === 2,
+    'several matches under one time, and after a video link');
+  ok(m('u18:2026-27:arda-1924:yantra-2019')?.note === 'в Черноочене' && m('u18:2026-27:natsional:lokomotiv-sofiya-1929')?.round === 2 && m('u18:2026-27:natsional:lokomotiv-sofiya-1929')?.status === 'scheduled',
+    'the venue, and a name written shorter matched to the table');
+  ok(r.table[0].logo === 'https://media.bgclubs.eu/images/logos/10150.png', 'any club\'s crest from its link: ' + r.table[0].logo);
+  ok(R.BFC_PAGES.map(([k]) => k).join(' ') === 'sw3 nw3 ne3 se3 u18 u17 u16 u15', 'the four Third League groups and the four youth groups');
+}
 console.log(fails ? `${fails} FAILED` : 'all passed');
