@@ -11,7 +11,7 @@
 //                                 members only), including its subfolders, so a whole folder can be added at once.
 //   /drive/video?id=...           a Google Drive clip of the site's own videos, streamed (with seeking) to the page's
 //                                 own player: Google gives the file to a server but refuses it to another site's page.
-//   POST /ebfu/login, /ebfu/explore   ebfu.net with the member's OWN account (approved members only):
+//   POST /ebfu/login, /ebfu/explore, /ebfu/week   ebfu.net with the member's OWN account (approved members only):
 //                                 log in once, then map the video archive. Passwords are never stored or logged;
 //                                 the ebfu.net session goes back to the member's browser only.
 //   everything else               the static site.
@@ -482,7 +482,11 @@ function findMinutes(text) {
 const SB_URL = 'https://zinuspouctowujhocevy.supabase.co';
 const SB_KEY = 'sb_publishable_sElFdQnVmyqIZMRqBV5dAg_VrstG7T8';
 const EBFU_BASE = 'https://ebfu.net/';
-const EBFU_ARCHIVE = 'https://ebfu.net/interfaceReferees/videoShowChampWeek.php';   // Видеоархив
+// Видеоархив: the menu of every competition's rounds (videoArchive.php); choosing a round (a form post, kept in the PHP
+// session) opens that round's page (videoShowChampWeek.php), which sends a visitor with no round chosen back to the
+// login page — so that page is not a test of being logged in
+const EBFU_ARCHIVE = 'https://ebfu.net/interfaceReferees/videoArchive.php';
+const EBFU_WEEK = 'https://ebfu.net/interfaceReferees/videoShowChampWeek.php';
 const EBFU_SKIP = /календар|история|calendar|history|събити|event|изход|logout|log-out|signout|exit|настройки|settings|profile|профил|gdpr/i;
 
 async function handleEbfu(request, url, env) {
@@ -495,6 +499,7 @@ async function handleEbfu(request, url, env) {
   try {
     if (url.pathname === '/ebfu/login') return json({ ...(await ebfuLogin(String(body.username || '').trim(), String(body.password || ''), diag)), diag });
     if (url.pathname === '/ebfu/explore') return json({ ...(await ebfuExplore(String(body.session || ''), diag)), diag });
+    if (url.pathname === '/ebfu/week') return json({ ...(await ebfuWeekVideos(String(body.session || ''), body, diag)), diag });
   } catch (e) { return json({ ok: false, error: 'ebfu.net: ' + (e.name === 'TimeoutError' ? 'no answer in time' : e.message), diag }); }
   return json({ ok: false, error: 'unknown action' }, 404);
 }
@@ -823,8 +828,8 @@ async function scriptLogin(first, jar, username, password, diag) {
   for (const j of [...new Set(jumps)].slice(0, 2)) {
     try { const u = new URL(j, first.url).toString(); if (!/(^|\.)ebfu\.net$/i.test(new URL(u).hostname)) continue; const pg = await ebfuFetch(u, jar, { referer: first.url }, diag); if (!isLoginPage(pg.text, pg.url)) { landing = pg; break; } } catch {}
   }
-  // the real test: can the video archive be opened now?
-  const check = landing && /videoShow/i.test(landing.url) ? landing : await ebfuFetch(EBFU_ARCHIVE, jar, { referer: first.url }, diag);
+  // the real test: a page of the logged-in site (where the login script sent us, else the video archive's menu)
+  const check = landing || await ebfuFetch(EBFU_ARCHIVE, jar, { referer: first.url }, diag);
   if (!isLoginPage(check.text, check.url)) {
     const name = ((landing || check).text.match(NAME_RE) || check.text.match(NAME_RE) || [])[1] || '';
     return { ok: true, session: jarStr(jar), name, landing: maskUrl((landing || check).url) };
@@ -835,6 +840,84 @@ async function scriptLogin(first, jar, username, password, diag) {
   const safe = t => maskText(String(t).split(password).join('•••'));
   return { ok: false, error: msg ? 'ebfu.net says: ' + safe(msg).trim() : 'ebfu.net did not accept the login.',
     inspect: { loginFields: plan.fields.map(f => f.key + '=' + f.kind), answer: answer ? safe(JSON.stringify(answer)).slice(0, 1500) : safe(res.text.slice(0, 800)), loginFunction: maskText(plan.code.slice(0, 4000)) } };
+}
+
+/* ---- the video archive: a round's matches and the teams' full-match videos ----
+   The menu (videoArchive.php) lists each competition's rounds as tiles: "efbet Лига КРЪГ 15", "ВПФЛ", "В ЮЗ" (the Third
+   League's groups: В ЮЗ, В СЗ, В СИ, В ЮИ), "U18"…"U15"; a tile posts showChampWeek=<competition>-<round> (the
+   competition's number changes every season). The round's page has a card per match: the round, the day and time, both
+   teams' short names, the score, the stadium, and a blue camera button for each video a club uploaded (the home team's,
+   sometimes the visitors' too), which plays https://ebfu.net/videoFile.php?stream_token=… (an MP4, any site can play it).
+   The member's page pairs the cards with its own matches. */
+export const EBFU_LABEL = { efbet: 'efbet Лига', mrbit: 'ВПФЛ', sw3: 'В ЮЗ', nw3: 'В СЗ', ne3: 'В СИ', se3: 'В ЮИ', u18: 'U18', u17: 'U17', u16: 'U16', u15: 'U15' };
+// the menu → { season (the one chosen), tiles: [{ label, comp, round }] }
+export function ebfuTiles(html) {
+  const h = String(html), tiles = [];
+  for (const m of h.matchAll(/<div class="videoChampWeek[^"]*"[^>]*\$\('#showChampWeek(\d+)-(\d+)'\)[\s\S]*?<div class="robotoDarkGreen13[^"]*">([^<]*)<\/div>/gi))
+    tiles.push({ comp: m[1], round: +m[2], label: decodeEntities(m[3]).replace(/\s+/g, ' ').trim() });
+  const sel = h.match(/<select name="selectSeason"[\s\S]*?<\/select>/i), opt = sel && (sel[0].match(/<option value="(\d{4}-\d{4})"\s+selected/i) || sel[0].match(/<option value="(\d{4}-\d{4})"/i));
+  return { season: opt ? opt[1] : null, tiles };
+}
+// a round's page → { heading ("2026-2027, efbet Лига, 15 кръг"), cards: [{ round, when: { d, mo, time }, home, away, score, venue,
+//   videos: [{ url, by: 'home' | 'away' | '', title }] }] }
+const EBFU_MONTHS = ['яну', 'фев', 'мар', 'апр', 'май', 'юни', 'юли', 'авг', 'сеп', 'окт', 'ное', 'дек'];
+export function ebfuWeek(html) {
+  const h = String(html), cards = [];
+  const heading = (stripTags((h.match(/Видео архив за сезон:([^<]*)</) || [])[1] || '')).trim();
+  const parts = h.split(/<div class="flex-col br10 p10[^"]*"[^>]*>/).slice(1);
+  for (const c of parts) {
+    const divs = [...c.matchAll(/<div(?:\s+class="([^"]*)")?[^>]*>([^<]*)<\/div>/g)].map(m => ({ cls: m[1] || '', text: decodeEntities(m[2]).replace(/\s+/g, ' ').trim() }));
+    const head = divs.find(d => /Кръг\s*$/i.test(d.text)), when = divs.find(d => /^\p{L}{2,3}\s+\d{1,2},\s*\p{L}{3}/u.test(d.text));
+    const teams = divs.filter(d => /\bfw400\b/.test(d.cls)), names = teams.map(d => d.text), score = divs.find(d => /\bfw500\b/.test(d.cls) && /^\d+\s*-\s*\d+$|^-?\s*$/.test(d.text));
+    if (names.length < 2) continue;
+    const w = when && when.text.match(/(\d{1,2}),\s*(\p{L}{3})\p{L}*\s*(?:в\s*(\d{1,2}):(\d{2}))?/u);
+    const mo = w ? EBFU_MONTHS.indexOf(w[2].toLowerCase()) : -1;
+    const sc = score && score.text.match(/^(\d+)\s*-\s*(\d+)$/);
+    const venue = divs.slice(divs.indexOf(teams[1]) + 1).find(d => d.text && !d.cls);
+    const videos = [...c.matchAll(/startPlayer\('([\s\S]*?)'\s*,\s*'(https:\/\/ebfu\.net\/videoFile\.php\?stream_token=[\w.-]+)'\)/g)].map(m => {
+      const t = stripTags(m[1].replace(/##/g, '"'));
+      return { url: m[2], by: /качено от домакина/i.test(t) ? 'home' : /качено от госта/i.test(t) ? 'away' : '', title: t.replace(/\s*Видеото е качено.*$/i, '').trim() };
+    });
+    cards.push({ round: head ? +((head.text.match(/(\d+)\s*Кръг/i) || [])[1] || 0) : null, when: w && mo >= 0 ? { d: +w[1], mo: mo + 1, time: w[3] ? w[3].padStart(2, '0') + ':' + w[4] : null } : null,
+      home: names[0], away: names[1], score: sc ? [+sc[1], +sc[2]] : null, venue: venue ? venue.text : '', videos });
+  }
+  return { heading, cards };
+}
+// body: { league, round, season?, comp? (remembered from an earlier answer: saves reading the menu) }
+async function ebfuWeekVideos(session, body, diag) {
+  if (!session) return { ok: false, error: 'Connect ebfu.net first.' };
+  const label = EBFU_LABEL[String(body.league || '')], round = Math.floor(Number(body.round));
+  if (!label || !(round > 0 && round < 99)) return { ok: false, error: 'unknown league or round' };
+  const jar = jarFrom(session), expired = () => ({ ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' });
+  let season = /^\d{4}-\d{4}$/.test(String(body.season || '')) ? String(body.season) : null;
+  let comp = /^\d{1,6}$/.test(String(body.comp || '')) ? String(body.comp) : null, comps = null;
+  const readMenu = async () => {
+    const a = await ebfuFetch(EBFU_ARCHIVE, jar, {}, diag);
+    if (isLoginPage(a.text, a.url)) return false;
+    const t = ebfuTiles(a.text);
+    comps = {}; for (const x of t.tiles) if (!comps[x.label]) comps[x.label] = x.comp;
+    season = season || t.season; comp = comps[label] || null;
+    return { has: t.tiles.some(x => x.label === label && x.round === round) };
+  };
+  if (!comp || !season) {
+    const m = await readMenu();
+    if (!m) return expired();
+    if (!m.has) return { ok: true, season, comps, cards: [], none: 'round', session: jarStr(jar) };
+  }
+  const open = () => ebfuFetch(EBFU_ARCHIVE, jar, { method: 'POST', body: new URLSearchParams({ selectSeason: season, showChampWeek: comp + '-' + round }).toString(),
+    contentType: 'application/x-www-form-urlencoded', referer: EBFU_ARCHIVE }, diag);
+  let pg = await open();
+  if (isLoginPage(pg.text, pg.url)) return expired();
+  let w = ebfuWeek(pg.text);
+  // the page names its league and round: anything else means a remembered competition number is out of date
+  const right = x => +((x.heading.match(/(\d+)\s*кръг\s*$/i) || [])[1] || 0) === round && x.cards.every(c => c.round === round);
+  if (!right(w) && body.comp) {
+    const m = await readMenu();
+    if (!m) return expired();
+    if (!m.has) return { ok: true, season, comps, cards: [], none: 'round', session: jarStr(jar) };
+    pg = await open(); w = ebfuWeek(pg.text);
+  }
+  return { ok: true, season, comp, comps, heading: w.heading, cards: w.cards, session: jarStr(jar) };
 }
 
 async function ebfuExplore(session, diag) {

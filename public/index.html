@@ -894,6 +894,10 @@
   .msrc{display:block;margin-top:8px;font-size:13px;color:var(--muted)}
   .msec .sheet{background:var(--card);border:1px solid var(--line);margin-top:0;padding:14px}
   .msec .vbtns{justify-content:flex-start;margin:0}
+  .vbtn.full{background:var(--accent);color:var(--accent-ink);padding:11px 16px;font-size:15px} .vbtn.full .ic,.vbtn.full .len{color:var(--accent-ink)} .vbtn.full .len{opacity:.85}
+  .vbtn.full{text-align:left} .vbtn.full .lbl{white-space:nowrap} .vbtn.full .len{min-width:0}
+  .mfull .msrc{margin-top:8px} .mfull .bar{margin-top:6px}
+  @media (max-width:600px){ .mfull .vbtns{flex-direction:column;align-items:stretch} }
   .msec .mnwrap{margin:0}
   .msec .mnews{border-top:1px solid var(--line);border-radius:12px}
   .msec .mnews.open{border-radius:12px 12px 0 0}
@@ -1742,14 +1746,14 @@ function storyMedia(s){
 }
 
 function ebfuHtml(s, mins){
-  const match = storyMatch(s);
+  const match = storyMatch(s), full = cardLinks(s).find(ebfuDone);   // the story's match: its whole recording is on its page
   const sits = mins.length
     ? 'Ситуации в ' + mins.map(m => `<span class="min">${minLabel(m)}</span>${m.tags.length ? esc(m.tags.map(t => MIN_TAGS[t] || t).join(', ')) : ''}`).join(' ')
     : (s.cats.filter(c => c !== 'other').length ? 'Ситуации: ' + esc(s.cats.filter(c => c !== 'other').map(c => CATS[c]).join(', ')) : '');
   return `<div class="ebfu"><div><b>Видеоархив на ebfu.net</b> · ${match ? esc(match) + ' · ' : ''}${esc(fmtDay(s.first))}${s.divs.some(d => d !== 'unk') ? ' · ' + esc(s.divs.filter(d => d !== 'unk').map(d => DIVS[d]).join(', ')) : ''}</div>
     ${sits ? `<div>${sits}</div>` : ''}
-    <div><a class="btn" href="${esc(EBFU_URL)}" target="_blank" rel="noopener">Отвори в ebfu.net</a>
-    <span class="muted">Отваря се с вашия вход в ebfu.net. Скок направо до мача и минутата предстои.</span></div></div>`;
+    <div>${full ? `<button class="btn primary" data-gomatch="${esc(full.league)}|${esc(full.id)}">▶ Целият мач</button> ` : ''}<a class="btn" href="${esc(EBFU_URL)}" target="_blank" rel="noopener">Отвори в ebfu.net</a>
+    <span class="muted">${full ? 'Целият мач се гледа на страницата на мача, с вашия профил в ebfu.net.' : 'Отваря се с вашия вход в ebfu.net.'}</span></div></div>`;
 }
 
 function mediaHtml(s){
@@ -2302,13 +2306,14 @@ function applyView(){
   const vm = /^video-(\d+)(?:-c(\d+))?$/.exec(v);      // #video-12 opens the player at that clip; #video-12-c5 plays its cut 5
   const vid = vm ? Number(vm[1]) : 0;
   PENDING_CUT = vm && vm[2] ? Number(vm[2]) : 0;
-  if (!vid && VPlayer.isOpen()) VPlayer.close(true);
+  if (!vid && VPlayer.isOpen() && !/^match\/[^/]+\/[^/]+\/full$/.test(v)) VPlayer.close(true);
   if (vid && VPlayer.isOpen()) { const c = VPlayer.current(); if (c && c.id === vid) { pendingCut(); return; } }
   PENDING_VID = vid;
   SCROLL_TO = v === 'table' ? 'standings' : null;
   if (v.startsWith('post-')) Forum.want(v.slice(5));                  // #post-12 opens that forum post
   // #match/efbet/<id>: the match's own page (Results underneath, so back returns to its round)
-  const mp = v.match(/^match\/([^/]+)\/(.+)$/);
+  const mp = v.match(/^match\/([^/]+)\/([^/]+)(\/full)?$/);
+  if (mp && mp[3] && !VPlayer.isOpen()) history.replaceState(null, '', '#match/' + mp[1] + '/' + mp[2]);   // the full match isn't reopened by itself
   const was = FB.match;
   FB.match = mp ? { lg: decodeURIComponent(mp[1]), id: decodeURIComponent(mp[2]) } : null;
   if (FB.match) { FB.league = FB.match.lg; FB.last[sectOf(FB.league)] = FB.league; }
@@ -3037,7 +3042,7 @@ function openVideo(id, ids, fromHash){
 }
 // new data while the player is open (a comment, the admin's changes, a deleted clip): the clip playing goes on
 function syncPlayer(){
-  if (!window.VPlayer || !VPlayer.isOpen() || Forum.playing()) return;   // the forum's videos keep their own queue
+  if (!window.VPlayer || !VPlayer.isOpen() || Forum.playing() || EBFU_PLAYING) return;   // the forum's videos and the full match keep their own queue
   const k = [VID_VER, CATV_VER].join('|');
   if (k === VP_SYNC) return;
   VP_SYNC = k;
@@ -4530,7 +4535,7 @@ let ACC_TAB = 'login', ACC_KEY = '';
 function renderAccount(force){
   const box = $('#accountBox');
   const key = [AUTH, USER && USER.id, PROFILE && PROFILE.approved, PROFILE && PROFILE.role, PROFILE && PROFILE.display_name, RECOVERY, ACC_TAB,
-    EBFU ? EBFU.name + EBFU.at : '-', EBFU_BUSY, EBFU_REPORT ? EBFU_REPORT.at : '-'].join('|');
+    EBFU ? EBFU.name + EBFU.at : '-', EBFU_BUSY].join('|');
   if (!force && key === ACC_KEY && box.firstChild) return;   // nothing changed — keep the form and what's typed in it
   ACC_KEY = key;
   preserveForm(box, () => drawAccount(box));
@@ -4571,7 +4576,7 @@ function accSay(t, cls){ const m = $('#accMsg'); if (m) { m.textContent = t; m.c
 // The site logs in to ebfu.net with the member's own username and password, once. Only the ebfu.net
 // session is kept, in this browser; the password is never stored anywhere.
 const EBFU_KEY = 'bgRefWatch.ebfu', EBFU_FAILS = 'bgRefWatch.ebfuFails';
-let EBFU = loadJSON(EBFU_KEY), EBFU_BUSY = false, EBFU_REPORT = null, EBFU_MSG = null;
+let EBFU = loadJSON(EBFU_KEY), EBFU_BUSY = false, EBFU_MSG = null;
 const recentFails = () => (loadJSON(EBFU_FAILS) || []).filter(t => Date.now() - t < 30 * 60e3);
 function ebfuCard(){
   const msg = EBFU_MSG ? `<div class="msg ${EBFU_MSG.cls || ''}">${esc(EBFU_MSG.text)}</div>` : '<div class="msg"></div>';
@@ -4587,19 +4592,10 @@ function ebfuCard(){
         ${blocked ? '<div class="msg err">Два неуспешни опита за последните 30 минути. Проверете потребителското име и паролата в самия ebfu.net и опитайте по-късно.</div>' : msg}
       </form></div>`;
   }
-  const r = EBFU_REPORT;
-  const has = k => r && r.report.pages.some(p => p.step === k);
-  const camOk = r && (has('video') || r.report.cameraFunction && !r.report.cameraFunction.missing || r.report.cameraProbe);
-  const steps = r ? [['start page', has('start')], ['video archive', has('archive')], ['league round' + ((r.report.pages.find(p => p.step === 'round') || {}).tile ? ' (' + r.report.pages.find(p => p.step === 'round').tile + ')' : ''), has('round')],
-    ['camera button → ' + (has('video') ? 'video page' : r.report.cameraFunction ? 'pop-up player script' : 'player'), camOk]].map(([l, okk]) => (okk ? '✓ ' : '✗ ') + l).join(' · ') : '';
-  const notes = r ? [].concat(r.report.notes || [], r.report.note || []) : [];
   return `<div class="card" id="ebfuCard"><h2>ebfu.net</h2>
     <p><b>Свързано</b>${EBFU.name ? ' като ' + esc(EBFU.name) : ''} · от ${esc(fmtDate(EBFU.at))}</p>
-    <p class="muted">Следваща стъпка: „Провери видеоархива“ отваря архива с вашия профил и записва как са построени страниците му (линкове, бутони, плейъри), за да се довърши автоматичното търсене по мач и минута. Календарът, историята и настройките ви никога не се отварят.</p>
-    <div class="bar"><button class="primary" id="btnEbfuCheck" ${EBFU_BUSY ? 'disabled' : ''}>${EBFU_BUSY ? 'Проверка…' : 'Провери видеоархива'}</button><button id="btnEbfuOff">Прекъсни</button></div>
-    ${r ? `<p>${esc(steps)}</p>${notes.map(n => `<p class="muted">${esc(n)}</p>`).join('')}
-      <div class="bar"><button class="primary" id="btnEbfuSend" ${r.sent ? 'disabled' : ''}>${r.sent ? '✓ Докладът е изпратен' : 'Изпрати доклада на разработчика'}</button></div>
-      <details class="muted"><summary>Какво има в доклада</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:240px;overflow:auto">${esc(JSON.stringify(r.report, null, 1).slice(0, 6000))}</pre></details>` : ''}
+    <p class="muted">Целият мач от видеоархива на ebfu.net се отваря на страницата на всеки български мач, след като отборите качат записа. Календарът, историята и настройките ви в ebfu.net никога не се отварят.</p>
+    <div class="bar"><button id="btnEbfuOff">Прекъсни</button></div>
     ${msg}</div>`;
 }
 async function siteToken(){ const { data } = await SB.auth.getSession(); return data.session ? data.session.access_token : null; }
@@ -4632,29 +4628,180 @@ async function ebfuConnect(form){
       return ebfuSay((j.error || 'Връзката не успя.') + sent, 'err');
     }
     EBFU = { session: j.session, name: j.name || '', at: Date.now() };
+    EBFU_EXPIRED = false;
     saveJSON(EBFU_KEY, EBFU); saveJSON(EBFU_FAILS, []);
-    ebfuSay('Свързано. Сега натиснете „Провери видеоархива“.', 'ok');
+    ebfuSay('Свързано. Целият мач вече се отваря на страницата на всеки български мач.', 'ok');
+    if (EBFU_BACK) { const h = EBFU_BACK; EBFU_BACK = ''; location.hash = h; }   // back to the match the member came from
   } catch (e) { EBFU_BUSY = false; ebfuSay(e.message, 'err'); }
 }
-async function ebfuCheck(){
-  EBFU_BUSY = true; EBFU_MSG = null; renderAccount(true);
+// ── the whole match, from ebfu.net's video archive. After a match the clubs upload their recording to ebfu.net (one or
+// both of them); the match page finds it with the member's own ebfu.net session and plays it here. A round's page in
+// the archive lists all of its matches, so one look serves the whole round. What was found stays in this browser
+// (the links don't change); a match with no video yet is looked at again after 15 minutes, when its page is opened.
+const EBFU_VID_KEY = 'bgRefWatch.ebfuVids';
+const EBFU_V = (v => v && v.m && v.r && v.x ? v : { m: {}, r: {}, x: {} })(loadJSON(EBFU_VID_KEY));   // m: 'lg|id' → { v: [{ url, by }], at }; r: 'lg|round' → when looked at; x: 'lg|id' → not in the archive's round
+let EBFU_Q = [], EBFU_RUN = '', EBFU_ERR = {}, EBFU_EXPIRED = false, EBFU_BACK = '', EBFU_PLAYING = false, EBFU_PUSHED = false;
+function ebfuForget(){ EBFU_V.m = {}; EBFU_V.r = {}; EBFU_V.x = {}; saveJSON(EBFU_VID_KEY, EBFU_V); EBFU_Q = []; EBFU_ERR = {}; }
+const ebfuDone = m => !!LEAGUES[m.league] && m.status === 'finished';
+// whether the match's round should be looked at (again) now
+function ebfuWants(m){
+  if (!ebfuDone(m) || !EBFU || !EBFU.session || !approved() || EBFU_ERR[m.league + '|' + m.round]) return false;   // after an error: only „Опитай пак“
+  const got = EBFU_V.m[m.league + '|' + m.id], age = Date.now() - (EBFU_V.r[m.league + '|' + m.round] || 0);
+  if (!got) return age > 15 * 60e3;
+  // one club's recording: the other club's may follow, in the first days
+  return got.v.length < 2 && age > 6 * 3600e3 && Date.now() - Date.parse(m.kickoff) < 10 * 864e5;
+}
+function ebfuLook(lg, round){
+  const k = lg + '|' + round;
+  if (!EBFU || EBFU_RUN === k || EBFU_Q.includes(k)) return;
+  EBFU_Q.push(k);
+  ebfuNext();
+}
+const EBFU_ERRS = [[/no answer in time/, 'ebfu.net не отговори навреме.'], [/site login has expired|Log in to the site/, 'Влезте отново в сайта.'],
+  [/approved by the admin/, 'Целият мач се отключва, щом администраторът одобри профила ви.']];
+const ebfuErr = t => (EBFU_ERRS.find(([rx]) => rx.test(t || '')) || [0, 'ebfu.net не отговори както трябва' + (t ? ': ' + t : '.')])[1];
+async function ebfuNext(){
+  if (EBFU_RUN || !EBFU_Q.length) return;
+  if (!EBFU) { EBFU_Q = []; return; }
+  const k = EBFU_RUN = EBFU_Q.shift(), [lg, r] = k.split('|'), round = Number(r);
+  delete EBFU_ERR[k];
+  ebfuPaint();
   try {
-    const j = await ebfuCall('explore', { session: EBFU.session });
-    EBFU_BUSY = false;
-    if (!j.ok) {
-      if (j.expired) { EBFU = null; saveJSON(EBFU_KEY, null); }
-      return ebfuSay(j.error || 'Проверката не завърши.', 'err');
+    // the archive's season and its number for each league, re-read once a week (they change every season)
+    const fresh = EBFU.seasonAt && Date.now() - EBFU.seasonAt < 7 * 864e5;
+    const j = await ebfuCall('week', { session: EBFU.session, league: lg, round, season: fresh ? EBFU.season : undefined, comp: fresh ? (EBFU.comp || {})[lg] : undefined });
+    if (!EBFU) { /* disconnected meanwhile */ }
+    else if (!j.ok) {
+      if (j.expired) { EBFU_EXPIRED = true; EBFU = null; saveJSON(EBFU_KEY, null); EBFU_Q = []; }
+      else EBFU_ERR[k] = ebfuErr(j.error);
+    } else {
+      if (j.session) EBFU.session = j.session;
+      if (!fresh || j.season !== EBFU.season) Object.assign(EBFU, { season: j.season, seasonAt: Date.now(), comp: {} });
+      if (j.comp) (EBFU.comp = EBFU.comp || {})[lg] = j.comp;
+      saveJSON(EBFU_KEY, EBFU);
+      ebfuKeep(lg, round, j.cards || []);
     }
-    if (j.session) { EBFU.session = j.session; saveJSON(EBFU_KEY, EBFU); }
-    EBFU_REPORT = { report: j.report, steps: j.diag || [], at: Date.now(), sent: false };
-    ebfuSay('Готово. Изпратете доклада, за да се довърши автоматичното търсене.', 'ok');
-  } catch (e) { EBFU_BUSY = false; ebfuSay(e.message, 'err'); }
+  } catch (e) { EBFU_ERR[k] = e.message; }
+  EBFU_RUN = '';
+  ebfuPaint();
+  ebfuNext();
 }
-async function ebfuSendReport(){
-  const { error } = await SB.from('ebfu_reports').insert({ report: { ...EBFU_REPORT.report, steps: EBFU_REPORT.steps } });
-  if (error) return ebfuSay('Не можа да се изпрати: ' + error.message, 'err');
-  EBFU_REPORT.sent = true;
-  ebfuSay('Докладът е изпратен.', 'ok');
+// the round's cards → our matches
+function ebfuKeep(lg, round, cards){
+  const d = FB.data[lg], ours = d ? d.matches.filter(x => x.round === round) : [], pairs = ebfuPair(ours, cards), now = Date.now();
+  for (const m of ours) {
+    const k = lg + '|' + m.id, c = pairs.get(String(m.id));
+    if (c && c.videos.length) EBFU_V.m[k] = { v: c.videos.map(v => ({ url: v.url, by: v.by })), at: now };
+    if (c || !cards.length) delete EBFU_V.x[k]; else if (ebfuDone(m)) EBFU_V.x[k] = 1;
+  }
+  EBFU_V.r[lg + '|' + round] = now;
+  const keys = Object.keys(EBFU_V.m);   // a season of looking stays small: the newest 600 matches
+  if (keys.length > 600) keys.sort((a, b) => EBFU_V.m[a].at - EBFU_V.m[b].at).slice(0, keys.length - 600).forEach(x => delete EBFU_V.m[x]);
+  saveJSON(EBFU_VID_KEY, EBFU_V);
+}
+// ebfu.net names the clubs its own way ("Локомотив Пд U17" for "Локомотив 1926 (Пловдив)"): the names are compared
+// word by word, the towns' short forms spelled out; the day, the kick-off and the score settle the rest
+const EBFU_ABBR = { сф: 'софия', пд: 'пловдив', пк: 'перник', бл: 'благоевград', вн: 'варна', вр: 'враца', вт: 'търново', бс: 'бургас', сз: 'загора',
+  пл: 'плевен', мз: 'мездра', бч: 'балчик', нп: 'пазар', го: 'оряховица', локо: 'локомотив' };
+const EBFU_SKIP = new Set(['пфк', 'фк', 'офк', 'уфк', 'сфк', 'ад', 'еад', 'сдс']);
+const ebfuWords = n => [...new Set(String(n || '').toLowerCase().replace(/ё/g, 'е').replace(/й/g, 'и').split(/[^\p{L}\p{N}]+/u)
+  .filter(w => w && !EBFU_SKIP.has(w) && !/^[uу]\d{2}$/.test(w)).map(w => EBFU_ABBR[w] || w))];
+const ebfuSame = (a, b) => a === b || a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a));
+function ebfuNameFit(x, y){
+  const A = ebfuWords(x), B = ebfuWords(y);
+  if (!A.length || !B.length) return 0;
+  const n = A.filter(a => B.some(b => ebfuSame(a, b))).length;
+  return (n / A.length + n / B.length) / 2;
+}
+function ebfuFit(m, c, swap){
+  const h = ebfuNameFit(m.home_name, swap ? c.away : c.home), a = ebfuNameFit(m.away_name, swap ? c.home : c.away);
+  if (h < 0.3 || a < 0.3) return 0;
+  let s = h + a - (swap ? 0.3 : 0);
+  if (c.when && m.kickoff) {
+    const p = sofiaParts(m.kickoff);
+    if (p.d === c.when.d && BG_MONTHS.indexOf(p.m) + 1 === c.when.mo) s += 0.6 + (c.when.time && !noTime(m) && p.time === c.when.time ? 0.2 : 0);
+    else s -= 0.3;
+  }
+  const sc = c.score && (swap ? [c.score[1], c.score[0]] : c.score);
+  if (sc && m.status === 'finished' && m.home_score != null) s += sc[0] === Number(m.home_score) && sc[1] === Number(m.away_score) ? 0.5 : -0.5;
+  return s;
+}
+// the best card for each match, the surest pairs first. A card can list the clubs the other way round (the match moved
+// to the other ground): then its "home" club is our away one.
+function ebfuPair(ours, cards){
+  const all = [];
+  ours.forEach(m => cards.forEach((c, i) => [false, true].forEach(swap => { const s = ebfuFit(m, c, swap); if (s >= 0.9) all.push([s, String(m.id), i, swap]); })));
+  all.sort((x, y) => y[0] - x[0]);
+  const out = new Map(), used = new Set();
+  for (const [, id, i, swap] of all) if (!out.has(id) && !used.has(i)) {
+    const c = cards[i];
+    out.set(id, swap ? { ...c, videos: c.videos.map(v => ({ ...v, by: v.by === 'home' ? 'away' : v.by === 'away' ? 'home' : v.by })) } : c);
+    used.add(i);
+  }
+  return out;
+}
+const ebfuBy = (m, v) => v.by === 'home' ? m.home_name : v.by === 'away' ? m.away_name : '';
+// the match page's section
+function fullHtml(m){
+  const k = m.league + '|' + m.id, rk = m.league + '|' + m.round, got = EBFU_V.m[k];
+  // (a recording already found shows even when the result here is late: the round was looked up for another match)
+  if (!LEAGUES[m.league] || (m.status !== 'finished' && m.status !== 'live' && !(got && got.v.length))) return '';
+  const box = body => `<section class="msec mfull" data-mfull="${esc(k)}"><h2>Целият мач</h2>${body}</section>`;
+  const p = t => `<p class="mempty">${t}</p>`;
+  if (m.status === 'live') return box(p('Записът на целия мач се появява тук, след като отборите го качат в ebfu.net.'));
+  if (AUTH === 'loading') return box(LOADING('Зареждане…', true));
+  if (!USER) return box(p('Целият мач от видеоархива на ebfu.net се гледа тук с вашия профил в ebfu.net. <a href="#account">Влезте в сайта</a>.'));
+  if (!approved()) return box(p('Целият мач от видеоархива на ebfu.net се отключва, щом администраторът одобри профила ви.'));
+  if (got && got.v.length) {
+    const two = got.v.length > 1;
+    return box(`<div class="vbtns">${got.v.map((v, i) => { const by = ebfuBy(m, v);
+      return `<button class="vbtn full" data-ebfu-play="${i}"><span class="ic">▶</span><span class="lbl">Целият мач</span>${by ? `<span class="len">${two ? 'запис на ' : 'качен от '}<span data-noi18n>${esc(teamName(by))}</span></span>` : ''}</button>`; }).join('')}</div>
+      <p class="msrc">${two ? 'И двата отбора са качили запис' : 'Записът е качен от отбора'} във видеоархива на ebfu.net.</p>`);
+  }
+  if (!EBFU) return box(EBFU_EXPIRED
+    ? `${p('Връзката с ebfu.net изтече. Свържете се отново, за да гледате целия мач тук.')}<div class="bar"><a class="btn" href="#account" data-ebfu-go>Свържи ebfu.net</a></div>`
+    : `${p('Свържете профила си в ebfu.net, за да гледате тук целия мач от видеоархива. Паролата се използва веднъж за вход и не се пази.')}<div class="bar"><a class="btn" href="#account" data-ebfu-go>Свържи ebfu.net</a></div>`);
+  if (EBFU_RUN === rk || EBFU_Q.includes(rk) || !EBFU_V.r[rk] && !EBFU_ERR[rk]) return box(LOADING('Търсим записа в ebfu.net…', true));
+  const when = EBFU_V.r[rk] ? `<span class="muted">проверено в ${esc(sofiaParts(new Date(EBFU_V.r[rk]).toISOString()).time)}</span>` : '';
+  const again = `<div class="bar"><button class="small" data-ebfu-again>${EBFU_ERR[rk] ? 'Опитай пак' : 'Провери пак'}</button>${EBFU_ERR[rk] ? '' : when}</div>`;
+  if (EBFU_ERR[rk]) return box(p(esc(EBFU_ERR[rk])) + again);
+  if (EBFU_V.x[k]) return box(p(`Мачът не се намери във видеоархива на ebfu.net за ${esc(m.round)} кръг.`) + again);
+  return box(p('Отборите още не са качили записа в ebfu.net.') + again);
+}
+// the section again, in place (the rest of the page stays as it is)
+function ebfuPaint(){
+  const el = document.querySelector('.mfull[data-mfull]');
+  if (!el || !FB.match) return;
+  const d = FB.data[FB.match.lg], m = d && (d.matches || []).find(x => String(x.id) === String(FB.match.id));
+  const html = m && el.dataset.mfull === m.league + '|' + m.id ? fullHtml(m) : '';
+  if (!html) return;
+  const t = document.createElement('div');
+  t.innerHTML = html;
+  el.replaceWith(t.firstElementChild);
+}
+// the player: the address becomes #match/<league>/<id>/full, so Back closes it
+function ebfuPlay(m, i){
+  const got = EBFU_V.m[m.league + '|' + m.id];
+  if (!got || !got.v.length) return;
+  const sc = m.home_score != null ? `${m.home_score}:${m.away_score}` : '–', two = got.v.length > 1;
+  const items = got.v.map((v, j) => { const by = ebfuBy(m, v);
+    return { id: `ebfu:${m.league}:${m.id}:${j}`, title: `${teamName(m.home_name)} ${sc} ${teamName(m.away_name)}${by ? ` · ${two ? 'запис на' : 'качен от'} ${teamName(by)}` : ''}`,
+      kind: 'file', src: v.url, cors: false, heavy: true, host: 'ebfu.net' }; });
+  const h = matchHref(m) + '/full';
+  if (location.hash !== h) { history.pushState({ vp: 1 }, '', h); EBFU_PUSHED = true; } else EBFU_PUSHED = false;
+  EBFU_PLAYING = true;
+  VPlayer.open({ items, index: Math.min(i, items.length - 1),
+    details: (x, box) => {
+      const by = ebfuBy(m, got.v[items.indexOf(x)] || {});
+      box.innerHTML = `<div class="vinfo"><div class="vmeta"><span>${esc(LEAGUES[m.league])}</span><span>·</span><span>${esc(m.round)} кръг</span><span>·</span><span>${esc(matchWhen(m))}</span></div>
+        <h3 class="finfo-t" data-noi18n>${esc(teamName(m.home_name))} ${esc(sc)} ${esc(teamName(m.away_name))}</h3>
+        <p class="desc">Целият мач от видеоархива на ebfu.net${by ? `, качен от <span data-noi18n>${esc(teamName(by))}</span>` : ''}.</p></div>`;
+    },
+    onClose: silent => {
+      EBFU_PLAYING = false;
+      if (silent) { EBFU_PUSHED = false; return; }
+      if (EBFU_PUSHED) { EBFU_PUSHED = false; history.back(); } else history.replaceState(null, '', matchHref(m));
+    } });
 }
 const redirectTo = () => location.origin + location.pathname;
 async function onAccountSubmit(form){
@@ -5185,7 +5332,7 @@ function matchPageHtml(m){
   const vids = V.btns || V.player ? sec('Видео', `${V.btns ? `<div class="vbtns">${V.btns}</div>` : ''}${V.player}`) : V.none ? sec('Видео', '<p class="mempty">Видеото още не е намерено.</p>') : '';
   return `<div class="mpage" data-mid="${esc(m.id)}">
     <div class="mpbar"><a class="mback" href="#results" data-mback>${ICO.back}Мачове</a><button class="mshare small" data-mshare>${ICO.share}Сподели</button></div>
-    ${hero}${crew}${bans}${squads}${vids}${sec('Статии', mnWrap(lg, m, true))}
+    ${hero}${fullHtml(m)}${crew}${bans}${squads}${vids}${sec('Статии', mnWrap(lg, m, true))}
   </div>`;
 }
 const canMorph = () => !!document.startViewTransition && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -5203,13 +5350,14 @@ function renderMatchPage(box, force){
   if (LEAGUES[lg]) FB.round[lg] = m.round;
   else if (d.rounds) { const gi = d.rounds.findIndex(r => r.matches.some(x => String(x.id) === String(id))); if (gi >= 0) FB.round[lg] = gi; }
   if (LEAGUES[lg]) { loadMatchCoverage(lg, [m]); loadSheets(lg, [m]); }
+  if (ebfuWants(m)) ebfuLook(lg, m.round);   // the whole match from ebfu.net
   const idx = MP_SEEN !== lg + '|' + id && matchNewsSoon();
   if (idx) {
     MP_SEEN = lg + '|' + id;
     const ss = idx.byMatch.get(String(id)) || [];
     queueExtract(ss.slice(0, 10).flatMap(st => extractTargets(st).slice(0, 2)));
   }
-  const key = ['match', lg, id, d.ver, SHEETS.ver, [...FB.open].join(',')].join('|');
+  const key = ['match', lg, id, d.ver, SHEETS.ver, [...FB.open].join(','), AUTH, USER ? USER.id : '-', approved(), EBFU ? EBFU.at : EBFU_EXPIRED].join('|');
   if (!force && key === RES_KEY && box.firstChild) return;
   if (!force && box.dataset.shown === 'match:' + id && box.querySelector('.player iframe, .player video')) return;   // a video playing keeps playing
   RES_KEY = key;
@@ -5565,6 +5713,14 @@ function initFootballUI(){
     if (oc) { FB.oth[oc.dataset.mid] = Number(oc.dataset.oth); renderResults(true); return; }
     const rc = e.target.closest('button.orow[data-refi]');
     if (rc) { FB.refSel[rc.dataset.mid] = Number(rc.dataset.refi); renderResults(true); return; }
+    const fp = e.target.closest('[data-ebfu-play]');
+    if (fp && FB.match) { const d = FB.data[FB.match.lg], m = d && d.matches.find(x => String(x.id) === String(FB.match.id)); if (m) ebfuPlay(m, Number(fp.dataset.ebfuPlay)); return; }
+    if (e.target.closest('[data-ebfu-again]') && FB.match) {
+      const d = FB.data[FB.match.lg], m = d && d.matches.find(x => String(x.id) === String(FB.match.id));
+      if (m) { delete EBFU_ERR[m.league + '|' + m.round]; ebfuLook(m.league, m.round); }
+      return;
+    }
+    if (e.target.closest('[data-ebfu-go]')) { EBFU_BACK = location.hash; return; }   // to Profile, and back here once connected
     const vb = e.target.closest('button.vbtn');
     if (vb) {
       const k = vb.dataset.mid + ':' + vb.dataset.kind, other = vb.dataset.mid + ':' + (vb.dataset.kind === 'short' ? 'long' : 'short');
@@ -6379,9 +6535,7 @@ function initUI(){
   $('#accountBox').addEventListener('click', async e => {
     const tab = e.target.closest('[data-tab]'); if (tab) { ACC_TAB = tab.dataset.tab; renderAccount(true); return; }
     if (e.target.id === 'btnLogout') { await SB.auth.signOut(); return; }
-    if (e.target.id === 'btnEbfuCheck') return ebfuCheck();
-    if (e.target.id === 'btnEbfuSend') return ebfuSendReport();
-    if (e.target.id === 'btnEbfuOff') { EBFU = null; EBFU_REPORT = null; saveJSON(EBFU_KEY, null); return ebfuSay('Връзката с ebfu.net на това устройство е прекъсната.', 'ok'); }
+    if (e.target.id === 'btnEbfuOff') { EBFU = null; ebfuForget(); saveJSON(EBFU_KEY, null); return ebfuSay('Връзката с ebfu.net на това устройство е прекъсната.', 'ok'); }
     if (e.target.id === 'btnForgot') {
       const email = $('#accountBox input[name=email]').value.trim();
       if (!email) return accSay('Първо въведете имейла си, после натиснете „Забравена парола?“.', 'err');
