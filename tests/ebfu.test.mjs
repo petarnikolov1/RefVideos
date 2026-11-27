@@ -127,5 +127,31 @@ const wide = `<html><body><div class="header">Иван Иванов <img src="..
   j = await call({ session: 'PHPSESSID=old', league: 'world', round: 12 });
   ok(!j.ok && !j.expired && /league/.test(j.error), 'only the ten Bulgarian leagues');
 }
+// /ebfu/file: a recording relayed a piece at a time, each piece tried again when ebfu.net fails; only ebfu.net's video
+// links, only from this site
+{
+  const worker = (await import('../public/_worker.js')).default;
+  const SIZE = 3_000_000_000, TOK = 'https://ebfu.net/videoFile.php?stream_token=4512-6768-1';
+  let asked = [], failFirst = 1;
+  globalThis.fetch = async (u, o = {}) => {
+    const r = (o.headers || {}).Range || '';
+    asked.push(r);
+    if (failFirst > 0) { failFirst--; return new Response('busy', { status: 503 }); }
+    const [, a, z] = r.match(/bytes=(\d+)-(\d*)/);
+    const end = z ? Math.min(+z, SIZE - 1) : SIZE - 1;
+    return new Response('x'.repeat(16), { status: 206, headers: { 'content-type': 'video/mp4', 'content-range': `bytes ${a}-${end}/${SIZE}`, 'content-length': String(end - a + 1) } });
+  };
+  const get = (u, h = {}) => worker.fetch(new Request('https://refvideos.pages.dev/ebfu/file?u=' + encodeURIComponent(u), { headers: { 'Sec-Fetch-Site': 'same-origin', ...h } }), {});
+  let r = await get(TOK, { Range: 'bytes=2400000000-' });
+  ok(r.status === 206 && r.headers.get('content-range') === `bytes 2400000000-${2400000000 + 8 * 1024 * 1024 - 1}/${SIZE}` && r.headers.get('accept-ranges') === 'bytes'
+    && asked.length === 2 && asked[1] === `bytes=2400000000-${2400000000 + 8 * 1024 * 1024 - 1}`, 'a jump 40 minutes in: one 8 MB piece from there, asked again after ebfu.net\'s 503: ' + asked.join(', '));
+  asked = [];
+  r = await get(TOK, { Range: 'bytes=100-199' });
+  ok(r.status === 206 && asked[0] === 'bytes=100-199', 'a small range is passed on as it is');
+  r = await get('https://example.com/videoFile.php?stream_token=4512-6768-1');
+  ok(r.status === 400, 'anything but an ebfu.net video link is refused');
+  r = await get(TOK, { 'Sec-Fetch-Site': 'cross-site' });
+  ok(r.status === 403, 'another site can\'t use the relay');
+}
 console.log(fails ? `${fails} FAILED` : 'all passed');
 process.exit(fails ? 1 : 0);

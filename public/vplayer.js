@@ -19,8 +19,11 @@
 //   VPlayer.time(), seek(t)          the position in the video on screen, in seconds (time() is null when the player
 //                                     can't tell: another site's player); canCut() says whether it can
 //
-// item: { id, title, kind: 'file' | 'yt' | 'embed' | 'link', src, cors, poster, posterBig, fallback, href, host, thumbKey, ytid, msg,
-//         heavy (a big original: not previewed or got ready ahead on a phone's mobile data) }
+// item: { id, title, kind: 'file' | 'yt' | 'embed' | 'link', src, cors, poster, posterBig, fallback, href, host, thumbKey, ytid, msg, retry, alt,
+//         heavy (a big original: not previewed or got ready ahead on a phone's mobile data),
+//         retry (a long file from a site whose connection can drop: played again from the same moment, up to three times),
+//         alt (a second address of the same file, tried from the second try on) }
+//   opt.onFail(item, { why, code, t, duration, alt, tries })   a file that couldn't be played after all
 //   file   a video file the page plays itself: everything works (an uploaded clip, a Google Drive file)
 //   yt     YouTube, through its player API: speed (0.25–2×), the end of the clip, zoom
 //   embed  another site's player in a frame: zoom only
@@ -38,6 +41,7 @@
   const fmt = s => { if (!isFinite(s) || s < 0) s = 0; const m = Math.floor(s / 60), x = Math.floor(s % 60); return m + ':' + String(x).padStart(2, '0'); };
   const fmtFine = s => fmt(s) + '.' + String(Math.floor((s % 1) * 10));
   const rateLabel = r => (r === 0.1 ? '0.1' : String(r)) + '×';
+  const sameSite = u => { try { return new URL(u, location.href).origin === location.origin; } catch (e) { return false; } };
   const hoverable = () => window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
   const lowData = () => { const c = navigator.connection; return !!(c && (c.saveData || /(^|-)2g|3g/.test(c.effectiveType || ''))); };
   const wifi = () => { const c = navigator.connection; return !!(c && /wifi|ethernet/.test(c.type || '')); };
@@ -219,6 +223,7 @@
   let yt = null, ytReady = null, ytTime = 0, ytDur = 0, ytState = -1;
   let rng = null, mk = null;          // a cut being played { start, end, label, wait }; the marks of a cut being made { a, b }
   let idleT = 0, flashT = 0, nextT = 0, noteT = 0, loadT = 0, raf = 0, wasPlaying = false, failed = false, opener = null;
+  let tries = 0, okAt = 0, retryT = 0, stallT = 0;   // a file whose connection dropped: started again where it was (item.retry)
   const DUR = load(K.dur) || {};
 
   (() => { const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st); })();
@@ -304,7 +309,7 @@
     }
     else if (mode === 'yt' && yt && yt.playVideo) yt.playVideo();
   }
-  function mPause(){ if (mode === 'file') vid().pause(); else if (mode === 'yt' && yt && yt.pauseVideo) yt.pauseVideo(); }
+  function mPause(){ if (mode === 'file') { vid()._paused = Date.now(); vid().pause(); } else if (mode === 'yt' && yt && yt.pauseVideo) yt.pauseVideo(); }
   function mPaused(){ if (mode === 'file') return vid().paused; if (mode === 'yt') return ytState !== 1 && ytState !== 3; return true; }
   function mTime(){ if (mode === 'file') return vid().currentTime || 0; if (mode === 'yt') return ytTime; return 0; }
   function mDur(){ if (mode === 'file') { const d = vid().duration; return isFinite(d) ? d : 0; } if (mode === 'yt') return ytDur; return 0; }
@@ -355,8 +360,43 @@
     v.addEventListener('waiting', () => { if (mine()) paint(); });
     v.addEventListener('canplay', () => { if (mine()) paint(); });
     v.addEventListener('ended', () => { if (mine()) ended(); });
-    v.addEventListener('error', () => { if (mine() && v.getAttribute('src')) fail('error'); });
+    v.addEventListener('error', () => { if (mine() && v.getAttribute('src') && !recover(v)) fail('error'); });
+    v.addEventListener('timeupdate', () => { if (!v.paused) v._on = Date.now(); if (mine() && tries && v.currentTime > okAt + 30) tries = 0; });   // playing well again
+    v.addEventListener('seeking', () => { if (!v.paused) v._on = Date.now(); });
+    // a download that never comes (the browser trying again and again without saying so): after 15 s, the same
+    // moment from the second address
+    const stall = () => {
+      clearTimeout(stallT);
+      if (!mine() || !(it() || {}).retry) return;
+      const t = v.currentTime;
+      stallT = setTimeout(() => { if (mine() && !failed && v.readyState < 3 && !v.paused && Math.abs(v.currentTime - t) < 0.5) recover(v, true); }, 15000);
+    };
+    v.addEventListener('waiting', stall);
+    v.addEventListener('seeking', stall);
+    ['playing', 'canplay', 'pause'].forEach(e => v.addEventListener(e, () => { if (mine()) clearTimeout(stallT); }));
     v.addEventListener('ratechange', () => { if (mine()) paintButtons(); });
+  }
+
+  // a long file from a site whose connection drops now and then (a jump far into a full match): the same file again,
+  // from the same moment, a little later each time — from its second address (item.alt) after the first try — before
+  // giving up
+  function recover(v, stalled){
+    const x = it();
+    if (!x || !x.retry || failed || tries >= (x.alt ? 4 : 3)) return false;
+    if (stalled && x.alt && !x.altOn) tries = Math.max(tries, 1);
+    // (the browser pauses a video whose download failed: it was playing when it last played after the last pause)
+    const t = isFinite(v.currentTime) ? v.currentTime : 0, wasOn = !v.paused || (v._on || 0) > (v._paused || 0);
+    tries++; okAt = t;
+    if (x.alt && tries >= 2) x.altOn = true;
+    note(`Връзката с ${x.host || 'сайта'} прекъсна — пускаме отново от ${fmt(t)}…`, 6000);
+    clearTimeout(retryT);
+    retryT = setTimeout(() => {
+      if (it() !== x || mode !== 'file' || vid() !== v) return;
+      const go = () => { v.removeEventListener('loadedmetadata', go); try { v.currentTime = t; } catch (e) {} if (wasOn) mPlay(); };
+      v.addEventListener('loadedmetadata', go);
+      v.src = x.altOn ? x.alt : x.src; v.load();
+    }, 800 * Math.min(tries, 2));
+    return true;
   }
 
   // what a clip that can't be played here becomes: the source's own player (Google Drive), or a link
@@ -365,7 +405,9 @@
     if (failed || !x) return;
     failed = true;
     clearTimeout(loadT);
-    const v = vid(); v.pause(); v.removeAttribute('src'); delete v.dataset.src; try { v.load(); } catch (e) {}
+    const v = vid();
+    if (opt.onFail) try { opt.onFail(x, { why, code: v.error ? v.error.code : 0, t: v.currentTime || 0, duration: isFinite(v.duration) ? v.duration : 0, alt: !!x.altOn, tries }); } catch (e) {}
+    v.pause(); v.removeAttribute('src'); delete v.dataset.src; try { v.load(); } catch (e) {}
     if (x.fallback) {
       showEmbed(x.fallback);
       note('Този клип се пуска в плейъра на Google Drive: без забавяне и кадър по кадър.');
@@ -439,7 +481,7 @@
     if (!items.length) return;
     idx = clamp(i, 0, items.length - 1);
     const x = it();
-    failed = false; clearMsg(); if (NOTE) NOTE.hidden = true;
+    failed = false; tries = 0; okAt = 0; clearTimeout(retryT); clearTimeout(stallT); clearMsg(); if (NOTE) NOTE.hidden = true;
     clearTimeout(loadT); hideMenu();
     rng = null; mk = null; drawMarks();
     resetZoom(true);
@@ -460,6 +502,8 @@
       if (k < 0) k = V[cur].paused || V[cur].ended ? cur : 1 - cur;
       const other = V[1 - k];
       other.pause(); other.hidden = true;
+      // (the recording watched before lets go of its connection: a site that takes few has one for this one)
+      if (x.retry && other.getAttribute('src')) { other.removeAttribute('src'); delete other.dataset.src; try { other.load(); } catch (e) {} }
       cur = k;
       const v = V[cur];
       v.hidden = false;
@@ -495,6 +539,8 @@
     if (n < 0 || lowData()) return;
     const x = items[n];
     if (!x || x.kind !== 'file' || (x.heavy && !hoverable() && !wifi())) return;
+    // a site that takes few connections (item.retry): nothing is downloaded beside the video being watched
+    if (x.retry || (it() || {}).retry) return;
     const o = V[1 - cur];
     if (o.dataset.src === x.src && o.getAttribute('src')) return;
     o.crossOrigin = x.cors ? 'anonymous' : null;
@@ -989,6 +1035,8 @@
     if (!x) return Promise.resolve('');
     if (x.poster) return Promise.resolve(x.poster);
     if (x.kind !== 'file' || !x.src) return Promise.resolve('');
+    // another site's video without CORS can't be drawn into a picture (and a site that takes few connections isn't asked)
+    if (x.retry || (!x.cors && !sameSite(x.src))) return Promise.resolve('');
     const key = x.thumbKey || x.src;
     if (THC[key]) return Promise.resolve(THC[key].u);
     return new Promise(res => { tq.push({ x, key, res }); pump(); });

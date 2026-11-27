@@ -31,6 +31,7 @@ export default {
     if (url.pathname === '/extract') return handleExtract(request, url, ctx);
     if (url.pathname === '/selftest') return handleSelftest(url, ctx);
     if (url.pathname === '/logo') return handleLogo(request, url, ctx);
+    if (url.pathname === '/ebfu/file') return handleEbfuFile(request, url);
     if (url.pathname.startsWith('/ebfu/')) return handleEbfu(request, url, env);
     if (url.pathname === '/drive/list') return handleDrive(request, env);
     if (url.pathname === '/drive/video') return handleDriveVideo(request, url, env, ctx);
@@ -502,6 +503,7 @@ async function handleEbfu(request, url, env) {
   try {
     if (url.pathname === '/ebfu/login') return json({ ...(await ebfuLogin(String(body.username || '').trim(), String(body.password || ''), diag)), diag });
     if (url.pathname === '/ebfu/week') return json({ ...(await ebfuWeekVideos(String(body.session || ''), body, diag)), diag });
+    if (url.pathname === '/ebfu/probe') return json(await ebfuProbe(String(body.url || ''), Number(body.at) || 0));
   } catch (e) { return json({ ok: false, error: 'ebfu.net: ' + (e.name === 'TimeoutError' ? 'no answer in time' : e.message), diag }); }
   return json({ ok: false, error: 'unknown action' }, 404);
 }
@@ -981,6 +983,71 @@ async function ebfuWeekVideos(session, body, diag) {
    Only the Drive files of the site's own videos are served (the database says which, without showing anything else:
    video_drive_ok), so this is no open proxy for any Drive file. */
 const DRIVE_OK_SECONDS = 6 * 3600;
+/* ---------------- /ebfu/file: a club's full-match recording, relayed ----------------
+   The page plays ebfu.net's videos straight from ebfu.net; when that connection keeps failing (a jump far into a
+   match), the player asks here instead. ebfu.net is asked for the file a piece at a time (8 MB, each piece tried
+   three times), so no single answer has to run for long; the browser asks for the next piece as it plays. Only
+   ebfu.net's video links, and only from this site's own pages. */
+const EBFU_FILE = /^https:\/\/ebfu\.net\/videoFile\.php\?stream_token=[\w.-]{6,200}$/;
+const EBFU_PIECE = 8 * 1024 * 1024;
+async function ebfuUpstream(u, range, method = 'GET') {
+  let last = null;
+  for (let i = 0; i < 3; i++) {
+    const ac = new AbortController(), t = setTimeout(() => ac.abort(), 20000);   // (the time for the answer to start, not for the whole piece)
+    try {
+      const r = await fetch(u, { method, headers: { ...BROWSER_HEADERS, Accept: '*/*', Referer: 'https://ebfu.net/', ...(range ? { Range: range } : {}) }, signal: ac.signal });
+      clearTimeout(t);
+      if (r.status === 200 || r.status === 206 || r.status === 416) return r;
+      last = r;
+    } catch (e) { clearTimeout(t); last = null; }
+    await new Promise(res => setTimeout(res, 400 * (i + 1)));
+  }
+  return last;
+}
+async function handleEbfuFile(request, url) {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405);
+  const u = url.searchParams.get('u') || '';
+  if (!EBFU_FILE.test(u)) return text('Not an ebfu.net video', 400);
+  const site = request.headers.get('Sec-Fetch-Site');
+  if (site && site !== 'same-origin' && site !== 'none') return text('Only from this site', 403);
+  const asked = request.headers.get('Range') || '', m = asked.match(/^bytes=(\d+)-(\d*)$/);
+  const a = m ? +m[1] : 0, z = m && m[2] ? Math.min(+m[2], a + EBFU_PIECE - 1) : a + EBFU_PIECE - 1;
+  const up = await ebfuUpstream(u, `bytes=${a}-${z}`, request.method);
+  if (!up) return text('ebfu.net did not answer', 502);
+  if (!(up.status === 200 || up.status === 206 || up.status === 416)) return text('ebfu.net answered ' + up.status, 502);
+  const h = new Headers();
+  for (const k of ['Content-Type', 'Content-Length', 'Content-Range', 'Last-Modified', 'ETag']) { const v = up.headers.get(k); if (v) h.set(k, v); }
+  if (!/^(video|audio)\//i.test(h.get('Content-Type') || '')) h.set('Content-Type', 'video/mp4');
+  h.set('Accept-Ranges', 'bytes');
+  h.set('Cache-Control', 'private, max-age=3600');
+  h.set('X-Content-Type-Options', 'nosniff');
+  return new Response(request.method === 'HEAD' ? null : up.body, { status: up.status, headers: h });
+}
+// what ebfu.net answers for a recording: the start, and the place where playing failed (at: 0–1 of the file)
+async function ebfuProbe(u, at) {
+  if (!EBFU_FILE.test(u)) return { ok: false, error: 'not an ebfu.net video' };
+  const one = async range => {
+    const t0 = Date.now(), ac = new AbortController(), tm = setTimeout(() => ac.abort(), 25000);
+    try {
+      const r = await fetch(u, { headers: { ...BROWSER_HEADERS, Accept: '*/*', Range: range }, signal: ac.signal });
+      const head = Date.now() - t0;
+      let got = 0; const rd = r.body && r.body.getReader();
+      if (rd) { while (got < 262144) { const c = await rd.read(); if (c.done) break; got += c.value.length; } try { await rd.cancel(); } catch {} }
+      clearTimeout(tm);
+      return { range, status: r.status, ms: head, readMs: Date.now() - t0, got, type: r.headers.get('content-type'), length: r.headers.get('content-length'),
+        contentRange: r.headers.get('content-range'), acceptRanges: r.headers.get('accept-ranges'), server: r.headers.get('server') };
+    } catch (e) { clearTimeout(tm); return { range, error: e.name === 'AbortError' ? 'no answer in 25 s' : e.message, ms: Date.now() - t0 }; }
+  };
+  const first = await one('bytes=0-262143');
+  const total = Number(((first.contentRange || '').match(/\/(\d+)$/) || [])[1]) || Number(first.length) || 0;
+  const tries = [first];
+  if (total) {
+    const off = Math.floor(total * Math.min(Math.max(at, 0), 1));
+    tries.push(await one(`bytes=${off}-`), await one(`bytes=${off}-${off + 262143}`), await one(`bytes=${Math.max(0, total - 262144)}-`));
+  }
+  return { ok: true, total, tries };
+}
+
 async function handleDriveVideo(request, url, env, ctx) {
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('Method not allowed', 405);
   const id = url.searchParams.get('id') || '';

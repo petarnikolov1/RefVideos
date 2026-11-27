@@ -4813,7 +4813,7 @@ function ebfuPlay(m, i){
   const sc = m.home_score != null ? `${m.home_score}:${m.away_score}` : '–', two = got.v.length > 1;
   const items = got.v.map((v, j) => { const by = ebfuBy(m, v);
     return { id: `ebfu:${m.league}:${m.id}:${j}`, title: `${teamName(m.home_name)} ${sc} ${teamName(m.away_name)}${by ? ` · ${two ? 'запис на' : 'качен от'} ${teamName(by)}` : ''}`,
-      kind: 'file', src: v.url, cors: false, heavy: true, host: 'ebfu.net' }; });
+      kind: 'file', src: v.url, alt: '/ebfu/file?u=' + encodeURIComponent(v.url), cors: false, heavy: true, retry: true, host: 'ebfu.net', href: v.url }; });
   const h = matchHref(m) + '/full';
   if (location.hash !== h) { history.pushState({ vp: 1 }, '', h); EBFU_PUSHED = true; } else EBFU_PUSHED = false;
   EBFU_PLAYING = true;
@@ -4823,6 +4823,14 @@ function ebfuPlay(m, i){
       box.innerHTML = `<div class="vinfo"><div class="vmeta"><span>${esc(LEAGUES[m.league])}</span><span>·</span><span>${esc(m.round)} кръг</span><span>·</span><span>${esc(matchWhen(m))}</span></div>
         <h3 class="finfo-t" data-noi18n>${esc(teamName(m.home_name))} ${esc(sc)} ${esc(teamName(m.away_name))}</h3>
         <p class="desc">Целият мач от видеоархива на ebfu.net${by ? `, качен от <span data-noi18n>${esc(teamName(by))}</span>` : ''}.</p></div>`;
+    },
+    // a recording that couldn't be played even through the site: what ebfu.net answers goes to the developer
+    onFail: (x, f) => {
+      const u = got.v[items.indexOf(x)] && got.v[items.indexOf(x)].url;
+      if (!u) return;
+      ebfuCall('probe', { url: u, at: f.duration ? f.t / f.duration : 0 }).catch(e => ({ error: e.message }))
+        .then(probe => ebfuReport('play|' + m.league + '|' + m.id + '|' + Math.round(f.t / 60), { stage: 'play', league: m.league, match: [m.home_name, m.away_name],
+          ...f, ua: navigator.userAgent, probe: probe && probe.tries ? { total: probe.total, tries: probe.tries } : probe }));
     },
     onClose: silent => {
       EBFU_PLAYING = false;
