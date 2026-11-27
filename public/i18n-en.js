@@ -153,7 +153,7 @@ window.BGRW_EN = {
     'Предишно (P)': 'Previous (P)', 'Следващо (N)': 'Next (N)', 'Скорост ([ ])': 'Speed ([ ])', 'Скорост': 'Speed', 'Намали (−)': 'Zoom out (−)', 'Намали': 'Zoom out', 'Увеличи (+)': 'Zoom in (+)', 'Увеличи': 'Zoom in',
     'Повтаряй клипа (L)': 'Loop the clip (L)', 'Повтаряй клипа': 'Loop the clip', 'Пускай следващото (A)': 'Play the next one (A)', 'Пускай следващото': 'Play the next one', 'Звук (M)': 'Sound (M)', 'Звук': 'Sound',
     'Цял екран (F)': 'Full screen (F)', 'Цял екран': 'Full screen', 'Следващи': 'Up next', 'YouTube не се зареди.': 'YouTube did not load.', 'Отвори': 'Open', 'Пускай следващото автоматично': 'Play the next one automatically',
-    'Интервал': 'Space', 'пусни/спри ·': 'play/pause ·', 'кадър ·': 'frame ·', 'скорост ·': 'speed ·', 'забавено ·': 'slow motion ·', 'увеличение ·': 'zoom ·', '5 с ·': '5 s ·', 'следващо/предишно ·': 'next/previous ·',
+    'Интервал': 'Space', 'пусни/спри ·': 'play/pause ·', 'пусни/спри, задръжте за 2× ·': 'play/pause, hold for 2× ·', 'кадър ·': 'frame ·', 'скорост ·': 'speed ·', 'забавено ·': 'slow motion ·', 'увеличение ·': 'zoom ·', '5 с ·': '5 s ·', 'следващо/предишно ·': 'next/previous ·',
     'повтаряй ·': 'loop ·', 'цял екран': 'full screen', 'Спри': 'Pause', 'Нормален размер': 'Normal size', 'Нормален размер (0)': 'Normal size (0)', 'Пусни звука (M)': 'Unmute (M)', 'Без звук': 'Muted', 'пусни звука': 'unmute',
     'забавено': 'slow motion', '‹ кадър': '‹ frame', 'кадър ›': 'frame ›', 'Забавен каданс: 0.25× или 0.1×. Кадър по кадър: спрете и натиснете ‹ ›.': 'Slow motion: 0.25× or 0.1×. Frame by frame: pause and press ‹ ›.',
     'Повтаря клипа': 'Loops the clip', 'Без повторение': 'No loop', 'Следващото се пуска само': 'The next one plays by itself', 'Спира след клипа': 'Stops after the clip',
@@ -209,6 +209,21 @@ window.BGRW_EN = {
     'Потребителско име в ebfu.net': 'ebfu.net username', 'Парола за ebfu.net': 'ebfu.net password', 'ebfu.net заключва профил след 5 грешни пароли, затова сайтът спира за 30 минути след 2 неуспешни опита.': 'ebfu.net locks an account after 5 wrong passwords, so the site stops for 30 minutes after 2 failed tries.',
     'Свържи ebfu.net': 'Connect ebfu.net', 'Свързване…': 'Connecting…', 'Проверка…': 'Checking…', 'Провери видеоархива': 'Check the video archive', 'Прекъсни': 'Disconnect', 'Какво има в доклада': 'What’s in the report',
     'Изпрати доклада на разработчика': 'Send the report to the developer', '✓ Докладът е изпратен': '✓ Report sent', 'Докладът е изпратен.': 'Report sent.',
+    // the match's events (bulgarian-football.com's statistics) and where the halves start in a recording
+    'Събития в мача': 'Match events', '1-во полувреме': 'First half', 'Почивка': 'Half-time', '2-ро полувреме': 'Second half', 'Продължения': 'Extra time',
+    'След края': 'After the final whistle', 'почивка': 'HT', 'подаване': 'assist', 'дузпа': 'penalty', 'автогол': 'own goal', 'пропусна дузпа': 'missed penalty',
+    'втори жълт картон': 'second yellow card', 'контузия': 'injury', 'напусна без смяна': 'left without a substitute', 'ВАР': 'VAR',
+    'проверка за червен картон': 'review for a red card', 'проверка за жълт картон': 'review for a yellow card', 'проверка за дузпа': 'review for a penalty', 'проверка за гол': 'review for a goal',
+    'отменен гол': 'goal disallowed', 'отменен жълт картон': 'yellow card cancelled', 'отменен червен картон': 'red card cancelled', 'отменен дузпа': 'penalty cancelled',
+    'груба игра': 'foul play', 'много груба игра': 'serious foul play', 'задържане': 'holding', 'спиране на опасна атака': 'stopping a promising attack', 'реплика': 'dissent',
+    'неспортсменско поведение': 'unsporting behaviour', 'бурна радост': 'excessive celebration', 'удар с ръка в главата': 'arm to the head', 'игра с ръка': 'handball', 'забавяне на играта': 'time-wasting',
+    'Минутите водят до момента в записа.': 'The minutes lead to that moment of the recording.', 'Минутите водят до момента в записа на': 'The minutes lead to that moment of the recording by',
+    'Минутите ще водят до момента в записа, щом някой отбележи в плейъра къде започва мачът.': 'The minutes will lead into the recording once someone marks in the player where the match starts.',
+    'Отбележи в записа': 'Mark it in the recording', 'Източник:': 'Source:', 'Събитията се появяват тук по време на мача.': 'The events appear here during the match.',
+    'Още няма описани събития за този мач.': 'No events have been written up for this match yet.', 'Къде започва мачът в този запис': 'Where the match starts in this recording',
+    '1-во полувреме започва тук': 'First half starts here', '2-ро полувреме започва тук': 'Second half starts here', 'Събития': 'Events',
+    'Пуснете записа до първия сигнал на съдията и натиснете. Отбелязаното важи за всички и минутите на събитията водят до момента в записа.':
+      "Play the recording to the referee's first whistle and press. The mark is for everyone, and the events' minutes then lead to that moment of the recording.",
     // the full match from ebfu.net's video archive, on the match page
     'Целият мач': 'Full match', 'запис на': 'recording by', 'качен от': 'uploaded by',
     'И двата отбора са качили запис във видеоархива на ebfu.net.': 'Both clubs uploaded a recording to the ebfu.net video archive.',
@@ -302,7 +317,8 @@ window.BGRW_EN = {
     // admin
     ['(\\d+) чакат одобрение · общо (\\d+)', '$1 waiting for approval · $2 in total'], ['регистриран (.+)', 'registered $1'],
     ['Свързано като (.+) · от (.+)', 'Connected as $1 · since $2'],
-    ['проверено в (\\d{1,2}:\\d{2})', 'checked at $1'], ['Мачът не се намери във видеоархива на ebfu\\.net за (\\d+) кръг\\.', 'The match was not found in the ebfu.net video archive for round $1.'],
+    ['проверено в (\\d{1,2}:\\d{2})', 'checked at $1'],
+    ['\\+(\\d+) мин\\.', '+$1 min'], ['Събитията не се заредиха: (.+)', 'The events could not be loaded: $1'], ['Отбелязването не се запази: (.+)', 'The mark was not saved: $1'], ['Мачът не се намери във видеоархива на ebfu\\.net за (\\d+) кръг\\.', 'The match was not found in the ebfu.net video archive for round $1.'],
     ['ebfu\\.net не отговори както трябва: (.+)', 'ebfu.net did not answer properly: $1'],
   ],
 };

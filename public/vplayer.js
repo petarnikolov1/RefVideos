@@ -1,7 +1,8 @@
 // The video player of eRefBG: full screen, one clip after another, zoom, slow motion and frame by frame.
 // A plain script: the page loads it as window.VPlayer.
 //
-//   VPlayer.open({ items, index, details, onChange, onClose })   plays items[index]; the next ones follow on their own
+//   VPlayer.open({ items, index, details, onChange, onClose, at, tab })   plays items[index] (from `at` seconds; `tab: 'info'`
+//     opens the details beside it); the next ones follow on their own.  VPlayer.jump(t): to that moment, playing
 //   VPlayer.update(items)            the same queue with fresh data (a deleted clip leaves it, signed links change)
 //   VPlayer.close(), isOpen(), current(), refreshDetails(), root
 //   VPlayer.thumb(item) → Promise<url>   a picture for the gallery: the item's own (Google Drive, YouTube), or a frame
@@ -282,6 +283,8 @@
     R.addEventListener('click', onClick);
     R.addEventListener('pointermove', poke, { passive: true });
     document.addEventListener('keydown', e => { if (R && !R.hidden) onKey(e); });
+    document.addEventListener('keyup', e => { if (R && !R.hidden && e.key === ' ') spaceUp(e); });
+    window.addEventListener('blur', () => { if (fastOn) endFast(); spaceAt = 0; clearTimeout(holdT); });
     bindGestures();
     bindSeek();
     window.addEventListener('resize', layout);
@@ -871,6 +874,28 @@
     }
     poke();
   }
+  // holding Space: 2× while it is held (the speed chosen before comes back when it is let go)
+  let spaceAt = 0, holdT = 0, fastOn = false, fastFrom = 1;
+  function startFast(){
+    if (fastOn || (mode !== 'file' && mode !== 'yt')) return;
+    fastOn = true; fastFrom = rate; rate = 2; applyRate();
+    if (mPaused()) mPlay();
+    clearTimeout(flashT); FLASH.textContent = '2× ▸▸'; FLASH.classList.add('on', 'hold');
+  }
+  function endFast(){
+    if (!fastOn) return;
+    fastOn = false; rate = fastFrom; applyRate(); paintButtons();
+    FLASH.classList.remove('hold'); flash(rateLabel(rate));
+  }
+  function spaceUp(e){
+    const btn = e.target.closest && e.target.closest('button');
+    if ((e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) || (btn && !PANE.contains(btn))) { spaceAt = 0; return; }
+    e.preventDefault(); clearTimeout(holdT);
+    const was = spaceAt; spaceAt = 0;
+    if (fastOn) endFast();
+    else if (was) togglePlay();
+    poke();
+  }
   function setAuto(on){ auto = on; save(K.auto, auto); flash(auto ? 'Следващото се пуска само' : 'Спира след клипа'); paintButtons(); drawSide(); }
 
   function onKey(e){
@@ -878,7 +903,17 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
     const done = () => { e.preventDefault(); poke(); };
-    if (k === ' ' || k === 'k' || k === 'K') { if (e.target.closest && e.target.closest('button') && k === ' ') return; togglePlay(); done(); }
+    if (k === ' ') {   // a tap plays or pauses (on letting go); held, the video runs at 2× until it is let go
+      // (Space on one of the player's own buttons presses it; on a button in the list or the details, it is the video's)
+      const btn = e.target.closest && e.target.closest('button');
+      if (btn && !PANE.contains(btn)) return;
+      if (btn) btn.blur();
+      done();
+      if (e.repeat || spaceAt) return;
+      spaceAt = Date.now(); clearTimeout(holdT);
+      holdT = setTimeout(() => { if (spaceAt) startFast(); }, 280);
+    }
+    else if (k === 'k' || k === 'K') { togglePlay(); done(); }
     else if (k === 'Escape') { if (!MENU.hidden) hideMenu(); else if (document.fullscreenElement || document.webkitFullscreenElement) return; else if (sideOpen) toggleSide(); else close(); done(); }
     else if (k === 'ArrowLeft' && e.target !== SEEK) { seekIn(mTime() - (e.shiftKey ? 1 : 5)); flash('− ' + (e.shiftKey ? 1 : 5) + ' с'); done(); }
     else if (k === 'ArrowRight' && e.target !== SEEK) { seekIn(mTime() + (e.shiftKey ? 1 : 5)); flash('+ ' + (e.shiftKey ? 1 : 5) + ' с'); done(); }
@@ -915,7 +950,7 @@
             <span class="n">${i === idx ? '▶' : i + 1}</span>
             <span class="th" data-th="${i}">${d ? `<i>${fmt(d)}</i>` : ''}${playable(x) ? '' : '<i>↗</i>'}</span>
             <span class="tt">${esc(x.title)}</span></button></li>`; }).join('')}</ul>
-        <div class="vp-kbd"><kbd>Интервал</kbd> пусни/спри · <kbd>,</kbd> <kbd>.</kbd> кадър · <kbd>[</kbd> <kbd>]</kbd> скорост · <kbd>S</kbd> забавено ·
+        <div class="vp-kbd"><kbd>Интервал</kbd> пусни/спри, задръжте за 2× · <kbd>,</kbd> <kbd>.</kbd> кадър · <kbd>[</kbd> <kbd>]</kbd> скорост · <kbd>S</kbd> забавено ·
           <kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> увеличение · <kbd>←</kbd> <kbd>→</kbd> 5 с · <kbd>N</kbd> <kbd>P</kbd> следващо/предишно · <kbd>L</kbd> повтаряй · <kbd>F</kbd> цял екран</div>`;
       PANE.querySelectorAll('[data-th]').forEach(el => {
         const x = items[Number(el.dataset.th)];
@@ -985,11 +1020,18 @@
     rng = null; mk = null;
     R.hidden = false;
     document.documentElement.style.overflow = 'hidden';
-    tab = 'queue';
+    tab = opt.tab === 'info' ? 'info' : 'queue';
     layout();
     if (!raf) raf = requestAnimationFrame(tick);
     show(clamp(opt.index || 0, 0, items.length - 1));
     ST.focus({ preventScroll: true });
+    if (opt.at > 0) startAt(opt.at, it());
+  }
+  // a moment to start from (opt.at, VPlayer.jump): as soon as the video knows its length, and playing
+  function startAt(t, x, tries = 0){
+    if (!R || R.hidden || it() !== x) return;
+    if (!canRate() || !mDur()) { if (tries < 200) setTimeout(() => startAt(t, x, tries + 1), 150); return; }
+    seekIn(Math.min(t, mDur() - 1)); mPlay(); paint();
   }
   function close(silent){
     if (!R || R.hidden) return;
@@ -1159,6 +1201,7 @@
     marks: m => { mk = m && (isFinite(m.a) || isFinite(m.b)) ? { a: m.a, b: m.b } : null; drawMarks(); },
     time: () => (R && !R.hidden && canRate() ? mTime() : null),
     seek: t => { if (R && !R.hidden && canRate()) { mPause(); seekIn(t); paint(); } },
+    jump: t => { if (R && !R.hidden) startAt(Math.max(0, t), it()); },
     canCut: () => !!(R && !R.hidden && canRate()),
     get root(){ build(); return R; },
   };

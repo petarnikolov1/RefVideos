@@ -897,6 +897,32 @@
   .vbtn.full{background:var(--accent);color:var(--accent-ink);padding:11px 16px;font-size:15px} .vbtn.full .ic,.vbtn.full .len{color:var(--accent-ink)} .vbtn.full .len{opacity:.85}
   .vbtn.full{text-align:left} .vbtn.full .lbl{white-space:nowrap} .vbtn.full .len{min-width:0}
   .mfull .msrc{margin-top:8px} .mfull .bar{margin-top:6px}
+  /* the match's events: the home team's on the left, the away team's on the right, the minute between them */
+  .evteams{display:grid;grid-template-columns:1fr 64px 1fr;font-weight:700;font-size:13px;color:var(--muted);padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .evteams span:first-child{text-align:right;grid-column:1} .evteams span:last-child{grid-column:3}
+  .evs{list-style:none;margin:0;padding:0}
+  .evs .evh{display:flex;justify-content:center;gap:8px;padding:12px 0 4px;font-size:12.5px;font-weight:700;color:var(--muted)}
+  .evs .ev{display:grid;grid-template-columns:1fr 64px 1fr;align-items:start;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.35}
+  .evs .ev.c{grid-template-columns:64px 1fr}
+  .evs .ev.h .evx{text-align:right;justify-content:flex-end}
+  .evx{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;min-width:0}
+  .evs .evt{justify-self:center;font:700 13px/1.4 var(--f-num, inherit);font-variant-numeric:tabular-nums;color:var(--text);background:none;border:0;padding:2px 6px;border-radius:6px}
+  .evs button.evt{color:var(--accent);background:var(--chip);cursor:pointer} .evs button.evt:hover{background:var(--accent);color:var(--accent-ink)}
+  .evw{color:var(--muted);font-size:12.5px}
+  .evsc{font-variant-numeric:tabular-nums}
+  .evi{width:14px;height:14px;flex:0 0 auto}
+  .cd{display:inline-block;width:9px;height:12px;border-radius:2px;flex:0 0 auto;background:var(--yc);box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+  .cd.r{background:var(--rc)} .cd.yr{background:linear-gradient(135deg,var(--yc) 50%,var(--rc) 50%)}
+  .evx .sub{display:inline-flex;flex-direction:column;gap:1px} .evx .sub .out{color:var(--muted)}
+  .vt{font:700 10.5px/1 var(--f-body);letter-spacing:.02em;padding:2px 4px;border:1px solid currentColor;border-radius:4px;color:var(--muted)}
+  .ev.k-goal,.ev.k-pen,.ev.k-og{font-weight:600}
+  .evmark{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px} .evmark .msrc{margin:0}
+  /* the player's details: where the halves start in the recording, and the events */
+  .vmk,.vev{margin-top:14px} .vmk h4,.vev h4{margin:0 0 6px;font-size:13.5px}
+  .vmk-r{display:flex;align-items:center;gap:10px;margin:6px 0} .vmk-r span{font-variant-numeric:tabular-nums}
+  .vmk .muted{font-size:12.5px;margin:6px 0 0} .vmk-err{color:var(--err);font-size:12.5px;margin:4px 0 0}
+  .vinfo .evs .ev{font-size:13px;grid-template-columns:1fr 54px 1fr} .vinfo .evs .ev.c{grid-template-columns:54px 1fr}
+  .vinfo button.evt{color:inherit;background:rgba(255,255,255,.12);border:0;border-radius:6px;padding:2px 6px;cursor:pointer}
   @media (max-width:600px){ .mfull .vbtns{flex-direction:column;align-items:stretch} }
   .msec .mnwrap{margin:0}
   .msec .mnews{border-top:1px solid var(--line);border-radius:12px}
@@ -4805,9 +4831,154 @@ function ebfuPaint(){
   const t = document.createElement('div');
   t.innerHTML = html;
   el.replaceWith(t.firstElementChild);
+  eventsPaint();   // (a recording found: the minutes can lead into it)
+}
+// ── what happened in the match, minute by minute (goals, cards, substitutions, VAR reviews): bulgarian-football.com's
+// statistics for the First and Second League, read by stats-sync into match_events. Where each half starts in a club's
+// recording is marked by a member in the player, once for everyone (recording_marks); from then on the minutes lead to
+// that moment of the recording.
+const EVENT_LG = new Set(['efbet', 'mrbit']);
+const EVENTS = {}, MARKS = {};   // match id → { row } | { none } | { err } (and when it was read); match id → { rec → { k1, k2 } }
+const recKey = (m, v, i) => `${m.league}|${m.id}|${(v && v.by) || i}`;
+const MARKS_ASKED = new Set();
+async function loadEvents(m, again){
+  const id = String(m.id), had = EVENTS[id];
+  if (!EVENT_LG.has(m.league) || !SB) return;
+  if (had === 'loading' || (had && !again)) {   // (the member approved after the events were read: the marks now)
+    if (approved() && !MARKS_ASKED.has(id)) { await loadMarks(id); eventsPaint(); }
+    return;
+  }
+  EVENTS[id] = 'loading';
+  try {
+    const { data, error } = await SB.from('match_events').select('events,stop,codes,source,updated_at').eq('match_id', id).maybeSingle();
+    if (error) throw error;
+    EVENTS[id] = data ? { row: data, at: Date.now() } : { none: true, at: Date.now() };
+  } catch (e) { EVENTS[id] = had && had.row ? had : { err: e.message, at: Date.now() }; }
+  if (approved()) await loadMarks(id);
+  eventsPaint();
+}
+async function loadMarks(id){
+  MARKS_ASKED.add(id);
+  try {
+    const { data, error } = await SB.from('recording_marks').select('rec,k1,k2').eq('match_id', id);
+    if (error) throw error;
+    MARKS[id] = Object.fromEntries((data || []).map(r => [r.rec, r]));
+  } catch (e) { MARKS[id] = MARKS[id] || {}; }
+}
+// a minute of the match → seconds into the recording, from where its halves start (one half marked: the other is worked
+// out from the first half's added time and a 15-minute break, and is approximate)
+function recTime(ev, mk, stop){
+  if (!mk || (mk.k1 == null && mk.k2 == null) || ev.m == null) return null;
+  const gap = (45 + (stop && stop[0] != null ? stop[0] : 2) + 15) * 60;
+  const k1 = mk.k1 != null ? mk.k1 : mk.k2 - gap, k2 = mk.k2 != null ? mk.k2 : mk.k1 + gap;
+  const approx = mk.k1 == null || mk.k2 == null;
+  const t = ev.h === 1 ? k1 + (ev.m - 1 + (ev.x || 0)) * 60 : ev.h === 2 ? k2 + (ev.m - 46 + (ev.x || 0)) * 60 : ev.h === 0 ? k2 - 45 : null;
+  return t == null ? null : { t: Math.max(0, t - 5), approx: approx && ev.h !== (mk.k1 != null ? 1 : 2) };
+}
+// the recording the minutes lead to: the first one with its halves marked
+function evRecording(m){
+  const got = EBFU_V.m[m.league + '|' + m.id], mk = MARKS[String(m.id)] || {};
+  if (!got || !got.v.length) return null;
+  const i = got.v.findIndex((v, j) => { const x = mk[recKey(m, v, j)]; return x && (x.k1 != null || x.k2 != null); });
+  return { got, i, mk: i >= 0 ? mk[recKey(m, got.v[i], i)] : null };
+}
+const EV_VOID = { 'гол': 'гол', 'жк': 'жълт картон', 'чк': 'червен картон', 'дузпа': 'дузпа' };
+const cardMark = k => `<span class="cd ${k}" aria-hidden="true"></span>`;
+const ballMark = '<svg class="evi" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6l2.6 1.9-1 3.1H6.4l-1-3.1z" fill="currentColor"/></svg>';
+function evText(ev){
+  const P = s => s ? `<span data-noi18n>${esc(s)}</span>` : '', soft = s => s ? ` <span class="evw">${s}</span>` : '', var1 = ev.v ? ' <span class="vt">ВАР</span>' : '';
+  switch (ev.k) {
+    case 'goal': return `${ballMark}<b class="evsc">${esc(ev.s)}</b> ${P(ev.p)}${ev.p2 ? soft(`<span>подаване</span> ${P(ev.p2)}`) : ''}${var1}`;
+    case 'pen': return `${ballMark}<b class="evsc">${esc(ev.s)}</b> ${P(ev.p)}${soft('дузпа')}${var1}`;
+    case 'og': return `${ballMark}<b class="evsc">${esc(ev.s)}</b> ${P(ev.p)}${soft('автогол')}${var1}`;
+    case 'miss': return `${ballMark}${P(ev.p)}${soft('пропусна дузпа')}`;
+    case 'y': return `${cardMark('y')}${P(ev.p)}${soft(esc(ev.why || ''))}${var1}`;
+    case 'yr': return `${cardMark('yr')}${P(ev.p)}${soft('втори жълт картон')}`;
+    case 'r': return `${cardMark('r')}${P(ev.p)}${soft(esc(ev.why || ''))}${var1}`;
+    case 'sub': return `<span class="sub"><span class="in">↑ ${P(ev.p)}</span><span class="out">↓ ${P(ev.p2)}</span></span>${ev.inj ? soft('контузия') : ''}`;
+    case 'left': return `${P(ev.p)}${soft('напусна без смяна')}`;
+    case 'var': return ev.what ? `<span class="vt">ВАР</span><span>проверка за ${esc(EV_VOID[ev.what] || ev.what)}</span>${soft(`${esc(ev.first)} → ${esc(ev.final)}`)}` : `<span class="vt">ВАР</span> ${esc(ev.txt || '')}`;
+    case 'void': return `<span class="vt">ВАР</span><span>отменен ${esc(EV_VOID[ev.what] || ev.what || 'момент')}</span>${ev.p ? P(ev.p) : ''}`;
+    default: return esc(ev.txt || '');
+  }
+}
+const EV_HALF = { 1: '1-во полувреме', 0: 'Почивка', 2: '2-ро полувреме', 3: 'Продължения', 9: 'След края' };
+// the list: a heading for each half (its added time beside it), each event on its team's side; a minute that leads into
+// the recording is a button (data-evt: seconds into recording number data-evr)
+function evListHtml(m, row, rec){
+  const out = [], stop = row.stop || [];
+  let half = null;
+  for (const ev of row.events || []) {
+    if (ev.h !== half && EV_HALF[ev.h] != null) {
+      half = ev.h;
+      const add = half === 1 ? stop[0] : half === 2 ? stop[1] : null;
+      out.push(`<li class="evh"><span>${EV_HALF[half]}</span>${add != null ? `<span class="evw">+${esc(add)} мин.</span>` : ''}</li>`);
+    }
+    const at = rec && rec.mk ? recTime(ev, rec.mk, stop) : null;
+    const min = ev.min === 'пвр' ? 'почивка' : esc(ev.min) + "'";
+    const minute = at ? `<button class="evt" data-evt="${Math.round(at.t)}" data-evr="${rec.i}" title="${at.approx ? 'приблизително в записа' : 'към момента в записа'}">${min}${at.approx ? '≈' : ''}</button>` : `<span class="evt">${min}</span>`;
+    const side = ev.side === 'h' ? 'h' : ev.side === 'a' ? 'a' : 'c', txt = `<div class="evx">${evText(ev)}</div>`;
+    out.push(`<li class="ev ${side} k-${esc(ev.k)}">${side === 'a' ? `<div></div>${minute}${txt}` : side === 'h' ? `${txt}${minute}<div></div>` : `${minute}${txt}`}</li>`);
+  }
+  return out.length ? `<ul class="evs">${out.join('')}</ul>` : '';
+}
+function eventsHtml(m){
+  if (!EVENT_LG.has(m.league)) return '';
+  const id = String(m.id), st = EVENTS[id], box = body => `<section class="msec mevents" data-mev="${esc(m.league + '|' + m.id)}"><h2>Събития в мача</h2>${body}</section>`;
+  if (!st || st === 'loading') return m.status === 'scheduled' ? '' : box(LOADING('Зареждане…', true));
+  if (st.err) return box(`<p class="mempty">Събитията не се заредиха: ${esc(st.err)}</p>`);
+  const row = st.row;
+  if (!row || !(row.events || []).length) return m.status === 'scheduled' ? '' : box(`<p class="mempty">${m.status === 'live' ? 'Събитията се появяват тук по време на мача.' : 'Още няма описани събития за този мач.'}</p>`);
+  const rec = approved() ? evRecording(m) : null;
+  const head = `<div class="evteams"><span data-noi18n>${esc(teamName(m.home_name))}</span><span data-noi18n>${esc(teamName(m.away_name))}</span></div>`;
+  let hint = '';
+  if (rec && rec.mk) hint = `<p class="msrc">Минутите водят до момента в записа${rec.got.v.length > 1 ? ' на ' + `<span data-noi18n>${esc(teamName(ebfuBy(m, rec.got.v[rec.i]) || m.home_name))}</span>` : ''}.</p>`;
+  else if (rec) hint = `<div class="evmark"><p class="msrc">Минутите ще водят до момента в записа, щом някой отбележи в плейъра къде започва мачът.</p><button class="small" data-ebfu-mark>Отбележи в записа</button></div>`;
+  return box(`${head}${evListHtml(m, row, rec)}${hint}<p class="msrc">Източник: <a href="${esc(row.source || 'https://bulgarian-football.com')}" target="_blank" rel="noopener">bulgarian-football.com</a></p>`);
+}
+function eventsPaint(){
+  const el = document.querySelector('.mevents[data-mev]');
+  if (!FB.match) return;
+  const d = FB.data[FB.match.lg], m = d && (d.matches || []).find(x => String(x.id) === String(FB.match.id));
+  if (!m) return;
+  const html = eventsHtml(m);
+  if (!el) {   // (the section wasn't there yet: it goes after the full match, or under the score)
+    if (!html) return;
+    const after = document.querySelector('.mfull[data-mfull]') || document.querySelector('.mpage .mhero');
+    if (after) after.insertAdjacentHTML('afterend', html);
+    return;
+  }
+  if (el.dataset.mev !== m.league + '|' + m.id) return;
+  if (!html) { el.remove(); return; }
+  const t = document.createElement('div');
+  t.innerHTML = html;
+  el.replaceWith(t.firstElementChild);
+}
+// saving where a half starts in this recording (the player's current moment), for everyone
+async function saveMark(m, rec, half){
+  const t = VPlayer.time();
+  if (t == null || !SB || !USER) return;
+  const id = String(m.id), row = { rec, match_id: id, [half]: Math.round(t * 10) / 10, set_by: USER.id, updated_at: new Date().toISOString() };
+  (MARKS[id] = MARKS[id] || {})[rec] = { ...(MARKS[id][rec] || {}), rec, [half]: row[half] };
+  VPlayer.refreshDetails(); eventsPaint();
+  const { error } = await SB.from('recording_marks').upsert(row, { onConflict: 'rec' });
+  if (error) { log('recording mark: ' + error.message); alertNote('Отбелязването не се запази: ' + error.message); }
+}
+const alertNote = t => { const n = document.querySelector('.vp-info .vmk-err'); if (n) n.textContent = t; };
+const hms = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60), ss = s % 60; return (h ? h + ':' + String(mm).padStart(2, '0') : mm) + ':' + String(ss).padStart(2, '0'); };
+// the player's details beside a recording: where its halves start (to mark), and the match's events, each a jump
+function ebfuDetailsHtml(m, v, i){
+  const id = String(m.id), rec = recKey(m, v, i), mk = (MARKS[id] || {})[rec] || {}, st = EVENTS[id], row = st && st.row;
+  const marks = `<div class="vmk"><h4>Къде започва мачът в този запис</h4>
+    <div class="vmk-r"><button class="small" data-mk="k1">1-во полувреме започва тук</button><span>${mk.k1 != null ? `<button class="evt" data-mkgo="${mk.k1}">${hms(mk.k1)}</button>` : '—'}</span></div>
+    <div class="vmk-r"><button class="small" data-mk="k2">2-ро полувреме започва тук</button><span>${mk.k2 != null ? `<button class="evt" data-mkgo="${mk.k2}">${hms(mk.k2)}</button>` : '—'}</span></div>
+    <p class="muted">Пуснете записа до първия сигнал на съдията и натиснете. Отбелязаното важи за всички и минутите на събитията водят до момента в записа.</p>
+    <p class="vmk-err" role="status"></p></div>`;
+  const evs = row && (row.events || []).length ? `<div class="vev"><h4>Събития</h4>${evListHtml(m, row, (mk.k1 != null || mk.k2 != null) ? { i, mk, got: EBFU_V.m[m.league + '|' + m.id] } : null)}</div>` : '';
+  return marks + evs;
 }
 // the player: the address becomes #match/<league>/<id>/full, so Back closes it
-function ebfuPlay(m, i){
+function ebfuPlay(m, i, at){
   const got = EBFU_V.m[m.league + '|' + m.id];
   if (!got || !got.v.length) return;
   const sc = m.home_score != null ? `${m.home_score}:${m.away_score}` : '–', two = got.v.length > 1;
@@ -4817,12 +4988,19 @@ function ebfuPlay(m, i){
   const h = matchHref(m) + '/full';
   if (location.hash !== h) { history.pushState({ vp: 1 }, '', h); EBFU_PUSHED = true; } else EBFU_PUSHED = false;
   EBFU_PLAYING = true;
-  VPlayer.open({ items, index: Math.min(i, items.length - 1),
+  loadEvents(m);
+  VPlayer.open({ items, index: Math.min(i, items.length - 1), at: at > 0 ? at : 0, tab: EVENT_LG.has(m.league) && approved() ? 'info' : 'queue',
     details: (x, box) => {
-      const by = ebfuBy(m, got.v[items.indexOf(x)] || {});
+      const j = items.indexOf(x), v = got.v[j] || {}, by = ebfuBy(m, v);
       box.innerHTML = `<div class="vinfo"><div class="vmeta"><span>${esc(LEAGUES[m.league])}</span><span>·</span><span>${esc(m.round)} кръг</span><span>·</span><span>${esc(matchWhen(m))}</span></div>
         <h3 class="finfo-t" data-noi18n>${esc(teamName(m.home_name))} ${esc(sc)} ${esc(teamName(m.away_name))}</h3>
-        <p class="desc">Целият мач от видеоархива на ebfu.net${by ? `, качен от <span data-noi18n>${esc(teamName(by))}</span>` : ''}.</p></div>`;
+        <p class="desc">Целият мач от видеоархива на ebfu.net${by ? `, качен от <span data-noi18n>${esc(teamName(by))}</span>` : ''}.</p>
+        ${EVENT_LG.has(m.league) && approved() ? ebfuDetailsHtml(m, v, j) : ''}</div>`;
+      box.onclick = e => {
+        const mk = e.target.closest('[data-mk]'); if (mk) { saveMark(m, recKey(m, v, j), mk.dataset.mk); return; }
+        const go = e.target.closest('[data-mkgo]'); if (go) { VPlayer.jump(+go.dataset.mkgo); return; }
+        const ev = e.target.closest('[data-evt]'); if (ev && +ev.dataset.evr === j) VPlayer.jump(+ev.dataset.evt);
+      };
     },
     // a recording that couldn't be played even through the site: what ebfu.net answers goes to the developer
     onFail: (x, f) => {
@@ -5367,7 +5545,7 @@ function matchPageHtml(m){
   const vids = V.btns || V.player ? sec('Видео', `${V.btns ? `<div class="vbtns">${V.btns}</div>` : ''}${V.player}`) : V.none ? sec('Видео', '<p class="mempty">Видеото още не е намерено.</p>') : '';
   return `<div class="mpage" data-mid="${esc(m.id)}">
     <div class="mpbar"><a class="mback" href="#results" data-mback>${ICO.back}Мачове</a><button class="mshare small" data-mshare>${ICO.share}Сподели</button></div>
-    ${hero}${fullHtml(m)}${crew}${bans}${squads}${vids}${sec('Статии', mnWrap(lg, m, true))}
+    ${hero}${fullHtml(m)}${eventsHtml(m)}${crew}${bans}${squads}${vids}${sec('Статии', mnWrap(lg, m, true))}
   </div>`;
 }
 const canMorph = () => !!document.startViewTransition && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -5386,6 +5564,8 @@ function renderMatchPage(box, force){
   else if (d.rounds) { const gi = d.rounds.findIndex(r => r.matches.some(x => String(x.id) === String(id))); if (gi >= 0) FB.round[lg] = gi; }
   if (LEAGUES[lg]) { loadMatchCoverage(lg, [m]); loadSheets(lg, [m]); }
   if (ebfuWants(m)) ebfuLook(lg, m.round);   // the whole match from ebfu.net
+  { const ev = EVENTS[String(m.id)], recent = m.kickoff && Math.abs(Date.now() - Date.parse(m.kickoff)) < 864e5;   // what happened, minute by minute
+    loadEvents(m, !!(ev && ev.at && recent && Date.now() - ev.at > 5 * 60e3)); }
   const idx = MP_SEEN !== lg + '|' + id && matchNewsSoon();
   if (idx) {
     MP_SEEN = lg + '|' + id;
@@ -5756,6 +5936,12 @@ function initFootballUI(){
       return;
     }
     if (e.target.closest('[data-ebfu-go]')) { EBFU_BACK = location.hash; return; }   // to Profile, and back here once connected
+    const evt = e.target.closest('.mevents [data-evt]'), mkb = e.target.closest('[data-ebfu-mark]');
+    if ((evt || mkb) && FB.match) {
+      const d = FB.data[FB.match.lg], m = d && d.matches.find(x => String(x.id) === String(FB.match.id));
+      if (m) ebfuPlay(m, evt ? +evt.dataset.evr : 0, evt ? +evt.dataset.evt : 0);
+      return;
+    }
     const vb = e.target.closest('button.vbtn');
     if (vb) {
       const k = vb.dataset.mid + ':' + vb.dataset.kind, other = vb.dataset.mid + ':' + (vb.dataset.kind === 'short' ? 'long' : 'short');
