@@ -4627,7 +4627,7 @@ async function ebfuConnect(form){
       }
       return ebfuSay((j.error || 'Връзката не успя.') + sent, 'err');
     }
-    EBFU = { session: j.session, name: j.name || '', at: Date.now() };
+    EBFU = { session: j.session, name: j.name || '', at: Date.now(), w: j.width || '' };
     EBFU_EXPIRED = false;
     saveJSON(EBFU_KEY, EBFU); saveJSON(EBFU_FAILS, []);
     ebfuSay('Свързано. Целият мач вече се отваря на страницата на всеки български мач.', 'ok');
@@ -4640,7 +4640,11 @@ async function ebfuConnect(form){
 // (the links don't change); a match with no video yet is looked at again after 15 minutes, when its page is opened.
 const EBFU_VID_KEY = 'bgRefWatch.ebfuVids';
 const EBFU_V = (v => v && v.m && v.r && v.x ? v : { m: {}, r: {}, x: {} })(loadJSON(EBFU_VID_KEY));   // m: 'lg|id' → { v: [{ url, by }], at }; r: 'lg|round' → when looked at; x: 'lg|id' → not in the archive's round
-let EBFU_Q = [], EBFU_RUN = '', EBFU_ERR = {}, EBFU_EXPIRED = false, EBFU_BACK = '', EBFU_PLAYING = false, EBFU_PUSHED = false;
+// a session from before the archive was read (logged in as a wide window, whose pages are laid out another way) is
+// connected again once
+const EBFU_OLD = !!(EBFU && !EBFU.w);
+if (EBFU_OLD) { EBFU = null; saveJSON(EBFU_KEY, null); }
+let EBFU_Q = [], EBFU_RUN = '', EBFU_ERR = {}, EBFU_EXPIRED = EBFU_OLD ? 'relogin' : false, EBFU_BACK = '', EBFU_PLAYING = false, EBFU_PUSHED = false;
 function ebfuForget(){ EBFU_V.m = {}; EBFU_V.r = {}; EBFU_V.x = {}; saveJSON(EBFU_VID_KEY, EBFU_V); EBFU_Q = []; EBFU_ERR = {}; }
 const ebfuDone = m => !!LEAGUES[m.league] && m.status === 'finished';
 // whether the match's round should be looked at (again) now
@@ -4672,28 +4676,46 @@ async function ebfuNext(){
     const j = await ebfuCall('week', { session: EBFU.session, league: lg, round, season: fresh ? EBFU.season : undefined, comp: fresh ? (EBFU.comp || {})[lg] : undefined });
     if (!EBFU) { /* disconnected meanwhile */ }
     else if (!j.ok) {
-      if (j.expired) { EBFU_EXPIRED = true; EBFU = null; saveJSON(EBFU_KEY, null); EBFU_Q = []; }
+      if (j.expired || j.relogin) { EBFU_EXPIRED = j.relogin ? 'relogin' : true; EBFU = null; saveJSON(EBFU_KEY, null); EBFU_Q = []; }
       else EBFU_ERR[k] = ebfuErr(j.error);
     } else {
       if (j.session) EBFU.session = j.session;
       if (!fresh || j.season !== EBFU.season) Object.assign(EBFU, { season: j.season, seasonAt: Date.now(), comp: {} });
       if (j.comp) (EBFU.comp = EBFU.comp || {})[lg] = j.comp;
       saveJSON(EBFU_KEY, EBFU);
-      ebfuKeep(lg, round, j.cards || []);
+      ebfuKeep(lg, round, j.cards || [], j.layout);
     }
+    // a page of the archive that couldn't be read as expected: how it is built goes to the developer (no names of
+    // members, no video links), so the reading can be fixed
+    if (j && j.inspect) ebfuReport('week|' + k, { stage: 'week', league: lg, round, layout: j.layout || '', inspect: j.inspect, steps: (j.diag || []).slice(-12) });
   } catch (e) { EBFU_ERR[k] = e.message; }
   EBFU_RUN = '';
   ebfuPaint();
   ebfuNext();
 }
+// at most once a day for each thing, from approved members only (the database checks it too)
+function ebfuReport(key, report){
+  const sent = loadJSON('bgRefWatch.ebfuSent') || {}, day = new Date().toISOString().slice(0, 10);
+  if (sent[key] === day || !SB || !approved()) return;
+  sent[key] = day; saveJSON('bgRefWatch.ebfuSent', sent);
+  SB.from('ebfu_reports').insert({ report }).then(({ error }) => { if (error) log('ebfu.net report could not be sent: ' + error.message); });
+}
 // the round's cards → our matches
-function ebfuKeep(lg, round, cards){
+function ebfuKeep(lg, round, cards, layout){
   const d = FB.data[lg], ours = d ? d.matches.filter(x => x.round === round) : [], pairs = ebfuPair(ours, cards), now = Date.now();
   for (const m of ours) {
     const k = lg + '|' + m.id, c = pairs.get(String(m.id));
     if (c && c.videos.length) EBFU_V.m[k] = { v: c.videos.map(v => ({ url: v.url, by: v.by })), at: now };
-    if (c || !cards.length) delete EBFU_V.x[k]; else if (ebfuDone(m)) EBFU_V.x[k] = 1;
+    // (read from the videos' titles, the round lists only the matches with a video: one without is just not uploaded)
+    if (c || !cards.length || layout === 'titles') delete EBFU_V.x[k]; else if (ebfuDone(m)) EBFU_V.x[k] = 1;
   }
+  // a match with no card, or a club's video that went to no match: the round goes to the developer, to fix the pairing
+  const lost = ours.filter(m => EBFU_V.x[lg + '|' + m.id]), paired = [...pairs.values()];
+  const left = cards.filter(c => c.videos.length && !paired.some(p => p === c || p.alts === c.alts && p.home === c.home));
+  if (lost.length || left.length) ebfuReport('pair|' + lg + '|' + round, { stage: 'pair', league: lg, round,
+    matches: lost.map(m => ({ home: m.home_name, away: m.away_name, score: m.home_score != null ? m.home_score + ':' + m.away_score : null, kickoff: m.kickoff })),
+    left: left.map(c => c.alts || [[c.home, c.away]]), layout: layout || '',
+    cards: cards.map(c => ({ alts: c.alts || [[c.home, c.away]], when: c.when, score: c.score, videos: c.videos.length })) });
   EBFU_V.r[lg + '|' + round] = now;
   const keys = Object.keys(EBFU_V.m);   // a season of looking stays small: the newest 600 matches
   if (keys.length > 600) keys.sort((a, b) => EBFU_V.m[a].at - EBFU_V.m[b].at).slice(0, keys.length - 600).forEach(x => delete EBFU_V.m[x]);
@@ -4703,7 +4725,7 @@ function ebfuKeep(lg, round, cards){
 // word by word, the towns' short forms spelled out; the day, the kick-off and the score settle the rest
 const EBFU_ABBR = { сф: 'софия', пд: 'пловдив', пк: 'перник', бл: 'благоевград', вн: 'варна', вр: 'враца', вт: 'търново', бс: 'бургас', сз: 'загора',
   пл: 'плевен', мз: 'мездра', бч: 'балчик', нп: 'пазар', го: 'оряховица', локо: 'локомотив' };
-const EBFU_SKIP = new Set(['пфк', 'фк', 'офк', 'уфк', 'сфк', 'ад', 'еад', 'сдс']);
+const EBFU_SKIP = new Set(['пфк', 'фк', 'офк', 'уфк', 'сфк', 'ад', 'еад', 'оод', 'сдс', 'футболен', 'клуб', 'професионален', 'спортен', 'сдружение']);
 const ebfuWords = n => [...new Set(String(n || '').toLowerCase().replace(/ё/g, 'е').replace(/й/g, 'и').split(/[^\p{L}\p{N}]+/u)
   .filter(w => w && !EBFU_SKIP.has(w) && !/^[uу]\d{2}$/.test(w)).map(w => EBFU_ABBR[w] || w))];
 const ebfuSame = (a, b) => a === b || a.length >= 5 && b.length >= 5 && (a.startsWith(b) || b.startsWith(a));
@@ -4714,9 +4736,14 @@ function ebfuNameFit(x, y){
   return (n / A.length + n / B.length) / 2;
 }
 function ebfuFit(m, c, swap){
-  const h = ebfuNameFit(m.home_name, swap ? c.away : c.home), a = ebfuNameFit(m.away_name, swap ? c.home : c.away);
-  if (h < 0.3 || a < 0.3) return 0;
-  let s = h + a - (swap ? 0.3 : 0);
+  // a card can be read more than one way ("ФК Светкавица - 2014 - ФК Бенковски Исперих"): the best reading counts
+  let best = 0;
+  for (const [ch, ca] of c.alts && c.alts.length ? c.alts : [[c.home, c.away]]) {
+    const h = ebfuNameFit(m.home_name, swap ? ca : ch), a = ebfuNameFit(m.away_name, swap ? ch : ca);
+    if (h >= 0.3 && a >= 0.3) best = Math.max(best, h + a);
+  }
+  if (!best) return 0;
+  let s = best - (swap ? 0.3 : 0);
   if (c.when && m.kickoff) {
     const p = sofiaParts(m.kickoff);
     if (p.d === c.when.d && BG_MONTHS.indexOf(p.m) + 1 === c.when.mo) s += 0.6 + (c.when.time && !noTime(m) && p.time === c.when.time ? 0.2 : 0);
@@ -4759,7 +4786,7 @@ function fullHtml(m){
       <p class="msrc">${two ? 'И двата отбора са качили запис' : 'Записът е качен от отбора'} във видеоархива на ebfu.net.</p>`);
   }
   if (!EBFU) return box(EBFU_EXPIRED
-    ? `${p('Връзката с ebfu.net изтече. Свържете се отново, за да гледате целия мач тук.')}<div class="bar"><a class="btn" href="#account" data-ebfu-go>Свържи ebfu.net</a></div>`
+    ? `${p(EBFU_EXPIRED === 'relogin' ? 'Свържете ebfu.net отново (еднократно), за да може сайтът да чете видеоархива.' : 'Връзката с ebfu.net изтече. Свържете се отново, за да гледате целия мач тук.')}<div class="bar"><a class="btn" href="#account" data-ebfu-go>Свържи ebfu.net</a></div>`
     : `${p('Свържете профила си в ebfu.net, за да гледате тук целия мач от видеоархива. Паролата се използва веднъж за вход и не се пази.')}<div class="bar"><a class="btn" href="#account" data-ebfu-go>Свържи ebfu.net</a></div>`);
   if (EBFU_RUN === rk || EBFU_Q.includes(rk) || !EBFU_V.r[rk] && !EBFU_ERR[rk]) return box(LOADING('Търсим записа в ebfu.net…', true));
   const when = EBFU_V.r[rk] ? `<span class="muted">проверено в ${esc(sofiaParts(new Date(EBFU_V.r[rk]).toISOString()).time)}</span>` : '';

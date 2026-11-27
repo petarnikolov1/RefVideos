@@ -11,7 +11,7 @@
 //                                 members only), including its subfolders, so a whole folder can be added at once.
 //   /drive/video?id=...           a Google Drive clip of the site's own videos, streamed (with seeking) to the page's
 //                                 own player: Google gives the file to a server but refuses it to another site's page.
-//   POST /ebfu/login, /ebfu/explore, /ebfu/week   ebfu.net with the member's OWN account (approved members only):
+//   POST /ebfu/login, /ebfu/week   ebfu.net with the member's OWN account (approved members only):
 //                                 log in once, then map the video archive. Passwords are never stored or logged;
 //                                 the ebfu.net session goes back to the member's browser only.
 //   everything else               the static site.
@@ -485,6 +485,9 @@ const EBFU_BASE = 'https://ebfu.net/';
 // Видеоархив: the menu of every competition's rounds (videoArchive.php); choosing a round (a form post, kept in the PHP
 // session) opens that round's page (videoShowChampWeek.php), which sends a visitor with no round chosen back to the
 // login page — so that page is not a test of being logged in
+// ebfu.net lays its pages out for the window width sent with the login: this is the width whose round pages were read
+// and checked (a card per match: day, time, teams, score, videos); other layouts are read from the videos' titles
+const EBFU_WIDTH = '580';
 const EBFU_ARCHIVE = 'https://ebfu.net/interfaceReferees/videoArchive.php';
 const EBFU_WEEK = 'https://ebfu.net/interfaceReferees/videoShowChampWeek.php';
 const EBFU_SKIP = /календар|история|calendar|history|събити|event|изход|logout|log-out|signout|exit|настройки|settings|profile|профил|gdpr/i;
@@ -498,7 +501,6 @@ async function handleEbfu(request, url, env) {
   const diag = [];
   try {
     if (url.pathname === '/ebfu/login') return json({ ...(await ebfuLogin(String(body.username || '').trim(), String(body.password || ''), diag)), diag });
-    if (url.pathname === '/ebfu/explore') return json({ ...(await ebfuExplore(String(body.session || ''), diag)), diag });
     if (url.pathname === '/ebfu/week') return json({ ...(await ebfuWeekVideos(String(body.session || ''), body, diag)), diag });
   } catch (e) { return json({ ok: false, error: 'ebfu.net: ' + (e.name === 'TimeoutError' ? 'no answer in time' : e.message), diag }); }
   return json({ ok: false, error: 'unknown action' }, 404);
@@ -530,6 +532,8 @@ function absorbCookies(jar, resp) {
     if (!v || /max-age=0|expires=thu, 01 jan 1970/i.test(c)) jar.delete(k); else jar.set(k, v);
   }
 }
+// ebfu.net's start page (the login page) ends the session that opens it
+const isStartPage = u => { try { const x = new URL(u); return /(^|\.)ebfu\.net$/i.test(x.hostname) && /^\/(?:index\.php)?$/i.test(x.pathname); } catch { return false; } };
 async function ebfuFetch(href, jar, opts, diag) {
   opts = opts || {};
   let u = href, method = opts.method || 'GET', body = opts.body, ct = opts.contentType;
@@ -546,7 +550,11 @@ async function ebfuFetch(href, jar, opts, diag) {
     absorbCookies(jar, r);
     diag.push(`${method} ${maskUrl(u)} → ${r.status}`);
     const loc = r.headers.get('location');
-    if (r.status >= 300 && r.status < 400 && loc) { u = new URL(loc, u).toString(); method = 'GET'; body = undefined; ct = undefined; continue; }
+    if (r.status >= 300 && r.status < 400 && loc) {
+      u = new URL(loc, u).toString(); method = 'GET'; body = undefined; ct = undefined;
+      if (opts.keepSession && isStartPage(u)) return { status: r.status, url: u, text: '', type: '', notices, toIndex: true };
+      continue;
+    }
     const bytes = await readBytes(r, 1500000);
     const text = decodeBytes(bytes, r.headers.get('content-type') || '');
     // ebfu.net sends visitors on with a tiny page that only runs  self.location.href = "…"  (sometimes after an alert)
@@ -555,6 +563,7 @@ async function ebfuFetch(href, jar, opts, diag) {
       if (js.alert) notices.push(js.alert);
       u = new URL(js.to, u).toString(); method = 'GET'; body = undefined; ct = undefined;
       diag.push('script redirect → ' + maskUrl(u));
+      if (opts.keepSession && isStartPage(u)) return { status: r.status, url: u, text, type: r.headers.get('content-type') || '', notices, toIndex: true };
       continue;
     }
     return { status: r.status, url: u, text, type: r.headers.get('content-type') || '', notices };
@@ -636,29 +645,6 @@ function summarizePage(html, base) {
 }
 // Everything that can be tapped, and where it leads: a real link, an address inside onclick/data-*,
 // or an ASP.NET "postback" (a form submit done by a script). Icon-only camera buttons are flagged.
-const CAMERA = /fa-video|fa-camera|video-camera|bi-camera|bi-camera-video|mdi-video|glyphicon-facetime|camera|\bvideo\b|видео/i;
-const maskAttrs = t => String(t).replace(/=\s*(["'])([^"']{40,})\1/g, (m, q) => '=' + q + '…' + q).slice(0, 300);
-function clickables(html, base) {
-  const out = [];
-  const add = (attrs, inner, tag) => {
-    const href = attrOf(attrs, 'href'), onclick = attrOf(attrs, 'onclick');
-    const dh = attrOf(attrs, 'data-href') || attrOf(attrs, 'data-url') || attrOf(attrs, 'data-link');
-    const js = /^javascript:/i.test(href) ? href.slice(11) : onclick;
-    let how = null, url = null, target = null, arg = null, m;
-    if ((m = js.match(/__doPostBack\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]/))) { how = 'postback'; target = m[1]; arg = m[2]; }
-    else if (href && !/^(javascript:|#)/i.test(href)) { how = 'get'; url = href; }
-    else if ((m = js.match(/(?:window\.)?location(?:\.href)?\s*=\s*['"]([^'"]+)['"]/) || js.match(/window\.open\(\s*['"]([^'"]+)['"]/) || js.match(/location\.(?:assign|replace)\(\s*['"]([^'"]+)['"]/))) { how = 'get'; url = m[1]; }
-    else if (dh) { how = 'get'; url = dh; }
-    if (url) { try { url = new URL(url, base).toString(); if (!/(^|\.)ebfu\.net$/i.test(new URL(url).hostname)) { how = null; url = null; } } catch { how = null; url = null; } }
-    const f = js.match(/^\s*(?:return\s+)?([A-Za-z_$][\w$.]*)\s*\(([^)]*)\)/);
-    const fn = f && !/^(?:__doPostBack|location|window\.location|window\.open)$/.test(f[1]) ? { name: f[1], args: f[2].slice(0, 80) } : null;
-    out.push({ text: stripTags(inner).slice(0, 80), how, url, target, arg, fn, camera: CAMERA.test(attrs + ' ' + inner) && stripTags(inner).length < 30,
-      tag: maskAttrs(tag + ' ' + attrs.replace(/\s+/g, ' ')) });
-  };
-  for (const m of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) add(m[1], m[2], 'a');
-  for (const m of html.matchAll(/<(button|div|span|li|td|tr|i)\b([^>]*\s(?:onclick|data-href|data-url|data-link|data-id|data-video|data-mid|data-match|data-bs-toggle|data-toggle)\s*=[^>]*)>([\s\S]{0,600}?)<\/\1>/gi)) add(m[2], m[3], m[1]);
-  return out.filter(c => !EBFU_SKIP.test(c.text + ' ' + (c.url || '') + ' ' + (c.target || '') + ' ' + (c.fn ? c.fn.name : '')));
-}
 async function follow(c, page, jar, diag) {
   if (c.how === 'get') return ebfuFetch(c.url, jar, { referer: page.url }, diag);
   if (c.how === 'postback') {
@@ -813,7 +799,7 @@ async function scriptLogin(first, jar, username, password, diag) {
     inspect: { ...summarizePage(first.text, first.url), loginFunction: maskText(String(plan.code || '').slice(0, 6000)) } };
   diag.push('login fields: ' + plan.fields.map(f => f.key + '=' + f.kind).join(', '));
   const fields = new URLSearchParams();
-  for (const f of plan.fields) fields.set(f.key, f.kind === 'username' ? username.trim() : f.kind === 'password' ? (f.trim ? password.trim() : password) : f.kind === 'width' ? '1280' : f.value);
+  for (const f of plan.fields) fields.set(f.key, f.kind === 'username' ? username.trim() : f.kind === 'password' ? (f.trim ? password.trim() : password) : f.kind === 'width' ? EBFU_WIDTH : f.value);
   const target = new URL(plan.url, first.url).toString();
   const xhr = { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01', Origin: 'https://ebfu.net' };
   const res = await ebfuFetch(plan.method === 'GET' ? target + (target.includes('?') ? '&' : '?') + fields : target, jar,
@@ -832,7 +818,7 @@ async function scriptLogin(first, jar, username, password, diag) {
   const check = landing || await ebfuFetch(EBFU_ARCHIVE, jar, { referer: first.url }, diag);
   if (!isLoginPage(check.text, check.url)) {
     const name = ((landing || check).text.match(NAME_RE) || check.text.match(NAME_RE) || [])[1] || '';
-    return { ok: true, session: jarStr(jar), name, landing: maskUrl((landing || check).url) };
+    return { ok: true, session: jarStr(jar), name, landing: maskUrl((landing || check).url), width: EBFU_WIDTH };
   }
   const says = [];
   (function walk(o) { if (typeof o === 'string') { if (/[А-Яа-я]{3,}/.test(o) && o.length < 300) says.push(o); } else if (o && typeof o === 'object') Object.values(o).forEach(walk); })(answer);
@@ -850,16 +836,54 @@ async function scriptLogin(first, jar, username, password, diag) {
    sometimes the visitors' too), which plays https://ebfu.net/videoFile.php?stream_token=… (an MP4, any site can play it).
    The member's page pairs the cards with its own matches. */
 export const EBFU_LABEL = { efbet: 'efbet Лига', mrbit: 'ВПФЛ', sw3: 'В ЮЗ', nw3: 'В СЗ', ne3: 'В СИ', se3: 'В ЮИ', u18: 'U18', u17: 'U17', u16: 'U16', u15: 'U15' };
+// the archive's other competitions (their names keep a league from taking another group's number)
+const EBFU_OTHER = ['Купа', 'Купа АФЛ', 'Купа на България', 'ProCup', 'WU16', 'WU17', 'WU19', 'Жени', 'U19', 'U14', 'U13'];
+// how the round's page names each league in its heading ("2026-2027, ЮгоЗападна IMPERIABET Трета Лига, 18 кръг")
+const EBFU_HEAD = { efbet: /efbet/i, mrbit: /втора\s+лига|впфл/i, sw3: /югозапад/i, nw3: /северозапад/i, ne3: /североизточ/i, se3: /югоизточ/i,
+  u18: /до\s*18|u\s*18/i, u17: /до\s*17|u\s*17/i, u16: /до\s*16|u\s*16/i, u15: /до\s*15|u\s*15/i };
 // the menu → { season (the one chosen), tiles: [{ label, comp, round }] }
 export function ebfuTiles(html) {
   const h = String(html), tiles = [];
   for (const m of h.matchAll(/<div class="videoChampWeek[^"]*"[^>]*\$\('#showChampWeek(\d+)-(\d+)'\)[\s\S]*?<div class="robotoDarkGreen13[^"]*">([^<]*)<\/div>/gi))
     tiles.push({ comp: m[1], round: +m[2], label: decodeEntities(m[3]).replace(/\s+/g, ' ').trim() });
+  // another layout of the menu: every round button names showChampWeek and <competition>-<round>; the competition's name
+  // is the nearest known name before its first button
+  if (!tiles.length) {
+    const first = new Map(), labels = [...Object.values(EBFU_LABEL), ...EBFU_OTHER];
+    for (const t of h.matchAll(/<[^>]*showChampWeek[^>]*>/gi)) for (const m of t[0].matchAll(/\b(\d{3,6})-(\d{1,2})\b/g)) {
+      if (!first.has(m[1])) first.set(m[1], t.index);
+      tiles.push({ comp: m[1], round: +m[2], label: '' });
+    }
+    const name = {};
+    for (const [comp, at] of first) {
+      const before = ' ' + stripTags(h.slice(Math.max(0, at - 4000), at)).toLowerCase() + ' ';
+      let best = '', pos = -1;
+      for (const l of labels) { const i = before.lastIndexOf(' ' + l.toLowerCase() + ' '); if (i > pos || (i === pos && l.length > best.length)) { pos = i; best = l; } }
+      name[comp] = pos >= 0 ? best : '';
+    }
+    const seen = new Set();
+    for (let i = tiles.length - 1; i >= 0; i--) { const k = tiles[i].comp + '-' + tiles[i].round; if (seen.has(k)) tiles.splice(i, 1); else { seen.add(k); tiles[i].label = name[tiles[i].comp]; } }
+  }
   const sel = h.match(/<select name="selectSeason"[\s\S]*?<\/select>/i), opt = sel && (sel[0].match(/<option value="(\d{4}-\d{4})"\s+selected/i) || sel[0].match(/<option value="(\d{4}-\d{4})"/i));
-  return { season: opt ? opt[1] : null, tiles };
+  return { season: opt ? opt[1] : (h.match(/selectSeason[\s\S]{0,400}?(\d{4}-\d{4})/) || [])[1] || null, tiles };
 }
-// a round's page → { heading ("2026-2027, efbet Лига, 15 кръг"), cards: [{ round, when: { d, mo, time }, home, away, score, venue,
-//   videos: [{ url, by: 'home' | 'away' | '', title }] }] }
+// a club's full-match video: startPlayer('<title>', 'https://ebfu.net/videoFile.php?stream_token=…'). The title names the
+// teams ("ПФК Септември Сф - ФУТБОЛЕН КЛУБ ЛОКОМОТИВ СОФИЯ 1929 ЕАД"), the competition and round, and who uploaded it,
+// whatever the layout of the page around it.
+function ebfuVideos(html) {
+  // (any player function, the link absolute or not)
+  return [...String(html).matchAll(/\w+\(\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:https?:\/\/(?:www\.)?ebfu\.net)?(?:\.\.)?\/?videoFile\.php\?stream_token=[\w.-]+)'/g)].map(m => {
+    const raw = m[1].replace(/##/g, '"').replace(/\\'/g, "'"), t = stripTags(raw);
+    const teams = decodeEntities((raw.match(/^\s*(?:<[^>]+>\s*)*([^<]+)/) || [])[1] || t).split(/,\s/)[0].replace(/\s+/g, ' ').trim();
+    const cr = t.match(/,\s*([^,]*?)\s*-\s*(\d+)\s*кръг/i);
+    return { url: 'https://ebfu.net/videoFile.php?' + m[2].split('?')[1], by: /качено от домакина/i.test(t) ? 'home' : /качено от госта/i.test(t) ? 'away' : '', title: t.replace(/\s*Видеото е качено.*$/i, '').trim(),
+      teams, comp: cr ? cr[1].trim() : '', round: cr ? +cr[2] : null };
+  });
+}
+// "A - B - C": every way of reading it as home - away (a club's name can have " - " in it: "ФК Светкавица - 2014")
+const teamSplits = s => [...String(s).matchAll(/\s[-–]\s/g)].map(m => [s.slice(0, m.index).trim(), s.slice(m.index + m[0].length).trim()]).filter(([a, b]) => a && b);
+// a round's page → { heading ("2026-2027, efbet Лига, 15 кръг"), cards: [{ round, when: { d, mo, time }, home, away, alts: [[home, away]…],
+//   score, venue, videos: [{ url, by: 'home' | 'away' | '', title }] }], layout: 'cards' | 'titles' }
 const EBFU_MONTHS = ['яну', 'фев', 'мар', 'апр', 'май', 'юни', 'юли', 'авг', 'сеп', 'окт', 'ное', 'дек'];
 export function ebfuWeek(html) {
   const h = String(html), cards = [];
@@ -874,129 +898,81 @@ export function ebfuWeek(html) {
     const mo = w ? EBFU_MONTHS.indexOf(w[2].toLowerCase()) : -1;
     const sc = score && score.text.match(/^(\d+)\s*-\s*(\d+)$/);
     const venue = divs.slice(divs.indexOf(teams[1]) + 1).find(d => d.text && !d.cls);
-    const videos = [...c.matchAll(/startPlayer\('([\s\S]*?)'\s*,\s*'(https:\/\/ebfu\.net\/videoFile\.php\?stream_token=[\w.-]+)'\)/g)].map(m => {
-      const t = stripTags(m[1].replace(/##/g, '"'));
-      return { url: m[2], by: /качено от домакина/i.test(t) ? 'home' : /качено от госта/i.test(t) ? 'away' : '', title: t.replace(/\s*Видеото е качено.*$/i, '').trim() };
-    });
+    const videos = ebfuVideos(c);
+    const alts = [[names[0], names[1]], ...(videos[0] ? teamSplits(videos[0].teams) : [])];
     cards.push({ round: head ? +((head.text.match(/(\d+)\s*Кръг/i) || [])[1] || 0) : null, when: w && mo >= 0 ? { d: +w[1], mo: mo + 1, time: w[3] ? w[3].padStart(2, '0') + ':' + w[4] : null } : null,
-      home: names[0], away: names[1], score: sc ? [+sc[1], +sc[2]] : null, venue: venue ? venue.text : '', videos });
+      home: names[0], away: names[1], alts, score: sc ? [+sc[1], +sc[2]] : null, venue: venue ? venue.text : '', videos: videos.map(({ url, by, title }) => ({ url, by, title })) });
   }
-  return { heading, cards };
+  if (cards.length) return { heading, cards, layout: 'cards' };
+  // another layout: a card per match from its videos' titles (a match with no video yet has no card here, and none is needed)
+  const byTeams = new Map();
+  for (const v of ebfuVideos(h)) {
+    if (!byTeams.has(v.teams)) byTeams.set(v.teams, { round: v.round, comp: v.comp, when: null, alts: teamSplits(v.teams), score: null, venue: '', videos: [] });
+    byTeams.get(v.teams).videos.push({ url: v.url, by: v.by, title: v.title });
+  }
+  for (const c of byTeams.values()) if (c.alts.length) cards.push({ ...c, home: c.alts[0][0], away: c.alts[0][1] });
+  return { heading, cards, layout: cards.length ? 'titles' : '' };
 }
-// body: { league, round, season?, comp? (remembered from an earlier answer: saves reading the menu) }
+// how a page of the archive is built, for the developer when it couldn't be read as expected: from the archive's own
+// heading on (the member's name and picture are above it), without scripts, styles, addresses or the video links
+function ebfuSketch(html, from) {
+  const h = String(html), head = h.search(/Видео архив за сезон/), at = h.search(from || /startPlayer/), i = head >= 0 ? head : Math.max(0, at - 300);
+  if (!/Видео архив за сезон|startPlayer|showChampWeek/.test(h)) return { kb: Math.round(h.length / 1024) };
+  return { kb: Math.round(h.length / 1024), html: h.slice(i).replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, '').replace(/\s(?:style|src|href|srcset|alt)="[^"]*"/gi, '')
+    .replace(/stream_token=[\w.-]+/g, 'stream_token=…').replace(/\s+/g, ' ').slice(0, 24000) };
+}
+// body: { league, round, season?, comp? } → the round's cards. Never opens ebfu.net's start page: that ends the session.
 async function ebfuWeekVideos(session, body, diag) {
   if (!session) return { ok: false, error: 'Connect ebfu.net first.' };
-  const label = EBFU_LABEL[String(body.league || '')], round = Math.floor(Number(body.round));
+  const league = String(body.league || ''), label = EBFU_LABEL[league], round = Math.floor(Number(body.round));
   if (!label || !(round > 0 && round < 99)) return { ok: false, error: 'unknown league or round' };
-  const jar = jarFrom(session), expired = () => ({ ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' });
+  const jar = jarFrom(session), keep = { keepSession: true }, expired = () => ({ ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' });
   let season = /^\d{4}-\d{4}$/.test(String(body.season || '')) ? String(body.season) : null;
-  let comp = /^\d{1,6}$/.test(String(body.comp || '')) ? String(body.comp) : null, comps = null;
+  let comp = /^\d{1,6}$/.test(String(body.comp || '')) ? String(body.comp) : null, comps = null, tried = new Set(), inspect = null;
+  const gone = pg => pg.toIndex || isLoginPage(pg.text, pg.url);
+  // the menu: the season, and the league's competition numbers (a round's tile must be there)
   const readMenu = async () => {
-    const a = await ebfuFetch(EBFU_ARCHIVE, jar, {}, diag);
-    if (isLoginPage(a.text, a.url)) return false;
+    const a = await ebfuFetch(EBFU_ARCHIVE, jar, keep, diag);
+    if (gone(a)) return null;
     const t = ebfuTiles(a.text);
-    comps = {}; for (const x of t.tiles) if (!comps[x.label]) comps[x.label] = x.comp;
-    season = season || t.season; comp = comps[label] || null;
-    return { has: t.tiles.some(x => x.label === label && x.round === round) };
+    comps = {}; for (const x of t.tiles) if (x.label && !comps[x.label]) comps[x.label] = x.comp;
+    season = season || t.season;
+    if (!t.tiles.length || !/class="videoChampWeek/.test(a.text)) inspect = { ...inspect, menu: ebfuSketch(a.text, /showChampWeek/), tiles: t.tiles.length };
+    const mine = [...new Set(t.tiles.filter(x => x.label === label && x.round === round).map(x => x.comp))];
+    // a menu read some other way may not name every competition: then the ones with this round, nearest-named first
+    const rest = [...new Set(t.tiles.filter(x => x.round === round && !x.label).map(x => x.comp))];
+    return { cands: [...mine, ...rest], any: t.tiles.length > 0 };
   };
-  if (!comp || !season) {
-    const m = await readMenu();
-    if (!m) return expired();
-    if (!m.has) return { ok: true, season, comps, cards: [], none: 'round', session: jarStr(jar) };
-  }
-  const open = () => ebfuFetch(EBFU_ARCHIVE, jar, { method: 'POST', body: new URLSearchParams({ selectSeason: season, showChampWeek: comp + '-' + round }).toString(),
+  const open = c => ebfuFetch(EBFU_ARCHIVE, jar, { ...keep, method: 'POST', body: new URLSearchParams({ selectSeason: season, showChampWeek: c + '-' + round }).toString(),
     contentType: 'application/x-www-form-urlencoded', referer: EBFU_ARCHIVE }, diag);
-  let pg = await open();
-  if (isLoginPage(pg.text, pg.url)) return expired();
-  let w = ebfuWeek(pg.text);
-  // the page names its league and round: anything else means a remembered competition number is out of date
-  const right = x => +((x.heading.match(/(\d+)\s*кръг\s*$/i) || [])[1] || 0) === round && x.cards.every(c => c.round === round);
-  if (!right(w) && body.comp) {
+  // the right page names this league and round in its heading (or, without one, in its videos' titles)
+  const right = w => w.heading ? +((w.heading.match(/(\d+)\s*кръг\s*$/i) || [])[1] || 0) === round && EBFU_HEAD[league].test(w.heading)
+    : w.cards.length > 0 && w.cards.every(c => c.round === round && (!c.comp || EBFU_HEAD[league].test(c.comp)));
+  const tryComp = async c => {
+    tried.add(c);
+    const pg = await open(c);
+    if (pg.toIndex) {   // the round page sent us to the start page: the session ended, or the choice wasn't kept
+      const m = await ebfuFetch(EBFU_ARCHIVE, jar, keep, diag);
+      return gone(m) ? 'expired' : null;
+    }
+    if (isLoginPage(pg.text, pg.url)) return 'expired';
+    const w = ebfuWeek(pg.text);
+    if (!right(w)) { diag.push(`competition ${c}: the page is "${w.heading || '?'}"`); return null; }
+    if (w.layout !== 'cards' && (w.layout === 'titles' || /startPlayer/.test(pg.text))) inspect = { ...inspect, week: ebfuSketch(pg.text), layout: w.layout || 'none' };
+    return { comp: c, w };
+  };
+  let got = null;
+  if (comp && season) { got = await tryComp(comp); if (got === 'expired') return expired(); }
+  if (!got) {
     const m = await readMenu();
     if (!m) return expired();
-    if (!m.has) return { ok: true, season, comps, cards: [], none: 'round', session: jarStr(jar) };
-    pg = await open(); w = ebfuWeek(pg.text);
+    if (!m.any) return { ok: false, relogin: true, error: "ebfu.net's video archive could not be read with this session. Connect again.", inspect };
+    for (const c of m.cands.filter(c => !tried.has(c)).slice(0, 3)) { got = await tryComp(c); if (got === 'expired') return expired(); if (got) break; }
+    if (!got) return { ok: true, season, comps, cards: [], none: 'round', session: jarStr(jar), inspect };
   }
-  return { ok: true, season, comp, comps, heading: w.heading, cards: w.cards, session: jarStr(jar) };
+  return { ok: true, season, comp: got.comp, comps, heading: got.w.heading, cards: got.w.cards, layout: got.w.layout, session: jarStr(jar), inspect };
 }
 
-async function ebfuExplore(session, diag) {
-  if (!session) return { ok: false, error: 'Connect ebfu.net first.' };
-  const jar = jarFrom(session), report = { pages: [], notes: [] };
-  let start = await ebfuFetch(EBFU_BASE, jar, {}, diag);
-  if (isLoginPage(start.text, start.url)) {
-    start = await ebfuFetch(EBFU_ARCHIVE, jar, {}, diag);
-    if (isLoginPage(start.text, start.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
-    report.notes.push('The start address shows the login page, so Видеоархив was opened directly.');
-  }
-  report.pages.push({ step: 'start', ...summarizePage(start.text, start.url) });
-  const scripts = [{ where: 'start page', text: start.text }];
-  const done = () => ({ ok: true, report, session: jarStr(jar) });
-
-  // 1. "Видеоархив" (in the burger menu on phones, straight in the menu on computers — same page underneath)
-  const toArchive = clickables(start.text, start.url).find(c => c.how && /видео\s*архив|видеоархив|video\s*archive/i.test(c.text))
-    || clickables(start.text, start.url).find(c => c.how && /videoShow|video|archive|arhiv/i.test((c.url || '') + c.target))
-    || { how: 'get', url: EBFU_ARCHIVE, text: 'Видеоархив (direct address)' };
-  const archive = start.url.startsWith(EBFU_ARCHIVE) ? start : await follow(toArchive, start, jar, diag);
-  if (isLoginPage(archive.text, archive.url)) return { ok: false, expired: true, error: 'The ebfu.net session has expired. Connect again.' };
-  report.pages.push({ step: 'archive', via: toArchive.how + (toArchive.text.includes('direct') ? ' (direct address)' : ''), ...summarizePage(archive.text, archive.url) });
-  scripts.push({ where: 'archive page', text: archive.text });
-
-  // 2. league round tiles ("efbet Лига КРЪГ 12", "ВПФЛ КРЪГ 3", "В ЮЗ …", "U17 …"): take the newest efbet Лига round
-  const tiles = clickables(archive.text, archive.url).filter(c => c.how && /кръг|krug|round|rnd/i.test(c.text + ' ' + (c.url || '') + ' ' + c.tag));
-  report.roundTiles = tiles.slice(0, 60).map(c => ({ text: c.text, how: c.how, ...(c.url ? { url: maskUrl(c.url) } : {}), ...(c.target ? { postback: c.target } : {}) }));
-  const efbet = tiles.filter(c => /efbet/i.test(c.text));
-  const order = (efbet.length ? efbet : tiles).slice().sort((x, y) => roundNo(y.text) - roundNo(x.text));
-  if (!order.length) { report.notes.push('No league/round tiles found on the archive page.'); return done(); }
-  // newest round first; a round just played may have no videos yet, so up to two older ones are tried
-  let round = null, tile = null, cams = [];
-  for (const t of order.slice(0, 3)) {
-    const pg = await follow(t, archive, jar, diag).catch(e => { report.notes.push(t.text + ': ' + e.message); return null; });
-    if (!pg || pg.status >= 400) { report.notes.push(t.text + ': HTTP ' + (pg ? pg.status : '?')); continue; }
-    round = pg; tile = t; cams = clickables(pg.text, pg.url).filter(c => c.camera);
-    if (cams.length) break;
-    report.notes.push(t.text + ': no camera buttons, trying an older round');
-  }
-  if (!round) return done();
-  report.pages.push({ step: 'round', tile: tile.text, via: tile.how, ...summarizePage(round.text, round.url) });
-  scripts.push({ where: 'round page', text: round.text });
-  report.matchCard = cardSample(round.text);
-
-  // 3. the camera button of the first match: a link, a postback, or a script that opens the pop-up player
-  report.cameraButtons = cams.slice(0, 4).map(c => ({ how: c.how || 'script', ...(c.url ? { url: maskUrl(c.url) } : {}), ...(c.target ? { postback: c.target } : {}), ...(c.fn ? { calls: c.fn.name + '(' + c.fn.args + ')' } : {}), tag: c.tag }));
-  if (!cams.length) report.notes.push('No camera button recognised on the round page (see matchCard and clicks).');
-
-  // the site's own scripts (not libraries): the addresses they call and the camera function
-  const isEbfu = x => { try { return /(^|\.)ebfu\.net$/i.test(new URL(x).hostname); } catch { return false; } };
-  const own = [...new Set(report.pages.flatMap(pg => pg.scripts).filter(x => isEbfu(x) && !/jquery|bootstrap|font|analytics|gtag|moment|select2|datatables|popper|sweetalert|toastr/i.test(x)))].slice(0, 4);
-  report.scriptCalls = [];
-  for (const src of own) {
-    try {
-      const js = (await ebfuFetch(src, jar, { referer: round.url }, diag)).text;
-      scripts.push({ where: src, text: js });
-      const calls = [...js.matchAll(/["'`](\/?(?:api|ajax|handlers?|services?|video|archive|arhiv|match|stream|player)[\w\/.-]{2,80}(?:\?[^"'`\s]{0,60})?)["'`]/gi)].map(m => m[1]);
-      report.scriptCalls.push({ src, calls: [...new Set(calls)].slice(0, 40) });
-    } catch (e) { report.scriptCalls.push({ src, error: e.message }); }
-  }
-  const cam = cams[0];
-  if (cam && cam.how) {
-    const video = await follow(cam, round, jar, diag);
-    report.pages.push({ step: 'video', via: cam.how, ...summarizePage(video.text, video.url) });
-  } else if (cam && cam.fn) {
-    const fn = findFunction(cam.fn.name, scripts);
-    report.cameraFunction = fn || { missing: cam.fn.name };
-    // try the address that function loads the video from, once, with this match's own id
-    const arg = (cam.fn.args.match(/['"]?([\w-]{1,40})['"]?/) || [])[1];
-    const path = fn && (fn.code.match(/["'`](\/?[\w\/.-]+(?:\.(?:ashx|aspx|php|json)|\/[\w-]*)(?:\?[\w.-]*=)?)["'`]\s*\+/) || [])[1];
-    if (arg && path) {
-      try {
-        const probe = await ebfuFetch(new URL(path + encodeURIComponent(arg), round.url).toString(), jar, { referer: round.url }, diag);
-        report.cameraProbe = { url: maskUrl(new URL(path, round.url).toString()) + '…', status: probe.status, type: probe.type, preview: maskText(probe.text.slice(0, 600)) };
-      } catch (e) { report.cameraProbe = { error: e.message }; }
-    } else report.notes.push('The camera button runs ' + cam.fn.name + '(); its video address is built inside that function (see cameraFunction).');
-  }
-  return done();
-}
 
 /* ---------------- /drive/video: a Google Drive clip, for the page's own player ----------------
    Google Drive hands a file shared "anyone with the link" to a server, but refuses it to a page of another site (it

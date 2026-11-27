@@ -219,6 +219,7 @@ window.BGRW_EN = {
     'Целият мач от видеоархива на ebfu.net се отключва, щом администраторът одобри профила ви.': 'The full match from the ebfu.net video archive opens once an admin approves you.',
     'Връзката с ebfu.net изтече. Свържете се отново, за да гледате целия мач тук.': 'The ebfu.net connection has expired. Connect again to watch the full match here.',
     'Свържете профила си в ebfu.net, за да гледате тук целия мач от видеоархива. Паролата се използва веднъж за вход и не се пази.': 'Connect your ebfu.net account to watch the full match from the video archive here. The password is used once to log in and is not kept.',
+    'Свържете ebfu.net отново (еднократно), за да може сайтът да чете видеоархива.': 'Connect ebfu.net again (once) so the site can read the video archive.',
     'Търсим записа в ebfu.net…': 'Looking for the recording on ebfu.net…', 'Опитай пак': 'Try again', 'Провери пак': 'Check again',
     'Отборите още не са качили записа в ebfu.net.': 'The clubs have not uploaded the recording to ebfu.net yet.',
     'ebfu.net не отговори навреме.': 'ebfu.net did not answer in time.', 'ebfu.net не отговори както трябва.': 'ebfu.net did not answer properly.',

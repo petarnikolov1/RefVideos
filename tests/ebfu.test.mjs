@@ -46,12 +46,31 @@ const week = `<html><body><form id="form" name="form" method="post"><div class="
   ok(b.videos.length === 1 && c.videos.length === 0 && c.score === null && c.when.mo === 12, 'a match with no video yet (and not played)');
 }
 
+// the layout ebfu.net gives a session logged in from a wide window (the screenshot of efbet Лига, 13 кръг, 27 Nov 2026):
+// other markup, full club names, the town under each name. The videos' titles still name the teams and the round.
+const wideTitle = (home, away, comp, r, by) => `<span class=##robotoBlack16##>${home} - ${away}<span style=##color: #666;##>, ${comp} - </span>${r} Кръг<span>, Сезон: </span>2026-2027</span><br><span>Видеото е качено от ${by}</span>`;
+const wideCard = (home, town1, score, away, town2, cams) => `<div class="videoMatchRow row"><div class="col date"><i class="far fa-calendar"></i> Петък, 6 Ное, 2026 <i class="far fa-clock"></i> 17:00</div>
+  <div class="col teamH"><span class="tname">${home}</span><span class="ttown">${town1}</span></div><img class="logo"/><span class="score">${score}</span><img class="logo"/>
+  <div class="col teamA"><span class="tname">${away}</span><span class="ttown">${town2}</span></div>
+  <div class="col cams">${cams.map(([by, tok]) => `<i class="fas fa-video blue" onclick="startPlayer('${wideTitle(home, away, 'efbet Лига', 13, by)}', 'https://ebfu.net/videoFile.php?stream_token=${tok}');"></i>`).join('')}</div>
+  <div class="col venue"><i class="fas fa-landmark"></i> Георги Аспарухов - София</div></div>`;
+const wide = `<html><body><div class="header">Иван Иванов <img src="../refereeImages/image-1.jpg"></div><div class="archiveTitle">Видео архив за сезон: 2026-2027, efbet Лига, 13 кръг</div>
+  ${wideCard('ПФК Септември Сф', 'СОФИЯ', '1 - 0', 'ФУТБОЛЕН КЛУБ ЛОКОМОТИВ СОФИЯ 1929 ЕАД', 'СОФИЯ', [['домакина', '9-9-1']])}
+  ${wideCard('ФК Светкавица - 2014', 'ТЪРГОВИЩЕ', '1 - 1', 'ФК Бенковски Исперих', 'ИСПЕРИХ', [['домакина', '8-8-1'], ['госта', '8-8-2']])}
+  ${wideCard('ПФК Ботев Пловдив', 'ПЛОВДИВ', '3 - 3', 'ПФК ЦСКА-София', 'СОФИЯ', [])}</body></html>`;
+{
+  const w = ebfuWeek(wide), [a, b] = w.cards;
+  ok(w.heading === '2026-2027, efbet Лига, 13 кръг' && w.layout === 'titles' && w.cards.length === 2, 'the wide layout: read from the videos\' titles — ' + w.cards.length + ' cards, ' + w.layout);
+  ok(a.round === 13 && a.alts.some(([h, x]) => h === 'ПФК Септември Сф' && x === 'ФУТБОЛЕН КЛУБ ЛОКОМОТИВ СОФИЯ 1929 ЕАД') && a.videos[0].by === 'home' && a.videos[0].url.endsWith('9-9-1'),
+    'a card: the teams, the round and the video');
+  ok(b.videos.length === 2 && b.alts.length === 2 && b.alts.some(([h, x]) => h === 'ФК Светкавица - 2014' && x === 'ФК Бенковски Исперих'), 'a club with " - " in its name: both readings kept');
+}
 // the whole /ebfu/week route, with ebfu.net and the database stood in: the menu, the round (through ebfu.net's script
 // redirect), a remembered league number that is out of date, an expired session
 {
   const worker = (await import('../public/_worker.js')).default;
   const roundPage = r => week.replace(/12 кръг/g, r + ' кръг').replace(/ - 12 Кръг/g, ` - ${r} Кръг`);
-  let log = [], loggedIn = true, selected = '';
+  let log = [], loggedIn = true, selected = '', menuNow = null, pageFor = null, toStart = false;
   globalThis.fetch = async (u, o = {}) => {
     u = String(u); log.push((o.method || 'GET') + ' ' + u.replace(/^https:\/\/[^/]+/, ''));
     const res = (body, type = 'text/html', extra = {}) => new Response(body, { status: 200, headers: { 'content-type': type, ...extra } });
@@ -62,8 +81,11 @@ const week = `<html><body><form id="form" name="form" method="post"><div class="
       selected = new URLSearchParams(o.body).get('showChampWeek');
       return res('<html><head><script>self.location.href = "videoShowChampWeek.php";</script></head><body></body></html>', 'text/html', { 'set-cookie': 'PHPSESSID=abc2; path=/' });
     }
-    if (u.endsWith('/videoArchive.php')) return res(menu);
-    if (u.endsWith('/videoShowChampWeek.php')) { const [comp, r] = selected.split('-'); return res(comp === '1145' ? roundPage(r) : roundPage(99)); }
+    const toIndex = () => res('\t<script>\n\t\tself.location.href = "https://ebfu.net/index.php";\n\t</script>\n');
+    if (toStart && /videoArchive|videoShowChampWeek/.test(u)) return toIndex();
+    if (u.endsWith('/videoArchive.php')) return res(menuNow || menu);
+    if (u.endsWith('/videoShowChampWeek.php')) { const [comp, r] = selected.split('-'); return res(pageFor ? pageFor(comp, r) : comp === '1145' ? roundPage(r) : roundPage(99)); }
+    if (/ebfu\.net\/(?:index\.php)?$/.test(u)) return res('<html><body><span onClick="loginUser();">Вход</span></body></html>');
     return new Response('not found', { status: 404 });
   };
   const call = async body => (await worker.fetch(new Request('https://refvideos.pages.dev/ebfu/week', { method: 'POST', headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' },
@@ -79,6 +101,26 @@ const week = `<html><body><form id="form" name="form" method="post"><div class="
   ok(j.ok && j.comp === '1145' && j.cards.length === 3 && j.cards.every(c => c.round === 12), 'an out-of-date number: the page names another round, so the menu is read again');
   j = await call({ session: j.session, league: 'u17', round: 13, season: '2026-2027' });
   ok(j.ok && j.none === 'round' && j.cards.length === 0, 'a round the archive has no tile for yet: no cards');
+  // the wide layout: another menu (the round buttons under each competition's name) and the round page above
+  const wideMenu = `<html><body><form method="post"><select name="selectSeason"><option value="2026-2027" selected>2026-2027</option></select>
+    <h3>Купа</h3><button type="submit" name="showChampWeek" value="1150-1">1</button>
+    <h3>efbet Лига</h3>${Array.from({ length: 15 }, (_, i) => `<button type="submit" name="showChampWeek" value="1149-${i + 1}">${i + 1}</button>`).join('')}
+    <h3>ВПФЛ</h3>${Array.from({ length: 17 }, (_, i) => `<button type="submit" name="showChampWeek" value="1148-${i + 1}">${i + 1}</button>`).join('')}</form></body></html>`;
+  const narrow = { menu, roundPage };
+  menuNow = wideMenu; pageFor = (comp, r) => comp === '1149' && r === '13' ? wide : comp === '1148' && r === '13' ? wide.replace(/efbet Лига/g, 'Mr Bit Втора Лига') : roundPage(99);
+  log = [];
+  j = await call({ session: 'PHPSESSID=w', league: 'efbet', round: 13 });
+  ok(j.ok && j.comp === '1149' && j.layout === 'titles' && j.cards.length === 2 && j.inspect && j.inspect.week && !/Иван|refereeImages|9-9-1/.test(JSON.stringify(j.inspect)),
+    'a wide-layout session: the menu read another way, the round from the titles, and a sketch for the developer without the member\'s name or video links');
+  log = [];
+  j = await call({ session: 'PHPSESSID=w', league: 'mrbit', round: 13, season: '2026-2027', comp: '1149' });
+  ok(j.ok && j.comp === '1148' && j.cards.length === 2, 'a remembered number for another league is noticed (the heading names efbet Лига, not Втора лига)');
+  menuNow = null; pageFor = null;
+  // the round page sends a session that has ended to the start page: that page is never opened (it would end a live one)
+  log = []; toStart = true;
+  j = await call({ session: 'PHPSESSID=abc', league: 'u17', round: 12, season: '2026-2027', comp: '1145' });
+  ok(!j.ok && j.expired && !log.some(x => /GET \/(?:index\.php)?$/.test(x)), 'an ended session: says so without opening ebfu.net\'s start page: ' + log.filter(x => !/auth|rest/.test(x)).join(', '));
+  toStart = false;
   loggedIn = false;
   j = await call({ session: 'PHPSESSID=old', league: 'u17', round: 12, season: '2026-2027', comp: '1145' });
   ok(!j.ok && j.expired, 'an expired ebfu.net session says so');

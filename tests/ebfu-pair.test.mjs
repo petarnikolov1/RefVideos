@@ -76,6 +76,15 @@ function check(name, ours, cards, want){
   const cards = C([['ПФК Левски II', 'ОФК Ботев 1937', '3-1', '31.10', '14:00'], ['ФК Сливнишки герой', 'ФК Септември', '3-1', '31.10', '14:00']]);
   check('В ЮЗ, a postponed match', ours, cards, { a: -1, b: 0 });
 }
+// the wide layout gives no day or score, only the videos' titles: the clubs' full names, every reading of "A - B - C"
+{
+  const ours = M([['a', 'Септември София', 'ПФК Локомотив София 1929', '1:0', '2026-11-06T15:00:00Z'], ['b', 'Светкавица 2014 (Търговище)', 'Бенковски (Исперих)', '1:1', '2026-11-21T12:00:00Z'],
+    ['c', 'Ботев Пловдив', 'ЦСКА София', '3:3', '2026-11-08T17:00:00Z'], ['d', 'Локомотив Пловдив', 'Ботев Враца', '2:0', '2026-11-07T12:00:00Z']]);
+  const t = (teams, n = 1) => ({ home: teams, away: '', alts: [...teams.matchAll(/\s[-–]\s/g)].map(m => [teams.slice(0, m.index), teams.slice(m.index + m[0].length)]), when: null, score: null,
+    videos: Array.from({ length: n }, (_, i) => ({ url: 'u' + i, by: i ? 'away' : 'home' })) });
+  const cards = [t('ПФК Септември Сф - ФУТБОЛЕН КЛУБ ЛОКОМОТИВ СОФИЯ 1929 ЕАД'), t('ФК Светкавица - 2014 - ФК Бенковски Исперих', 2), t('ПФК Локомотив Пловдив - ПФК Ботев Враца')];
+  check('the wide layout, from the titles only', ours, cards, { a: 0, b: 1, c: -1, d: 2 });
+}
 ok(ebfuNameFit('Банско тийм (Банско)', 'ФК Банско Тиим') === 1 && ebfuNameFit('Локомотив Г. Оряховица', 'Локо ГО') > 0.6 && ebfuNameFit('Черно море (Варна)', 'Черноморец 1919 U16') < 0.5,
   'names: й and и, the towns\' short forms, Черно море is not Черноморец');
 console.log(fails ? `${fails} FAILED` : 'all passed');
